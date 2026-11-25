@@ -88,6 +88,7 @@ func run() -> void:
 	l.cmd_end_turn()
 	assert_eq(l.phase, "lost", "dead human loses")
 	test_frozen_enemy_skips()
+	test_hold_one_card()
 
 func _scripted(seed_value: int) -> Array:
 	var b := Battle.new(c, seed_value, "hero", ["dummy"], {})
@@ -104,3 +105,10 @@ func test_frozen_enemy_skips() -> void:
 	Effects.apply(Effects.card_def("stasis", c), f.human(), f.actors[1].pos, f.ctx)
 	f.cmd_end_turn()
 	assert_eq(f.telegraphs.size(), 0, "enemy in stopped time does not act")
+
+func test_hold_one_card() -> void:
+	var b := Battle.new(c, 9, "hero", ["dummy"], LAYOUT)
+	var life: float = b.belt.slots[2]["life"]
+	assert_true(b.cmd_hold(2), "hold a single card")
+	assert_eq(b.time_left, 8, "hold costs 2 time")
+	assert_eq(b.belt.slots[2]["life"], life + HandBelt.HOLD_BONUS, "that card lives longer")

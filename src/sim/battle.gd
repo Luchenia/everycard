@@ -173,11 +173,12 @@ func cmd_play(slot: int, aim: Vector2i) -> bool:
 	_after_action()
 	return true
 
-func cmd_hold() -> bool:
+## Without a slot: no card in hand ages this turn. With a slot: that card lives longer.
+func cmd_hold(slot := -1) -> bool:
 	if phase != "player" or time_left < HOLD_COST:
 		return false
 	time_left -= HOLD_COST
-	belt.hold()
+	belt.hold(slot)
 	_log("hold", "손패 붙잡기", {})
 	return true
 
