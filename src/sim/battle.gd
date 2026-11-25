@@ -392,7 +392,7 @@ func _resolve_telegraphs() -> void:
 			t["fire_at"] = now + 1
 			keep.append(t)
 			continue
-		_log("telegraph_hit", "%s: %s" % [a.name, Effects.card_def(t["card_id"], catalog).get("name", "")], {"cells": t["cells"]})
+		_log("telegraph_hit", "%s: %s" % [a.name, Effects.card_def(t["card_id"], catalog).get("name", "")], {"cells": t["cells"], "user": a.uid})
 		Effects.apply(Effects.card_def(t["card_id"], catalog), a, t["aim"], ctx, t["cells"])
 		a.next_at = maxi(a.next_at, now + 1)
 		_after_action()

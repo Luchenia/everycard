@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://chuloxafporns"
-path="res://.godot/imported/splash.png-80d42696598e42d8eca678ac510ea1b2.ctex"
+uid="uid://bv1wtoununoc6"
+path="res://.godot/imported/walker.png-5d7ae15597d2d0de148e314001313bb7.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/fx/splash.png"
-dest_files=["res://.godot/imported/splash.png-80d42696598e42d8eca678ac510ea1b2.ctex"]
+source_file="res://assets/art/units/walker.png"
+dest_files=["res://.godot/imported/walker.png-5d7ae15597d2d0de148e314001313bb7.ctex"]
 
 [params]
 

@@ -49,7 +49,7 @@ func _draw() -> void:
 		var x := x0 + i * w
 		draw_rect(Rect2(x - 1, y - 6, 2, 12 if i % 5 == 0 else 4), Color(1, 1, 1, 0.25))
 		if i > 0 and i % 5 == 0:
-			draw_string(font, Vector2(x - 4, y + 22), "%d" % i, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.4))
+			draw_string(font, Vector2(x - 3, y + 17), "%d" % i, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.4))
 	# hand refill: a little card
 	var dr := battle.next_draw_at() - battle.now
 	if dr >= 1 and dr <= SECS:
@@ -80,6 +80,10 @@ func _draw() -> void:
 			_face(a2, Vector2(xt, y - 14), 1.0)
 
 func _face(a: Actor, at: Vector2, alpha: float) -> void:
-	var tex := Art.unit_tex(a.def_id)
-	var sz := Vector2(tex.get_width(), tex.get_height()) * minf(1.0, 18.0 / tex.get_height())
-	draw_texture_rect(tex, Rect2(at - Vector2(sz.x / 2, sz.y), sz), false, Color(1, 1, 1, alpha))
+	var st := Art.unit(Art.unit_id(a))
+	if st.is_empty():
+		return
+	var src := Art.frame_src(st, 0)
+	var k := minf(1.0, 20.0 / src.size.y)
+	var sz := src.size * k
+	draw_texture_rect_region(st["tex"], Rect2(at - Vector2(sz.x / 2, sz.y), sz), src, Color(1, 1, 1, alpha))

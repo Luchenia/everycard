@@ -4,9 +4,8 @@ extends Control
 ## Keys: arrows move (1 s), mouse wheel or Q/E turn the ring, Space wait 1 s, right click cancel.
 
 const SEC_REAL := 0.35   # real seconds one game second takes when replayed
-const RING_R := 1500.0
-const RING_STEP := 0.098
-const HAND_Y := 794.0
+const HUB := Vector2(640, 800)   # hand wheel hub on screen
+const WHEEL_STEP := 0.62         # radians between two wheel slots
 
 var catalog: Catalog
 var flow: RunFlow
@@ -51,7 +50,7 @@ func _ready() -> void:
 	board.gui_input.connect(_on_board_input)
 	timeline = TimelineBar.new()
 	timeline.font = font
-	timeline.size = Vector2(560, 46)
+	timeline.size = Vector2(560, 40)
 	timeline.position = Vector2(360, 0)
 	timeline.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(timeline)
@@ -63,6 +62,7 @@ func _ready() -> void:
 	hand_layer = Control.new()
 	hand_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	hand_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hand_layer.draw.connect(_draw_wheel)
 	add_child(hand_layer)
 	tips = VBoxContainer.new()
 	tips.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -144,8 +144,11 @@ func _flashes() -> void:
 					if u:
 						from = u.pos
 				board.burst(e["data"].get("cells", []), col, from)
+				if c.get("parts", []).any(func(pt): return pt.get("op", "") == "damage"):
+					board.attack(int(e["data"].get("user", -1)), e["data"].get("cells", []))
 			"telegraph_hit":
 				board.burst(e["data"].get("cells", []), Art.DANGER)
+				board.attack(int(e["data"].get("user", -1)), e["data"].get("cells", []))
 				board.shake(0.18)
 
 func _process(delta: float) -> void:
@@ -170,7 +173,7 @@ func _refresh() -> void:
 	var b := flow.battle
 	board.battle = b
 	board.fit()
-	board.position = Vector2(round((1280 - board.size.x) / 2), 30)
+	board.position = Vector2(round((1280 - board.size.x) / 2), 44)
 	board.preview = {}
 	board.aiming = selected >= 0
 	timeline.battle = b
@@ -203,57 +206,62 @@ func _build_hand() -> void:
 		cv.hovered.connect(_on_card_hover)
 		hand_layer.add_child(cv)
 		cards.append(cv)
-	# the ring goes on past the window: the next card on each side shows faintly
-	var ring: Array = b.belt.draw_pile
-	if not ring.is_empty():
-		for side in [-1, 1]:
-			var id: String = ring[ring.size() - 1] if side < 0 else ring[0]
-			var g := CardView.new()
-			g.setup(id, catalog, font)
-			g.ghost = true
-			g.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			g.set_meta("ghost", side)
-			hand_layer.add_child(g)
-			hand_layer.move_child(g, 0)
 	_layout_hand()
 
+func _wheel_slots() -> Array:
+	var spec: Dictionary = Art.manifest().get("ui", {}).get("hand_wheel.png", {})
+	var hub: Array = spec.get("hub_centre", [160, 112])
+	var out := []
+	for q in spec.get("slot_centres", [[68, 83], [100, 43], [159, 27], [218, 43], [248, 83]]):
+		out.append(Vector2(q[0] - hub[0], q[1] - hub[1]) * Art.UI_S)
+	return out
+
+func _draw_wheel() -> void:
+	if flow == null or flow.phase != "battle":
+		return
+	var t := Art.tex("ui/hand_wheel.png")
+	if t == null:
+		return
+	var aim := 0.45 if selected >= 0 else 1.0
+	hand_layer.draw_set_transform(HUB, spin, Vector2(Art.UI_S, Art.UI_S))
+	hand_layer.draw_texture(t, Vector2(-160, -112), Color(1, 1, 1, aim))
+	hand_layer.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
 func _layout_hand() -> void:
-	var b := flow.battle
+	hand_layer.queue_redraw()
 	var n := cards.size()
 	var aiming := selected >= 0
+	var slots := _wheel_slots()
 	var wig := sin(real * 60.0) * 0.03 if real < wiggle_until else 0.0
 	for ch in hand_layer.get_children():
 		var cv := ch as CardView
 		if cv == null:
 			continue
-		var k := 0.0
-		var lift := 0.0
-		var sc := 1.0
+		var i: int = cv.get_meta("slot")
+		var si := i if n == slots.size() else int(round(float(i) * (slots.size() - 1) / maxf(1.0, n - 1)))
+		var anchor: Vector2 = HUB + Vector2(slots[si]).rotated(spin)
+		cv.lit = i == selected
+		var big := cv == hovered_card and not aiming
+		var z := 2 if big else 1
+		if cv.zoom != z:
+			cv.set_zoom(z)
 		var alpha := 1.0
-		if cv.has_meta("ghost"):
-			k = (float(n - 1) / 2.0 + 1.0) * float(cv.get_meta("ghost"))
-			sc = 0.82
-			alpha = 0.32
-		else:
-			var i: int = cv.get_meta("slot")
-			k = float(i) - float(n - 1) / 2.0
-			cv.lit = i == selected
-			if i == selected:
-				lift = 46.0
-				sc = 1.06
-			elif cv == hovered_card and not aiming:
-				lift = 30.0
-				sc = 1.12
 		if aiming:
 			alpha = 0.62 if cv.lit else 0.24
-		var a := k * RING_STEP + spin
-		var base := Vector2(640, HAND_Y + RING_R) + Vector2(sin(a), -cos(a)) * RING_R
-		cv.pivot_offset = Vector2(CardView.SIZE.x / 2, CardView.SIZE.y)
-		cv.position = base - Vector2(CardView.SIZE.x / 2, CardView.SIZE.y) - Vector2(0, lift)
-		cv.rotation = a + (wig if cv.lit else 0.0)
-		cv.scale = Vector2(sc, sc)
+		if big:
+			# enlarged and upright, standing on the wheel so the text can be read
+			var x := clampf(anchor.x - cv.size.x / 2, 8, 1280 - cv.size.x - 8)
+			cv.position = Vector2(x, 796 - cv.size.y - (14 if cv.lit else 0))
+			cv.rotation = wig if cv.lit else 0.0
+		else:
+			cv.position = anchor - cv.size / 2
+			cv.rotation = ((anchor - HUB).angle() + PI / 2) * 0.3
+			if cv.lit:
+				# the picked card stays small (the board must stay visible) but rises off the wheel
+				cv.position += (anchor - HUB).normalized() * 26
+				cv.rotation = wig
 		cv.modulate = Color(1, 1, 1, alpha)
-		cv.z_index = 5 if (cv == hovered_card or cv.lit) else 0
+		cv.z_index = 5 if (big or cv.lit) else 0
 
 # ---- hud ----------------------------------------------------------------------------------------
 
@@ -352,7 +360,8 @@ func _on_card_hover(cv: CardView, on: bool) -> void:
 		_clear_tips()
 		if selected < 0:
 			_keyword_tips(cv.def().get("desc", ""))
-			tips.position = Vector2(cv.global_position.x + CardView.SIZE.x * 1.12 + 8, 440)
+			var sl: Vector2 = HUB + Vector2(_wheel_slots()[mini(int(cv.get_meta("slot")), 4)])
+			tips.position = Vector2(sl.x + CardView.SIZE.x + 12, 420)
 			if tips.position.x > 1280 - 250:
 				tips.position.x = cv.global_position.x - 250
 	elif hovered_card == cv:
@@ -418,16 +427,15 @@ func _reward_overlay() -> void:
 	_title("승리", 200)
 	for i in flow.rewards.size():
 		var cv := CardView.new()
-		cv.setup(flow.rewards[i], catalog, font)
-		cv.position = Vector2(640 - 1.5 * 180 + i * 180 + 24, 290)
-		cv.scale = Vector2(1.15, 1.15)
+		cv.setup(flow.rewards[i], catalog, font, 2)
+		cv.position = Vector2(640 - 1.5 * 190 + i * 190 - 76 + 95, 270)
 		var idx := i
 		cv.picked.connect(func(_c): _pick_reward(idx))
 		cv.hovered.connect(func(c, on):
 			_clear_tips()
 			if on:
 				_keyword_tips(c.def().get("desc", ""))
-				tips.position = Vector2(c.position.x + 160, 300))
+				tips.position = Vector2(c.position.x + 164, 280))
 		overlay.add_child(cv)
 
 func _end_overlay() -> void:
@@ -478,15 +486,15 @@ func _fly(slot: int, target: Vector2i) -> void:
 	if src == null:
 		return
 	var cv := CardView.new()
-	cv.setup(src.card_id, catalog, font)
+	cv.setup(src.card_id, catalog, font, src.zoom)
 	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cv.position = src.position
 	cv.rotation = src.rotation
 	cv.scale = src.scale
-	cv.pivot_offset = CardView.SIZE / 2
+	cv.pivot_offset = cv.size / 2
 	cv.z_index = 20
 	add_child(cv)
-	var dest := board.position + board.cell_rect(target).get_center() - CardView.SIZE / 2
+	var dest := board.position + board.cell_rect(target).get_center() - cv.size / 2
 	var tw := create_tween().set_parallel(true)
 	tw.tween_property(cv, "position", dest, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_property(cv, "scale", Vector2(0.25, 0.25), 0.22)
@@ -533,7 +541,7 @@ func _input(ev: InputEvent) -> void:
 func _roll(dir: int) -> void:
 	selected = -1
 	if flow.battle.cmd_wheel(dir):
-		spin = -RING_STEP * dir
+		spin = -WHEEL_STEP * dir
 	_after()
 
 func _unhandled_input(ev: InputEvent) -> void:

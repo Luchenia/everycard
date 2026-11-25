@@ -1,46 +1,78 @@
 class_name CardView
 extends Control
-## One card face. Frame colour = rarity, header band = family (sword / magic / neutral), seconds in
-## the top-left badge, art window, description with [keywords] picked out.
+## One card face on the painted frames (ui/cards/card_frame_<family>_<rarity>.png, 76x127 art px).
+## Drawn at `zoom` screen px per art px: 1 resting on the hand wheel, 2 when hovered, picked or
+## offered. Seconds in the top-left badge, picture in the art window, name on the plate, the
+## sentence in the text box; trailing keywords ([감전] [반사] ...) become chips under the picture.
 
 signal picked(card_view)
 signal hovered(card_view, on)
 
-const SIZE := Vector2(132, 184)
+const SIZE := Vector2(76, 127)      # art px
+const ART_WIN := Rect2(12, 14, 52, 47)
+const NAME_PLATE := Rect2(10, 68, 57, 11)
+const TEXT_BOX := Rect2(8, 86, 59, 33)
+const BADGE := Vector2(11, 11)
+const FXMAP := {"strike": "slash", "spark": "fire", "crystallize": "crystal", "rain": "water_splash", "mirror": "mirror",
+	"frost": "ice_glint", "slow_field": "swamp_bubbles", "gust": "gust_right", "shock": "shock", "hurry": "haste", "haste_field": "haste"}
+
 var card_id := ""
 var catalog: Catalog
 var font: Font
 var desc: RichTextLabel
+var chips: Array = []
 var real := 0.0
+var zoom := 1
 var lit := false     # selected
-var ghost := false   # a card of the ring outside the hand window
+var ghost := false
 
-func setup(id: String, cat: Catalog, f: Font) -> void:
+func setup(id: String, cat: Catalog, f: Font, z := 1) -> void:
 	card_id = id
 	catalog = cat
 	font = f
-	size = SIZE
-	pivot_offset = Vector2(SIZE.x / 2, SIZE.y)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	desc = RichTextLabel.new()
 	desc.bbcode_enabled = true
 	desc.scroll_active = false
 	desc.fit_content = false
+	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	desc.position = Vector2(10, 100)
-	desc.size = Vector2(SIZE.x - 20, 76)
-	desc.add_theme_font_override("normal_font", f)
-	desc.add_theme_font_size_override("normal_font_size", 11)
-	desc.add_theme_color_override("default_color", Color("#2b2530"))
-	desc.add_theme_constant_override("line_separation", -1)
-	desc.text = "[center]%s[/center]" % CardView.rich(def().get("desc", ""))
+	desc.add_theme_font_override("normal_font", Art.font("Galmuri7"))
+	desc.add_theme_color_override("default_color", Color("#34281E"))
+	desc.add_theme_constant_override("line_separation", 0)
+	var split := CardView.split_chips(def().get("desc", ""))
+	chips = split[1]
+	desc.text = "[center]%s[/center]" % CardView.rich(split[0])
 	add_child(desc)
+	set_zoom(z)
 	mouse_entered.connect(func(): hovered.emit(self, true))
 	mouse_exited.connect(func(): hovered.emit(self, false))
+
+func set_zoom(z: int) -> void:
+	zoom = z
+	size = SIZE * z
+	pivot_offset = Vector2(size.x / 2, size.y)
+	desc.position = (TEXT_BOX.position + Vector2(3, 1)) * z
+	desc.size = (TEXT_BOX.size - Vector2(6, 1)) * z
+	desc.add_theme_font_size_override("normal_font_size", 8 * z)
 
 func def() -> Dictionary:
 	return Effects.card_def(card_id, catalog)
 
+## "sentence. [a] [b]" -> ["sentence.", ["a", "b"]]: keywords tacked on after the sentence.
+static func split_chips(text: String) -> Array:
+	var t := text.strip_edges()
+	var out := []
+	while t.ends_with("]"):
+		var a := t.rfind("[")
+		if a <= 0:
+			break
+		var before := t.substr(0, a).strip_edges()
+		if not (before.ends_with(".") or before.ends_with("]") or before.ends_with("!")):
+			break
+		out.push_front(t.substr(a + 1, t.length() - a - 2))
+		t = before
+	return [t, out]
 static func rich(text: String) -> String:
 	var out := ""
 	var i := 0
@@ -84,90 +116,77 @@ func _process(d: float) -> void:
 
 func _draw() -> void:
 	var c := def()
-	var rar: String = c.get("rarity", "common")
-	var fam: String = c.get("family", "neutral")
-	var rc: Color = Art.RARITY.get(rar, Art.RARITY["common"])
-	var fc: Color = Art.FAMILY.get(fam, Art.FAMILY["neutral"])
-	var r := Rect2(Vector2.ZERO, SIZE)
-	draw_rect(Rect2(r.position + Vector2(4, 6), r.size), Color(0, 0, 0, 0.4))
+	var z := float(zoom)
+	var r := Rect2(Vector2.ZERO, size)
+	draw_rect(Rect2(r.position + Vector2(2, 3) * z, r.size - Vector2(2, 2) * z), Color(0, 0, 0, 0.35))
 	if lit:
 		var gl := 0.5 + 0.5 * sin(real * 5.0)
-		draw_rect(r.grow(5), Color(Art.GOLD, 0.35 + 0.3 * gl))
-	# frame
-	draw_rect(r, Art.INK)
-	draw_rect(r.grow(-2), rc.darkened(0.35))
-	draw_rect(r.grow(-4), rc)
-	draw_rect(Rect2(r.position + Vector2(4, 4), Vector2(r.size.x - 8, 2)), rc.lightened(0.35))
-	# notches by rarity: more notches, finer card
-	var notches: int = {"basic": 0, "common": 1, "rare": 2, "epic": 3, "legendary": 3}.get(rar, 1)
-	for i in notches:
-		var x := SIZE.x / 2 - (notches - 1) * 7 + i * 14
-		draw_rect(Rect2(x - 3, SIZE.y - 7, 6, 4), rc.lightened(0.5))
-	if rar in ["legendary", "epic"]:
-		var k := fmod(real * 0.35, 1.0)
-		var sx := -40 + k * (SIZE.x + 80)
-		draw_colored_polygon(PackedVector2Array([Vector2(sx, 0), Vector2(sx + 14, 0), Vector2(sx - 20, SIZE.y), Vector2(sx - 34, SIZE.y)]), Color(1, 1, 0.85, 0.18))
-	# paper
-	var paper := Rect2(8, 8, SIZE.x - 16, SIZE.y - 16)
-	draw_rect(paper, Art.PAPER)
-	# family band and name
-	var band := Rect2(8, 8, SIZE.x - 16, 24)
-	draw_rect(band, fc)
-	draw_rect(Rect2(band.position + Vector2(0, band.size.y), Vector2(band.size.x, 2)), fc.darkened(0.4))
-	_family_mark(fam, Vector2(SIZE.x - 20, 20))
+		draw_rect(r.grow(2 * z), Color(Art.GOLD, 0.3 + 0.3 * gl))
+	var ft := Art.card_frame(c.get("family", "neutral"), c.get("rarity", "common"))
+	if ft:
+		draw_texture_rect(ft, r, false)
+	# picture
+	var aw := Rect2(ART_WIN.position * z, ART_WIN.size * z)
+	_picture(aw)
+	# keyword chips along the bottom of the picture
+	var cf := Art.font("Galmuri7")
+	var cx := aw.end.x
+	for k in range(chips.size() - 1, -1, -1):
+		var tw := cf.get_string_size(chips[k], HORIZONTAL_ALIGNMENT_LEFT, -1, int(8 * z)).x
+		var cr := Rect2(cx - tw - 4 * z, aw.end.y - 10 * z, tw + 4 * z, 10 * z)
+		draw_rect(cr.grow(z * 0.5), Color("#34281E"))
+		draw_rect(cr, Color("#f3dca0"))
+		draw_string(cf, cr.position + Vector2(2 * z, 8 * z), chips[k], HORIZONTAL_ALIGNMENT_LEFT, -1, int(8 * z), Color("#9a3d12"))
+		cx = cr.position.x - 2 * z
+	# name
+	var nf := Art.font("Galmuri9")
 	var nm: String = c.get("name", card_id)
-	var nw := font.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
-	var np := Vector2((SIZE.x - nw) / 2 + 4, 26)
-	draw_string_outline(font, np, nm, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 4, fc.darkened(0.6))
-	draw_string(font, np, nm, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
-	# art window
-	var art := Rect2(14, 38, SIZE.x - 28, 56)
-	draw_rect(art.grow(2), Art.INK)
-	draw_rect(art, Color("#26222e"))
-	_art(art)
-	# seconds badge (top-left): the cost everything else is measured in
-	var secs := int(c.get("time", 0))
-	var bc := Vector2(14, 14)
-	draw_circle(bc, 15, Art.INK)
-	draw_circle(bc, 13, Color("#f4e6c2") if secs > 0 else Color("#bfe8ff"))
-	draw_arc(bc, 13, -PI / 2, -PI / 2 + TAU * minf(secs / 6.0, 1.0), 20, Color("#c9853a") if secs > 0 else Color("#5aa8ff"), 3)
-	var st := "%d" % secs
-	var sw := font.get_string_size(st, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
-	draw_string(font, bc + Vector2(-sw / 2, 7), st, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Art.INK)
+	var np := NAME_PLATE.position * z
+	draw_string(nf, Vector2(np.x, np.y + 9 * z), nm, HORIZONTAL_ALIGNMENT_CENTER, NAME_PLATE.size.x * z, int(10 * z), Color("#F0ECE0"))
+	# seconds
+	var bf := Art.font("Galmuri11-Bold")
+	var st := "%d" % int(c.get("time", 0))
+	var bc := BADGE * z
+	var bp := Vector2(bc.x - 9 * z, bc.y + 4.5 * z)
+	draw_string_outline(bf, bp, st, HORIZONTAL_ALIGNMENT_CENTER, 18 * z, int(12 * z), int(2 * z), Color("#1a120c"))
+	draw_string(bf, bp, st, HORIZONTAL_ALIGNMENT_CENTER, 18 * z, int(12 * z), Color("#FFF0C8"))
 	if int(c.get("weight", 1)) > 1:
-		draw_rect(Rect2(SIZE.x - 22, SIZE.y - 18, 5, 8), Art.INK)
-		draw_rect(Rect2(SIZE.x - 15, SIZE.y - 18, 5, 8), Art.INK)
+		draw_rect(Rect2(Vector2(62, 120) * z, Vector2(2, 4) * z), Art.INK)
+		draw_rect(Rect2(Vector2(65, 120) * z, Vector2(2, 4) * z), Art.INK)
+	if c.get("rarity", "") in ["legendary", "epic"]:
+		var k2 := fmod(real * 0.35, 1.0)
+		var sx := (-20 + k2 * 116) * z
+		draw_colored_polygon(_shine(aw, sx, z), Color(1, 1, 0.85, 0.16))
 	if ghost:
 		draw_rect(r, Color(0.05, 0.05, 0.08, 0.35))
 
-func _family_mark(fam: String, c: Vector2) -> void:
-	match fam:
-		"sword":
-			draw_line(c + Vector2(-5, 5), c + Vector2(5, -5), Color.WHITE, 2)
-			draw_line(c + Vector2(-5, 1), c + Vector2(-1, 5), Color.WHITE, 2)
-		"magic":
-			var pts := PackedVector2Array()
-			for i in 8:
-				var rr := 6.0 if i % 2 == 0 else 2.5
-				pts.append(c + Vector2(sin(i * PI / 4), -cos(i * PI / 4)) * rr)
-			draw_colored_polygon(pts, Color.WHITE)
-		_:
-			draw_circle(c, 4, Color.WHITE)
-			draw_circle(c, 2, Art.FAMILY["neutral"])
+func _shine(aw: Rect2, sx: float, z: float) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for q in [Vector2(sx, aw.position.y), Vector2(sx + 6 * z, aw.position.y), Vector2(sx - 4 * z, aw.end.y), Vector2(sx - 10 * z, aw.end.y)]:
+		pts.append(Vector2(clampf(q.x, aw.position.x, aw.end.x), q.y))
+	return pts
+
+## The effect's own sprite when there is one, otherwise a drawn emblem (sized for a 104x94 window).
+func _picture(aw: Rect2) -> void:
+	if FXMAP.has(card_id):
+		var st := Art.fx(FXMAP[card_id])
+		if not st.is_empty():
+			var k := maxi(1, int(minf(aw.size.x * 0.9 / st["w"], aw.size.y * 0.9 / st["h"])))
+			var sz := Vector2(st["w"], st["h"]) * k
+			var ofs := Vector2(0, 0)
+			if card_id == "strike":
+				ofs = Vector2(sz.x * 0.15, 0)
+			var fi := Art.frame_at(st, real if st["loop"] else fmod(real, st["n"] / st["fps"] + 0.6))
+			draw_texture_rect_region(st["tex"], Rect2(aw.get_center() - sz / 2 + ofs, sz), Art.frame_src(st, fi))
+			return
+	var zz := zoom / 2.0
+	draw_set_transform(aw.get_center(), 0.0, Vector2(zz, zz))
+	_art(Rect2(-52, -47, 104, 94))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 ## Card picture. Uses the matching effect sprite where there is one; otherwise a simple emblem.
 func _art(a: Rect2) -> void:
 	var c := a.get_center()
-	var fxmap := {"spark": "fire", "crystallize": "crystal", "rain": "splash"}
-	if fxmap.has(card_id):
-		var spec: Dictionary = Art.FX[fxmap[card_id]]
-		var t := Art.tex(spec["path"])
-		if t:
-			var src := Art.frame_rect(t, spec["w"], int(real * 12.0) % Art.frames(t, spec["w"]))
-			var sc := minf(a.size.y / src.size.y, 3.0)
-			var sz := src.size * sc
-			draw_texture_rect_region(t, Rect2(c - sz / 2, sz), src)
-			return
 	var w := Color("#e9dfc8")
 	var k := real
 	match card_id:

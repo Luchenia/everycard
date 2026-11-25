@@ -38,6 +38,10 @@ var _last_hp: Dictionary = {}
 var shake_until := 0.0
 var fizzle: Dictionary = {}      # {cell, t0}: an out-of-range click
 var bursts: Array = []           # {cells, col, t0, beam_from}: a card or a blow landing
+var lunges: Dictionary = {}      # uid -> {t0, dir}: attacker leaning into its blow
+var oneshots: Array = []         # {fx, ground (local), t0, flip}: slash / hit bursts
+var cell_events: Dictionary = {} # cell -> {kind, t0}: fire lighting up / going out, ice breaking
+var _prev_mat: Dictionary = {}
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_PASS
@@ -71,6 +75,7 @@ func _process(delta: float) -> void:
 	if battle != null:
 		_update_liquids()
 		_track_hits()
+		_track_cells()
 	queue_redraw()
 	if top:
 		top.queue_redraw()
@@ -83,14 +88,47 @@ func cell_at(local: Vector2) -> Vector2i:
 func cell_rect(p: Vector2i, inset := 0.0) -> Rect2:
 	return Rect2(origin + Vector2(p) * C + Vector2(inset, inset), Vector2(C - inset * 2, C - inset * 2))
 
+## Ground point of a cell: centre x, 12 art px below the cell top (where sprite anchors sit).
 func feet(cp: Vector2) -> Vector2:
-	return origin + (cp + Vector2(0.5, 1.0)) * C - Vector2(0, 3 * S)
+	return origin + (cp + Vector2(0.5, 0.0)) * C + Vector2(0, 12 * S)
 
 func shake(secs := 0.25) -> void:
 	shake_until = real + secs
 
 func burst(cells: Array, col: Color, beam_from := Vector2i(-1, -1)) -> void:
 	bursts.append({"cells": cells, "col": col, "t0": real, "from": beam_from})
+
+## An attacker leans toward its target and a slash arc plays; the target cells get a hit burst.
+func attack(uid: int, cells: Array) -> void:
+	var a: Actor = battle._actor(uid)
+	if a == null or cells.is_empty():
+		return
+	var c := Vector2.ZERO
+	for p in cells:
+		c += Vector2(p)
+	c /= cells.size()
+	var d := (c - Vector2(a.pos))
+	var dir := d.normalized() if d.length() > 0.01 else Vector2.RIGHT
+	lunges[uid] = {"t0": real, "dir": dir}
+	if d.length() <= 1.6:
+		oneshots.append({"fx": "slash", "ground": feet(Vector2(a.pos)) - Vector2(0, 6 * S), "t0": real, "flip": dir.x < 0})
+	for p in cells:
+		if battle.grid.unit_at(p) != null:
+			oneshots.append({"fx": "hit", "ground": feet(Vector2(p)) - Vector2(0, 8 * S), "t0": real + 0.08, "flip": false})
+
+func _track_cells() -> void:
+	var g := battle.grid
+	for p in g.all_cells():
+		var m := g.get_material(p)
+		var was: String = _prev_mat.get(p, m)
+		if was != m:
+			if m == "fire":
+				cell_events[p] = {"kind": "fire_ignite", "t0": real}
+			elif was == "fire":
+				cell_events[p] = {"kind": "fire_out", "t0": real}
+			elif was == "ice" or was == "crystal":
+				cell_events[p] = {"kind": "ice_shatter", "t0": real}
+		_prev_mat[p] = m
 
 func out_of_range_click(p: Vector2i) -> void:
 	fizzle = {"cell": p, "t0": real}
@@ -124,6 +162,11 @@ func _build_floor() -> void:
 		_wall[i] = rnd.randi_range(0, 3) if rnd.randf() < 0.8 else rnd.randi_range(4, 15)
 
 func _tile(tex: Texture2D, idx: int, at: Vector2, mod := Color.WHITE) -> void:
+	if idx >= 8 and idx < 12 and tex.get_width() >= 16 * Art.T:
+		# dark patches are blended half-way toward the plain stone
+		draw_texture_rect_region(tex, Rect2(at, Vector2(C, C)), Rect2((idx - 8) * Art.T, 0, Art.T, Art.T), mod)
+		draw_texture_rect_region(tex, Rect2(at, Vector2(C, C)), Rect2(idx * Art.T, 0, Art.T, Art.T), Color(mod, 0.5))
+		return
 	draw_texture_rect_region(tex, Rect2(at, Vector2(C, C)), Rect2(idx * Art.T, 0, Art.T, Art.T), mod)
 
 func _draw() -> void:
@@ -132,9 +175,9 @@ func _draw() -> void:
 	if _floor_for != battle or _floor.size() != Grid.W * Grid.H:
 		_build_floor()
 	var off := _shake_off()
-	var stone := Art.tex("res://assets/art/floor/stone.png")
-	var wall := Art.tex("res://assets/art/floor/wall.png")
-	var face := Art.tex("res://assets/art/floor/wall_face.png")
+	var stone := Art.tex("floor/stone_floor.png")
+	var wall := Art.tex("floor/stone_wall_top.png")
+	var face := Art.tex("floor/stone_wall_face.png")
 	draw_rect(Rect2(Vector2.ZERO, size), Color("#0a090d"))
 	var W := Grid.W
 	var H := Grid.H
@@ -144,8 +187,11 @@ func _draw() -> void:
 	if face:
 		for x in range(0, W, 2):
 			var fw := mini(2, W - x)
-			draw_texture_rect_region(face, Rect2(origin + off + Vector2(x * C, -C), Vector2(fw * C, C)), Rect2(0, 0, fw * Art.T, Art.T),
-				Color.WHITE if (x / 2) % 2 == 0 else Color(0.92, 0.92, 0.96))
+			var flipx := (x / 2) % 2 == 1
+			var dst := Rect2(origin + off + Vector2(x * C, -C), Vector2(fw * C, C))
+			if flipx:
+				dst = Rect2(dst.position + Vector2(fw * C, 0), Vector2(-fw * C, C))
+			draw_texture_rect_region(face, dst, Rect2(0, 0, fw * Art.T, Art.T))
 	for y in range(-1, H + 1):
 		_tile(wall, _wall[(y + 2) * (W + 2)], origin + off + Vector2(-C, y * C))
 		_tile(wall, _wall[(y + 2) * (W + 2) + W + 1], origin + off + Vector2(W * C, y * C))
@@ -207,6 +253,8 @@ func _track_hits() -> void:
 	if _track_for != battle:
 		_track_for = battle
 		reset_tracking()
+		_prev_mat.clear()
+		cell_events.clear()
 	for u in battle.actors:
 		var hp := _hp_of(u)
 		if _last_hp.has(u.uid) and hp < int(_last_hp[u.uid]):
@@ -250,9 +298,9 @@ func _draw_top() -> void:
 	var items := []
 	for p in g.all_cells():
 		var m := g.get_material(p)
-		if m == "fire" or m == "crystal":
-			items.append({"y": float(p.y) + 0.9, "fx": m, "p": p})
-		elif m == "wall" or m == "metal":
+		if m == "fire" or m == "crystal" or m == "metal":
+			items.append({"y": float(p.y) + 0.75, "fx": ("mirror" if m == "metal" else m), "p": p})
+		elif m == "wall":
 			items.append({"y": float(p.y) + 0.95, "block": m, "p": p})
 	for u in battle.actors:
 		if replaying and not shown_pos.has(u.uid):
@@ -271,6 +319,25 @@ func _draw_top() -> void:
 			_block(tl, it["block"], it["p"], off)
 		else:
 			_unit(tl, it["unit"], off)
+	# one-shot effects: slashes, hit bursts, fire going out, ice breaking
+	oneshots = oneshots.filter(func(q): return real - float(q["t0"]) < 0.8)
+	for q in oneshots:
+		var k: float = real - float(q["t0"])
+		if k < 0.0:
+			continue
+		var st := Art.fx(q["fx"])
+		if not st.is_empty() and k * st["fps"] < st["n"]:
+			_sprite(tl, st, q["ground"] + off, Art.frame_at(st, k), Color.WHITE, q["flip"])
+	for p in cell_events.keys():
+		var ev: Dictionary = cell_events[p]
+		var k2: float = real - float(ev["t0"])
+		if k2 > 0.8:
+			cell_events.erase(p)
+			continue
+		if ev["kind"] == "fire_out" or ev["kind"] == "ice_shatter":
+			var st2 := Art.fx(ev["kind"])
+			if not st2.is_empty() and k2 * st2["fps"] < st2["n"]:
+				_sprite(tl, st2, feet(Vector2(p)) + off, Art.frame_at(st2, k2))
 	# cards and blows landing: a bright flash on the struck cells
 	bursts = bursts.filter(func(q): return real - q["t0"] < 0.45)
 	for q in bursts:
@@ -337,8 +404,20 @@ func _aura(tl: Control, p: Vector2i, off: Vector2) -> void:
 		tl.draw_rect(r.grow(-S), Color(0.45, 0.35, 0.7, 0.10 + (1.0 - ts) * 0.12))
 		_hand(tl, c, real * 0.6 * ts, Color(0.75, 0.65, 1.0, 0.55))
 	elif ts > 1.05:
-		tl.draw_rect(r.grow(-S), Color(1.0, 0.8, 0.3, 0.12))
-		_hand(tl, c, real * 4.0 * ts, Color(1.0, 0.85, 0.4, 0.7))
+		var hs := Art.fx("haste")
+		if hs.is_empty():
+			_hand(tl, c, real * 4.0 * ts, Color(1.0, 0.85, 0.4, 0.7))
+		else:
+			_sprite(tl, hs, c, Art.frame_at(hs, real, p.x + p.y), Color(1, 1, 1, 0.6))
+	var m := g.get_material(p)
+	var surf := {"water": "water_splash", "ice": "ice_glint", "swamp": "swamp_bubbles"}
+	if surf.has(m) and (m != "water" or (p.x * 7 + p.y * 3) % 3 == 0):
+		var ss := Art.fx(surf[m])
+		_sprite(tl, ss, c, Art.frame_at(ss, clock * 1.5, p.x * 5 + p.y * 9))
+	if m == "fire":
+		var fl := 0.8 + 0.2 * sin(real * 7.0 + p.x)
+		for k3 in 3:
+			tl.draw_circle(c, (10 + k3 * 5) * S, Color(1.0, 0.55, 0.15, 0.035 * fl))
 	var ch := float(g.get_var(p, "charge"))
 	if ch > 0.5:
 		var seed := int(real * 10.0) + p.x * 7 + p.y * 13
@@ -351,12 +430,26 @@ func _aura(tl: Control, p: Vector2i, off: Vector2) -> void:
 			tl.draw_polyline(pts, Color(1.0, 0.95, 0.4, 0.9), S)
 	var f := EnvironmentStep.force_at(g, p)
 	if f.length() > 0.4:
-		var d := f.normalized()
-		for i in 3:
-			var k := fmod(real * 1.6 + i / 3.0 + (p.x + p.y) * 0.13, 1.0)
-			var lane := Vector2(-d.y, d.x) * (i - 1) * 4.0 * S
-			var s0 := c + lane + d * (k - 0.5) * (C - 8 * S)
-			tl.draw_line(s0, s0 + d * 4 * S, Color(0.92, 1.0, 0.95, 0.6 * sin(k * PI)), S)
+		var gs := Art.fx("gust_right")
+		tl.draw_rect(r, Color(0.67, 0.82, 0.92, 0.13))
+		if gs.is_empty():
+			var d := f.normalized()
+			for i in 3:
+				var k := fmod(real * 1.6 + i / 3.0 + (p.x + p.y) * 0.13, 1.0)
+				var lane := Vector2(-d.y, d.x) * (i - 1) * 4.0 * S
+				var s0 := c + lane + d * (k - 0.5) * (C - 8 * S)
+				tl.draw_line(s0, s0 + d * 4 * S, Color(0.92, 1.0, 0.95, 0.6 * sin(k * PI)), S)
+		else:
+			# the strip blows right; turn it to the force's main direction
+			var ang := 0.0
+			if absf(f.x) >= absf(f.y):
+				ang = 0.0 if f.x > 0 else PI
+			else:
+				ang = PI / 2 if f.y > 0 else -PI / 2
+			tl.draw_set_transform(c, ang)
+			for k4 in 2:
+				_sprite(tl, gs, Vector2.ZERO, Art.frame_at(gs, real, k4 * 11 + p.x), Color(1, 1, 1, 0.75 - k4 * 0.35))
+			tl.draw_set_transform(Vector2.ZERO, 0.0)
 	var pr := float(g.get_var(p, "pressure"))
 	if pr > 2.0:
 		var k2 := fmod(real * 0.8, 1.0)
@@ -366,28 +459,36 @@ func _hand(tl: Control, c: Vector2, ang: float, col: Color) -> void:
 	tl.draw_arc(c, 5 * S, 0, TAU, 16, Color(col, col.a * 0.5), S)
 	tl.draw_line(c, c + Vector2(sin(ang), -cos(ang)) * 4 * S, col, S)
 
-func _fx(tl: Control, kind: String, p: Vector2i, off: Vector2) -> void:
-	var spec: Dictionary = Art.FX[kind]
-	var tex := Art.tex(spec["path"])
-	var base := origin + off + (Vector2(p) + Vector2(0.5, 1.0)) * C
-	var alpha := 0.35 if aiming else 1.0
-	if tex == null:
+## One sprite from an fx strip with its anchor on the cell's ground point.
+func _sprite(tl: Control, st: Dictionary, ground: Vector2, i: int, mod := Color.WHITE, flip := false, sc := 1.0) -> void:
+	if st.is_empty():
 		return
-	var n := Art.frames(tex, spec["w"])
-	var i := int(clock * float(spec["fps"]) + p.x * 7 + p.y * 5) % n
-	var src := Art.frame_rect(tex, spec["w"], i)
-	var anchor := Vector2(spec["ax"], spec["ay"])
-	# cell bottom-centre sits 4 art px above the cell's bottom edge
-	var at := base - Vector2(0, 4 * S) - anchor * S
-	if kind == "crystal":
-		tl.draw_rect(Rect2(base - Vector2(6 * S, 6 * S), Vector2(12 * S, 3 * S)), Color(0, 0, 0, 0.35 * alpha))
-	tl.draw_texture_rect_region(tex, Rect2(at, src.size * S), src, Color(1, 1, 1, alpha))
+	var src := Art.frame_src(st, i)
+	var sz := src.size * S * sc
+	var at := ground - Vector2(st["ax"], st["ay"]) * S * sc
+	var dst := Rect2(at, sz)
+	if flip:
+		dst = Rect2(ground + Vector2(st["ax"] * S * sc, -st["ay"] * S * sc), Vector2(-sz.x, sz.y))
+	tl.draw_texture_rect_region(st["tex"], dst, src, mod)
+
+func _fx(tl: Control, kind: String, p: Vector2i, off: Vector2) -> void:
+	var ground := feet(Vector2(p)) + off
+	var alpha := 0.35 if aiming else 1.0
+	var ev = cell_events.get(p)
+	if kind == "fire" and ev != null and ev["kind"] == "fire_ignite" and real - float(ev["t0"]) < 0.75:
+		var sti := Art.fx("fire_ignite")
+		_sprite(tl, sti, ground, Art.frame_at(sti, real - float(ev["t0"])), Color(1, 1, 1, alpha))
+		return
+	var st := Art.fx(kind)
+	if kind != "fire":
+		tl.draw_rect(Rect2(ground + Vector2(-7 * S, 1 * S), Vector2(14 * S, 3 * S)), Color(0, 0, 0, 0.3 * alpha))
+	_sprite(tl, st, ground, Art.frame_at(st, clock, p.x * 7 + p.y * 5), Color(1, 1, 1, alpha))
 
 func _block(tl: Control, kind: String, p: Vector2i, off: Vector2) -> void:
 	var r := cell_rect(p)
 	r.position += off
 	if kind == "wall":
-		var wall := Art.tex("res://assets/art/floor/wall.png")
+		var wall := Art.tex("floor/stone_wall_top.png")
 		tl.draw_rect(Rect2(r.position + Vector2(0, C - 3 * S), Vector2(C, 4 * S)), Color(0, 0, 0, 0.35))
 		tl.draw_texture_rect_region(wall, Rect2(r.position - Vector2(0, C * 0.5), Vector2(C, C)), Rect2((p.x * 3 + p.y) % 4 * Art.T, 0, Art.T, Art.T))
 		tl.draw_rect(Rect2(r.position + Vector2(0, C * 0.5), Vector2(C, C * 0.5 - S)), Color("#2a2a36"))
@@ -405,31 +506,37 @@ func _block(tl: Control, kind: String, p: Vector2i, off: Vector2) -> void:
 
 func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 	var cp := _pos_of(u)
+	var st := Art.unit(Art.unit_id(u))
+	if st.is_empty():
+		return
 	var f := feet(cp) + off
-	var tex := Art.unit_tex(u.def_id)
-	var sz := Vector2(tex.get_width(), tex.get_height()) * S
 	# moving between cells: a little hop
 	var frac := absf(cp.x - round(cp.x)) + absf(cp.y - round(cp.y))
 	var hop := -sin(minf(frac * 2.0, 1.0) * PI) * 3 * S if replaying else 0.0
-	var breathe := 1.0 + 0.035 * sin(real * (2.2 if replaying else 0.9) + u.uid)
-	var hit := flashes.has(u.uid) and real - float(flashes[u.uid]) < 0.3
-	var jolt := Vector2(sin(real * 80.0) * 2 * S, 0) if hit else Vector2.ZERO
-	tl.draw_rect(Rect2(f - Vector2(sz.x * 0.3, S), Vector2(sz.x * 0.6, 3 * S)), Color(0, 0, 0, 0.35))
-	var flip := _faces_left(u)
-	var h2 := sz.y * breathe
-	var rect := Rect2(f + jolt - Vector2(sz.x / 2, h2) + Vector2(0, hop), Vector2(sz.x, h2))
-	var mod := Color(1, 0.45, 0.45) if hit else Color.WHITE
-	if flip:
-		rect = Rect2(rect.position, Vector2(-rect.size.x, rect.size.y))   # drawn mirrored over the same spot
-	tl.draw_texture_rect(tex, rect, false, mod)
+	var hit_k := (real - float(flashes[u.uid])) if flashes.has(u.uid) else 9.0
+	var push := Vector2.ZERO
+	if lunges.has(u.uid):
+		var lk: float = (real - float(lunges[u.uid]["t0"])) / 0.22
+		if lk < 1.0:
+			push = lunges[u.uid]["dir"] * 3 * S * sin(lk * PI)
+	if hit_k < 0.15:
+		push += Vector2(-1 if _faces_left(u) else 1, 0) * -S
+	tl.draw_rect(Rect2(f - Vector2(6 * S, 2 * S), Vector2(12 * S, 4 * S)), Color(0, 0, 0, 0.43))
+	var look_left := _faces_left(u)
+	var flip: bool = look_left == bool(st["faces_right"])
+	var ground := f + push + Vector2(0, hop)
+	var idx := Art.frame_at(st, clock * 1.0, u.uid * 3)
+	_sprite(tl, st, ground, idx, Color.WHITE, flip)
+	if hit_k < 0.09:
+		_sprite(tl, st, ground, idx, Color(5, 5, 5, 1), flip)   # white flash
+	if u.has_status("shocked"):
+		var sh := Art.fx("shock")
+		_sprite(tl, sh, f - Vector2(0, st["h"] * 0.45 * S), Art.frame_at(sh, clock * 3.0, u.uid))
 	if u.has_status("crystal"):
-		var ct := Art.tex(Art.FX["crystal"]["path"])
-		if ct:
-			var src := Art.frame_rect(ct, 16, int(clock * 20.0) % Art.frames(ct, 16))
-			var cs := src.size * S * 1.25
-			tl.draw_texture_rect_region(ct, Rect2(f - Vector2(cs.x / 2, cs.y - 2 * S), cs), src, Color(1, 1, 1, 0.7))
+		var cr := Art.fx("crystal")
+		_sprite(tl, cr, f + Vector2(0, 2 * S), Art.frame_at(cr, clock), Color(1, 1, 1, 0.7), false, 1.3)
 	if u.has_status("frozen"):
-		tl.draw_rect(Rect2(f - Vector2(sz.x * 0.4, sz.y * 0.85), Vector2(sz.x * 0.8, sz.y * 0.85)), Color(0.7, 0.9, 1.0, 0.35))
+		tl.draw_rect(Rect2(f - Vector2(st["w"] * 0.4 * S, st["h"] * 0.85 * S), Vector2(st["w"] * 0.8 * S, st["h"] * 0.85 * S)), Color(0.7, 0.9, 1.0, 0.35))
 
 func _faces_left(u: Actor) -> bool:
 	var best := 999
@@ -466,8 +573,8 @@ func _hp_bar(tl: Control, u: Actor, off: Vector2) -> void:
 	for s in ["burning", "wet", "frozen", "crystal", "shocked", "rooted"]:
 		if u.has_status(s):
 			marks.append(s)
-	var tex := Art.unit_tex(u.def_id)
-	var head := feet(_pos_of(u)) + off - Vector2(0, tex.get_height() * S + 4 * S)
+	var ust := Art.unit(Art.unit_id(u))
+	var head := feet(_pos_of(u)) + off - Vector2(0, (float(ust.get("ay", 22)) + 3) * S)
 	for i in marks.size():
 		_mark(tl, marks[i], head + Vector2((i - (marks.size() - 1) / 2.0) * 7 * S, 0))
 	# predicted damage of the aimed card
@@ -540,10 +647,9 @@ func _ghost(tl: Control, t: Dictionary, off: Vector2) -> void:
 		centre += cell_rect(p).get_center()
 	centre = centre / cells.size() + off
 	var pulse := 0.5 + 0.5 * sin(real * 4.0)
-	var tex := Art.unit_tex(a.def_id)
-	var sz := Vector2(tex.get_width(), tex.get_height()) * S
-	var ghost_at := centre + Vector2(0, C * 0.5 - 3 * S)
-	tl.draw_texture_rect(tex, Rect2(ghost_at - Vector2(sz.x / 2, sz.y), sz), false, Color(1, 0.3, 0.25, 0.18 + 0.12 * pulse))
+	var st := Art.unit(Art.unit_id(a))
+	var ghost_at := centre + Vector2(0, -C * 0.5 + 12 * S)
+	_sprite(tl, st, ghost_at, 0, Color(1, 0.3, 0.25, 0.18 + 0.12 * pulse), not _faces_left(a) == bool(st.get("faces_right", false)))
 
 ## Aiming: the hovered cell, and when it is out of reach a line that falls short and fizzles.
 func _aim(tl: Control, off: Vector2) -> void:

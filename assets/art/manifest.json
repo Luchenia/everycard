@@ -1,0 +1,460 @@
+{
+ "cell_px": 16,
+ "note": "All sizes are native pixels. Board draws 16px cells (game scales x3). Strips are horizontal, frames left to right. anchor = pixel inside one frame that sits on the cell ground point (cell centre x, about 12px down from cell top), unless noted.",
+ "floor": {
+  "stone_floor.png": {
+   "what": "16 floor tile variants in a strip",
+   "frame": [
+    16,
+    16
+   ],
+   "count": 16,
+   "groups": {
+    "plain": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "cracked": [
+     4,
+     5,
+     6,
+     7
+    ],
+    "dark_patch": [
+     8,
+     9,
+     10,
+     11
+    ],
+    "chipped": [
+     12,
+     13,
+     14,
+     15
+    ]
+   },
+   "how": "Pick per cell from the seed: ~88% plain, 7% cracked, 5% chipped; dark_patch in 3-6 round blobs (blend 50% toward plain first, see reference/compose.py)."
+  },
+  "stone_wall_top.png": {
+   "what": "wall top blocks (room border), strip",
+   "frame": [
+    16,
+    16
+   ],
+   "count": 16,
+   "groups": {
+    "plain": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "variants": [
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ]
+   }
+  },
+  "stone_wall_face.png": {
+   "what": "front face of the top wall, one row under the top wall cap; tile horizontally (flip every other copy)",
+   "frame": [
+    32,
+    16
+   ],
+   "count": 1
+  }
+ },
+ "fx": {
+  "fire.png": {
+   "what": "[화염] cell: standing flame, stays inside 14px width, rises ~1 cell above.",
+   "frame": [
+    16,
+    36
+   ],
+   "count": 24,
+   "fps": 24,
+   "loop": true,
+   "anchor": [
+    8,
+    32
+   ],
+   "layer": "y-sorted with units",
+   "also": "draw an orange cell tint under it (rgba 120,30,10,~85) with 1px outline (255,120,40,~110), flicker; add warm additive glow ~40px"
+  },
+  "fire_ignite.png": {
+   "what": "one-shot: [화염] starts; play then switch to fire loop",
+   "frame": [
+    24,
+    40
+   ],
+   "count": 18,
+   "fps": 24,
+   "loop": false,
+   "anchor": [
+    12,
+    34
+   ]
+  },
+  "fire_out.png": {
+   "what": "one-shot: [화염] put out (by [젖음] etc.)",
+   "frame": [
+    20,
+    34
+   ],
+   "count": 18,
+   "fps": 24,
+   "loop": false,
+   "anchor": [
+    10,
+    30
+   ]
+  },
+  "crystal.png": {
+   "what": "[결정] cell: one prism crystal per cell (Luchenia chose A)",
+   "frame": [
+    16,
+    32
+   ],
+   "count": 24,
+   "fps": 24,
+   "loop": true,
+   "anchor": [
+    8,
+    26
+   ],
+   "layer": "y-sorted with units",
+   "also": "soft violet glow; small shadow ellipse 14x5"
+  },
+  "mirror.png": {
+   "what": "[거울] object: standing mirror shard, blocks the cell",
+   "frame": [
+    16,
+    32
+   ],
+   "count": 24,
+   "fps": 24,
+   "loop": true,
+   "anchor": [
+    8,
+    27
+   ],
+   "layer": "y-sorted with units"
+  },
+  "water_splash.png": {
+   "what": "droplets on [젖음] puddle cells (put on ~1 in 3 water cells)",
+   "frame": [
+    16,
+    16
+   ],
+   "count": 24,
+   "fps": 24,
+   "loop": true,
+   "anchor": [
+    8,
+    12
+   ]
+  },
+  "ice_glint.png": {
+   "what": "sparkles on top of [빙결] fill, every ice cell, offset frames per cell",
+   "frame": [
+    16,
+    16
+   ],
+   "count": 24,
+   "fps": 24,
+   "loop": true,
+   "anchor": [
+    8,
+    8
+   ]
+  },
+  "ice_shatter.png": {
+   "what": "one-shot: [빙결]/[결정] breaks; fade the ice fill out over the same 18 frames",
+   "frame": [
+    16,
+    16
+   ],
+   "count": 18,
+   "fps": 24,
+   "loop": false,
+   "anchor": [
+    8,
+    8
+   ]
+  },
+  "swamp_bubbles.png": {
+   "what": "bubbles on top of [늪] fill, every swamp cell",
+   "frame": [
+    16,
+    16
+   ],
+   "count": 24,
+   "fps": 24,
+   "loop": true,
+   "anchor": [
+    8,
+    8
+   ]
+  },
+  "gust_right.png": {
+   "what": "[돌풍] cell, wind blowing RIGHT. Other directions: flip horizontally (left) or rotate 90 (up/down). Draw it twice (alpha) and add a faint cell tint rgba(170,210,235,34) so direction reads.",
+   "frame": [
+    16,
+    16
+   ],
+   "count": 24,
+   "fps": 24,
+   "loop": true,
+   "anchor": [
+    8,
+    8
+   ]
+  },
+  "shock.png": {
+   "what": "[감전] on a unit: overlay 16x24 centred on the unit body (anchor = unit centre)",
+   "frame": [
+    16,
+    24
+   ],
+   "count": 24,
+   "fps": 24,
+   "loop": true,
+   "anchor": [
+    8,
+    12
+   ]
+  },
+  "haste.png": {
+   "what": "[가속] cell rune; draw at ~60% alpha",
+   "frame": [
+    16,
+    16
+   ],
+   "count": 24,
+   "fps": 24,
+   "loop": true,
+   "anchor": [
+    8,
+    8
+   ]
+  },
+  "slash.png": {
+   "what": "one-shot attack arc, facing right (flip for left). anchor is left of the arc: put it at the attacker.",
+   "frame": [
+    18,
+    24
+   ],
+   "count": 10,
+   "fps": 24,
+   "loop": false,
+   "anchor": [
+    -4,
+    12
+   ]
+  },
+  "hit.png": {
+   "what": "one-shot hit burst on the target centre",
+   "frame": [
+    23,
+    22
+   ],
+   "count": 8,
+   "fps": 24,
+   "loop": false,
+   "anchor": [
+    11,
+    11
+   ]
+  },
+  "_fills": {
+   "what": "[젖음] water, [빙결] ice, [기름] oil, [늪] swamp are NOT tiles: draw one organic puddle per connected group of cells, edges shrink 1.5-4.7px inward with noise (never spill into other cells), wet-stone ring, animated ripple. Reference implementation: reference/puddle.py (mask) + reference/states.py (colours per state, 48-frame loop). Port to a shader or bake per group at runtime."
+  }
+ },
+ "units": {
+  "hero.png": {
+   "what": "player hero idle, faces right",
+   "frame": [
+    24,
+    24
+   ],
+   "count": 16,
+   "fps": 12,
+   "loop": true,
+   "anchor": [
+    12,
+    22
+   ]
+  },
+  "slime.png": {
+   "what": "slime idle, faces left",
+   "frame": [
+    24,
+    24
+   ],
+   "count": 16,
+   "fps": 12,
+   "loop": true,
+   "anchor": [
+    12,
+    22
+   ]
+  },
+  "ember_imp.png": {
+   "what": "ember imp idle, faces left",
+   "frame": [
+    24,
+    24
+   ],
+   "count": 16,
+   "fps": 12,
+   "loop": true,
+   "anchor": [
+    12,
+    22
+   ]
+  },
+  "walker.png": {
+   "what": "wanderer idle (humanoid like the player), faces left",
+   "frame": [
+    24,
+    24
+   ],
+   "count": 16,
+   "fps": 12,
+   "loop": true,
+   "anchor": [
+    12,
+    22
+   ]
+  },
+  "iron_golem.png": {
+   "what": "iron golem idle, 32px, faces left",
+   "frame": [
+    32,
+    32
+   ],
+   "count": 16,
+   "fps": 12,
+   "loop": true,
+   "anchor": [
+    16,
+    30
+   ]
+  },
+  "boss_tide_warden.png": {
+   "what": "tide warden boss idle, 48px canvas (~40px tall), faces left",
+   "frame": [
+    48,
+    48
+   ],
+   "count": 16,
+   "fps": 12,
+   "loop": true,
+   "anchor": [
+    24,
+    46
+   ]
+  },
+  "_notes": "attack/hit: generated attack animations were not readable, so do them in code: attack = 3px lunge toward target over 4 frames + fx/slash.png; hit = 2 frames white flash + 1px knockback + fx/hit.png. Shadow: ellipse 12x4 rgba(0,0,0,110) at the anchor. Sort all units and tall fx by anchor y."
+ },
+ "ui": {
+  "cards/card_frame_<family>_<rarity>.png": {
+   "what": "12 card frames. family: neutral (slate plate), sword (crimson plate), magic (violet plate). rarity: basic (plain stone), common (bronze), rare (silver + sapphire), legendary (gold + amber).",
+   "size": [
+    76,
+    127
+   ],
+   "boxes": {
+    "art_window": [
+     12,
+     14,
+     52,
+     47
+    ],
+    "name_plate": [
+     10,
+     68,
+     57,
+     11
+    ],
+    "text_box": [
+     8,
+     86,
+     59,
+     33
+    ],
+    "time_badge_centre": [
+     11,
+     11
+    ],
+    "time_badge_radius": 9
+   },
+   "text": {
+    "name": "fonts/Galmuri9.ttf size 10, colour #F0ECE0, centred",
+    "description": "fonts/Galmuri7.ttf size 8, line height 8, max 4 lines, colour #34281E, centred",
+    "time": "fonts/Galmuri11-Bold.ttf size 12, #FFF0C8 with 1px dark outline, centred on badge"
+   },
+   "check": "19 of 21 current card texts fit in 4 lines. 낙뢰 (6 lines) and 광명 있으라 (5 lines) do not: move trailing keywords like [감전] [반사] [탈진] out of the sentence into small keyword chips (e.g. on the name plate edge), or shorten the sentence. 7px Hangul is small: show the hovered card enlarged."
+  },
+  "window_frame.png": {
+   "what": "stone window frame, empty centre, 9-slice",
+   "size": [
+    96,
+    96
+   ],
+   "nine_slice_margin": 18
+  },
+  "hand_wheel.png": {
+   "what": "hand wheel (top half of a stone rune wheel with 5 card slots + brass hub). Rotate around the hub when the hand scrolls.",
+   "size": [
+    320,
+    112
+   ],
+   "hub_centre": [
+    160,
+    112
+   ],
+   "slot_centres": [
+    [
+     68,
+     83
+    ],
+    [
+     100,
+     43
+    ],
+    [
+     159,
+     27
+    ],
+    [
+     218,
+     43
+    ],
+    [
+     248,
+     83
+    ]
+   ]
+  },
+  "icons/*.png": {
+   "what": "16x16 icons: heart, shield, hourglass, pause, settings, map, exhaust",
+   "size": [
+    16,
+    16
+   ]
+  }
+ }
+}
