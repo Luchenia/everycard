@@ -87,11 +87,10 @@ func test_round_boundary_draws() -> void:
 	var b := Battle.new(c, 1, "hero", ["idle"], LAYOUT)
 	b.cmd_play(0, b.actors[1].pos)
 	b.cmd_play(1, b.actors[1].pos)
-	var empty_before := b.belt.slots.count(null)
-	assert_eq(empty_before, 2, "two slots used")
+	assert_eq(b.belt.slots.count(null), 0, "used slots refill straight away")
 	assert_eq(b.next_draw_at(), 10, "next draw at 10s")
-	b.cmd_wait(4)
-	assert_eq(b.belt.slots.count(null), 0, "round boundary refilled the hand")
+	assert_eq(b.frames.size(), 7, "one replay frame per passed second plus the start")
+	assert_eq(b.frames[-1]["t"], 6, "last frame at the current second")
 
 func test_die_during_windup_no_effect() -> void:
 	var b := Battle.new(c, 1, "hero", ["biter"], LAYOUT)

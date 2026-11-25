@@ -19,6 +19,8 @@ func _initialize() -> void:
 			printerr("LOAD FAIL " + f)
 			failed += 1
 			continue
+		Grid.W = 9   # unit tests assume the 9x7 board; Battle sets its own size from config
+		Grid.H = 7
 		var t = script.new()
 		t.current = f
 		t.run()

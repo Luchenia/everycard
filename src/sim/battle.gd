@@ -21,6 +21,7 @@ var now := 0                 # battle clock in seconds
 var phase := "player"        # player | won | lost
 var telegraphs: Array = []   # {actor_uid, card_id, aim, cells, fire_at, track, foe_uid}
 var log: Array = []
+var frames: Array = []        # one per passed second: {t, pos {uid: Vector2i}, hp {uid: int}} for the view to replay
 
 func _init(cat: Catalog, seed_value: int, player_def: String, enemy_defs: Array, layout: Dictionary = {}) -> void:
 	catalog = cat
@@ -56,6 +57,7 @@ func _init(cat: Catalog, seed_value: int, player_def: String, enemy_defs: Array,
 		_spawn(e, Vector2i(ep[0], ep[1]))
 	ctx.next_uid = 100
 	_rebuild_belt()
+	_frame()
 
 func _spawn(a: Actor, p: Vector2i) -> void:
 	if not grid.place_unit(a, p):
@@ -221,6 +223,7 @@ func cmd_play(slot: int, aim: Vector2i) -> bool:
 		return false
 	var h := human()
 	var id := belt.take(slot)
+	belt.refill_one()   # the used slot fills straight away
 	var card := Effects.card_def(id, catalog)
 	var secs := action_secs(int(card.get("time", 0)), h)
 	_log("play", "%s: %s (%d초)" % [h.name, card.get("name", id), secs], {"card": id, "aim": aim})
@@ -277,8 +280,20 @@ func advance(secs: int, on_done: Callable = Callable()) -> void:
 				on_done.call()
 				_after_action()
 			if phase != "player":
+				_frame()
 				return
 		_world_second()
+		_frame()
+
+## Snapshot of where every unit is and its hp at the current second (view replay).
+func _frame() -> void:
+	var pos := {}
+	var hp := {}
+	for a in actors:
+		if grid.units.has(a):
+			pos[a.uid] = a.pos
+		hp[a.uid] = a.hp
+	frames.append({"t": now, "pos": pos, "hp": hp})
 
 func _world_second() -> void:
 	if now % int(cfg["env_every"]) == 0:

@@ -230,3 +230,7 @@ func roll(dir: int) -> String:
 			i += 1
 		i += 1
 	return dropped
+
+## Draws one card into the first empty slot (after a card is used).
+func refill_one() -> void:
+	_fill(1)

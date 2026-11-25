@@ -49,6 +49,12 @@ func _process(_d: float) -> bool:
 		5:
 			_shot("03_boss_safe_zone")
 		6:
+			# replay: wait 3 seconds and grab a frame while units glide
+			flow.battle.cmd_wait(3)
+			screen._after()
+		7:
+			_shot("04_replay_motion")
+		8:
 			quit(0)
 	step += 1
 	return false

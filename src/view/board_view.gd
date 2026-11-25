@@ -2,7 +2,7 @@ class_name BoardView
 extends Control
 ## Draws the grid: materials, variable overlays, units, enemy telegraphs and the card preview.
 
-const AREA := Vector2(648, 504)   # board area; the cell size follows the grid size
+const AREA := Vector2(780, 520)   # board area; the cell size follows the grid size
 const MAT_COLORS := {
 	"none": Color("#2b2f3a"), "water": Color("#2d5f9e"), "ice": Color("#a9d8f0"), "steam": Color("#8c97a6"),
 	"oil": Color("#3b2f1e"), "fire": Color("#e0631b"), "gas_flammable": Color("#6f8f2a"), "smoke": Color("#55555c"),
@@ -12,6 +12,11 @@ const MAT_COLORS := {
 var battle: Battle
 var hover := Vector2i(-1, -1)
 var preview: Dictionary = {}
+var shown_pos: Dictionary = {}   # uid -> Vector2 (cell coords, fractional while replaying)
+var shown_hp: Dictionary = {}    # uid -> hp at the replayed second
+var shown_now := -1              # replayed second
+var replaying := false
+var _clock := 0.0
 var font: Font
 var CELL := 72
 
@@ -23,6 +28,10 @@ func fit() -> void:
 	custom_minimum_size = Vector2(Grid.W * CELL, Grid.H * CELL)
 	size = custom_minimum_size
 	mouse_filter = Control.MOUSE_FILTER_PASS
+
+func _process(delta: float) -> void:
+	_clock += delta
+	queue_redraw()
 
 func cell_at(local: Vector2) -> Vector2i:
 	var p := Vector2i(int(floor(local.x / CELL)), int(floor(local.y / CELL)))
@@ -61,23 +70,37 @@ func _draw() -> void:
 			draw_string(font, r.position + Vector2(4, 14), "P%.0f" % pr, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.WHITE)
 		draw_rect(r, Color(0, 0, 0, 0.35), false, 1)
 	for t in battle.telegraphs:
-		var left: int = int(t["fire_at"]) - battle.now
+		var left: int = int(t["fire_at"]) - (shown_now if replaying else battle.now)
 		var hot := Color(1, 0.25, 0.1) if left <= 1 else Color(1, 0.55, 0.1)
 		for p in t["cells"]:
 			draw_rect(_rect(p, 3), Color(hot, 0.18))
 			draw_rect(_rect(p, 3), hot, false, 3)
 			draw_string(font, _rect(p).position + Vector2(CELL - 30, 18), "%d초" % left, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, hot)
-	for u in g.units:
-		var r2 := _rect(u.pos, 10)
-		var col := Color("#4aa3ff") if u.controller == "human" else (Color("#58d26b") if u.team == 0 else Color("#ff5a5a"))
-		draw_circle(r2.get_center(), CELL * 0.3, col)
+	for u in battle.actors:
+		if replaying:
+			if not shown_pos.has(u.uid):
+				continue
+		elif not g.units.has(u):
+			continue
+		var cp: Vector2 = shown_pos.get(u.uid, Vector2(u.pos)) if replaying else Vector2(u.pos)
+		var hp: int = shown_hp.get(u.uid, u.hp) if replaying else u.hp
+		var origin := cp * CELL
+		var center := origin + Vector2(CELL, CELL) * 0.5
+		# bullet time: while the player thinks, everything breathes very slowly
+		var breathe: float = 1.0 if replaying else 1.0 + 0.04 * sin(_clock * 0.9 + u.uid)
+		var col: Color = Color("#4aa3ff") if u.controller == "human" else (Color("#58d26b") if u.team == 0 else Color("#ff5a5a"))
+		draw_circle(center, CELL * 0.3 * breathe, col)
 		if u.is_boss:
-			draw_arc(r2.get_center(), CELL * 0.34, 0, TAU, 24, Color.GOLD, 3)
-		draw_string(font, r2.position + Vector2(2, 20), u.name.substr(0, 2), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.BLACK)
-		draw_string(font, _rect(u.pos).position + Vector2(4, CELL - 4), "%d" % u.hp, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.WHITE)
+			draw_arc(center, CELL * 0.34 * breathe, 0, TAU, 24, Color.GOLD, 3)
+		var nm: String = u.name.substr(0, 2)
+		var np := center + Vector2(-CELL * 0.22, 5)
+		draw_string_outline(font, np, nm, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 4, Color(0, 0, 0, 0.9))
+		draw_string(font, np, nm, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
+		draw_string_outline(font, origin + Vector2(4, CELL - 4), "%d" % hp, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, 4, Color(0, 0, 0, 0.9))
+		draw_string(font, origin + Vector2(4, CELL - 4), "%d" % hp, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.WHITE)
 		var sx := 4.0
 		for s in u.statuses:
-			draw_string(font, _rect(u.pos).position + Vector2(CELL - 12 - sx, 14), s.substr(0, 1).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.YELLOW)
+			draw_string(font, origin + Vector2(CELL - 12 - sx, 14), s.substr(0, 1).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.YELLOW)
 			sx += 10
 	if not preview.is_empty():
 		for p in preview.get("cells", []):
@@ -88,3 +111,11 @@ func _draw() -> void:
 					draw_string(font, _rect(u.pos).position + Vector2(CELL - 30, CELL - 6), "-%d" % preview["damage_by_uid"][uid], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 0.3, 0.3))
 	if hover.x >= 0:
 		draw_rect(_rect(hover), Color(1, 1, 1, 0.5), false, 2)
+	if not replaying:
+		# bullet time: cool tint and slowly drifting motes while the player decides
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.35, 0.55, 1.0, 0.07))
+		for k in 14:
+			var sp := 4.0 + float(k % 5)
+			var px := fmod(float(k) * 97.0 + _clock * sp, size.x)
+			var py := fmod(float(k) * 53.0 + _clock * sp * 0.6, size.y)
+			draw_circle(Vector2(px, py), 1.5 + float(k % 3) * 0.5, Color(0.8, 0.9, 1.0, 0.35))

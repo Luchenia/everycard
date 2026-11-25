@@ -17,6 +17,9 @@ var ability_mode := false
 var shown_log := 0
 var log_timer := 0.0
 var seed_value := 0
+const SEC_REAL := 0.35   # real seconds one game second takes when replayed
+var shown_frame := 0
+var replay_t := 0.0
 
 func _ready() -> void:
 	font = load("res://assets/fonts/Galmuri11.ttf")
@@ -50,18 +53,18 @@ func _ready() -> void:
 	status.add_theme_font_size_override("font_size", 18)
 	add_child(status)
 	info = Label.new()
-	info.position = Vector2(700, 96)
-	info.size = Vector2(556, 230)
+	info.position = Vector2(824, 96)
+	info.size = Vector2(432, 230)
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD
 	add_child(info)
 	log_label = RichTextLabel.new()
-	log_label.position = Vector2(700, 330)
-	log_label.size = Vector2(556, 270)
+	log_label.position = Vector2(824, 330)
+	log_label.size = Vector2(432, 280)
 	log_label.scroll_following = true
 	log_label.add_theme_font_size_override("normal_font_size", 13)
 	add_child(log_label)
 	hand_box = Control.new()
-	hand_box.position = Vector2(24, 612)
+	hand_box.position = Vector2(24, 626)
 	hand_box.size = Vector2(1232, 180)
 	hand_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(hand_box)
@@ -73,13 +76,50 @@ func _ready() -> void:
 
 func _new_run() -> void:
 	flow = RunFlow.new(catalog, seed_value)
+	shown_frame = flow.battle.frames.size() - 1
 	shown_log = 0
 	log_label.clear()
 	_refresh()
 
+func _replaying() -> bool:
+	return flow != null and flow.battle != null and shown_frame < flow.battle.frames.size() - 1
+
+## Plays passed seconds back: units glide from one second's position to the next.
+func _step_replay(delta: float) -> void:
+	var fr: Array = flow.battle.frames
+	if shown_frame >= fr.size() - 1:
+		if board.replaying:
+			board.replaying = false
+			_refresh()
+		return
+	board.replaying = true
+	replay_t += delta / SEC_REAL
+	while replay_t >= 1.0 and shown_frame < fr.size() - 1:
+		replay_t -= 1.0
+		shown_frame += 1
+	if shown_frame >= fr.size() - 1:
+		replay_t = 0.0
+		board.replaying = false
+		flow.update()
+		_refresh()
+		return
+	var a: Dictionary = fr[shown_frame]
+	var b: Dictionary = fr[shown_frame + 1]
+	var k := clampf(replay_t, 0.0, 1.0)
+	var e := k * k * (3.0 - 2.0 * k)
+	board.shown_pos = {}
+	for uid in a["pos"]:
+		var p0 := Vector2(a["pos"][uid])
+		var p1 := Vector2(b["pos"].get(uid, a["pos"][uid]))
+		board.shown_pos[uid] = p0.lerp(p1, e)
+	board.shown_hp = a["hp"] if k < 0.5 else b["hp"]
+	board.shown_now = int(a["t"])
+	status.text = "전투 %d/3   %d초 ▶ 진행 중" % [flow.index + 1, int(a["t"])]
+
 func _process(delta: float) -> void:
 	if flow == null or flow.battle == null:
 		return
+	_step_replay(delta)
 	log_timer -= delta
 	if log_timer <= 0.0 and shown_log < flow.battle.log.size():
 		var e: Dictionary = flow.battle.log[shown_log]
@@ -140,6 +180,10 @@ func _refresh() -> void:
 			btn.position = Vector2(300 + i * 120, 12 + absf(k) * absf(k) * 6)
 			btn.rotation = k * 0.035
 			btn.toggle_mode = true
+			btn.add_theme_stylebox_override("normal", _card_style(Color("#3a4058"), Color("#9aa3c4")))
+			btn.add_theme_stylebox_override("hover", _card_style(Color("#4a5272"), Color("#d0d6f0")))
+			btn.add_theme_stylebox_override("pressed", _card_style(Color("#5a4a20"), Color("#ffd060")))
+			btn.add_theme_stylebox_override("disabled", _card_style(Color("#24272f"), Color("#3a3f4c")))
 			btn.button_pressed = i == selected
 			if s != null and s.get("tail", false):
 				btn.text = "(무거운 카드)"
@@ -170,6 +214,16 @@ func _refresh() -> void:
 	hand_box.add_child(tips)
 	_update_info()
 
+func _card_style(bg: Color, border: Color) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = bg
+	sb.border_color = border
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(6)
+	sb.content_margin_left = 6
+	sb.content_margin_right = 6
+	return sb
+
 func _roll_cost(dir: int) -> String:
 	var b := flow.battle
 	var id := b.belt.end_card(dir)
@@ -194,6 +248,7 @@ func _overlay_title(t: String) -> void:
 
 func _pick_reward(i: int) -> void:
 	flow.choose_reward(i)
+	shown_frame = flow.battle.frames.size() - 1
 	shown_log = 0
 	log_label.clear()
 	selected = -1
@@ -227,7 +282,7 @@ func _update_info() -> void:
 	info.text = "\n".join(lines)
 
 func _on_board_input(ev: InputEvent) -> void:
-	if flow.phase != "battle":
+	if flow.phase != "battle" or _replaying():
 		return
 	var b := flow.battle
 	if ev is InputEventMouseMotion:
@@ -256,7 +311,7 @@ func _on_board_input(ev: InputEvent) -> void:
 
 func _input(ev: InputEvent) -> void:
 	# the wheel rolls the hand wherever the mouse is
-	if flow == null or flow.phase != "battle" or not (ev is InputEventMouseButton) or not ev.pressed:
+	if flow == null or flow.phase != "battle" or not (ev is InputEventMouseButton) or not ev.pressed or _replaying():
 		return
 	if ev.button_index == MOUSE_BUTTON_WHEEL_UP or ev.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 		selected = -1
@@ -265,7 +320,7 @@ func _input(ev: InputEvent) -> void:
 		_after()
 
 func _unhandled_input(ev: InputEvent) -> void:
-	if flow == null or flow.phase != "battle" or not (ev is InputEventKey) or not ev.pressed or ev.echo:
+	if flow == null or flow.phase != "battle" or not (ev is InputEventKey) or not ev.pressed or ev.echo or _replaying():
 		return
 	var b := flow.battle
 	match ev.keycode:
@@ -297,5 +352,6 @@ func _unhandled_input(ev: InputEvent) -> void:
 
 func _after() -> void:
 	ability_mode = false
-	flow.update()
+	if not _replaying():
+		flow.update()
 	_refresh()
