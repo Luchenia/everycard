@@ -255,8 +255,7 @@ func test_review_fixes() -> void:
 	w2.cmd_play(s0, f2.pos)
 	assert_true(w2.human() == f2, "control moved mid wind-up")
 	assert_eq(f2.hp, hp2, "the old body's card did not land")
-	# rolling with an empty draw pile does not hand back the dropped card
+	# a five-card deck is a five-card ring: rolling keeps every card
 	var r := HandBelt.new(["strike", "guard", "step", "frost", "spark"], SimRng.new(1), c, 5, false)
-	r.discard = []
 	assert_eq(r.roll(1), "spark", "dropped spark")
-	assert_true(not r.slots.map(func(x): return x["card_id"] if x else "").has("spark"), "spark not drawn straight back")
+	assert_eq(r.ring().size(), 5, "ring keeps all five")

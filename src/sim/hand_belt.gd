@@ -1,6 +1,9 @@
 class_name HandBelt
 extends RefCounted
-## The hand. Two modes:
+## The hand. In relaxed mode the whole deck is one ring: the hand is a window of up to 5 cards
+## on it, the rest of the ring waits in draw_pile (no discard pile). A used card goes to the back
+## of the ring and the wheel turns the ring one card at a time.
+## Two modes:
 ## - "relaxed" (default): cards stay until used. At turn end, empty slots receive floor(2 x speed)
 ##   draws (speed = time_scale of the player's cell). Heavy cards take two slots.
 ## - "lifespan": each card has its own remaining life that drops by the speed each turn end;
@@ -109,8 +112,24 @@ func take(slot: int) -> String:
 	slots[slot] = null
 	if slot + 1 < slots.size() and slots[slot + 1] != null and slots[slot + 1].get("tail", false):
 		slots[slot + 1] = null
-	discard.append(id)
+	if mode == "relaxed":
+		draw_pile.push_back(id)   # back of the ring
+		_compact()
+	else:
+		discard.append(id)
 	return id
+
+## Slides cards left so the window has no gaps (keeps the ring order).
+func _compact() -> void:
+	var e := _entries()
+	slots.fill(null)
+	var i := 0
+	for x in e:
+		slots[i] = x
+		if _heavy(x["card_id"]) and i + 1 < slots.size():
+			slots[i + 1] = {"card_id": x["card_id"], "tail": true}
+			i += 1
+		i += 1
 
 func _burn(i: int) -> void:
 	discard.append(slots[i]["card_id"])
@@ -203,6 +222,8 @@ func roll(dir: int) -> String:
 	var used := 0
 	for x in e:
 		used += 2 if (mode == "relaxed" and _heavy(x["card_id"])) else 1
+	if mode == "relaxed":
+		return _roll_ring(dir, e, dropped)
 	var tries := draw_pile.size() + discard.size() + 1
 	while tries > 0:
 		tries -= 1
@@ -230,6 +251,44 @@ func roll(dir: int) -> String:
 			i += 1
 		i += 1
 	return dropped
+
+## Ring roll: dir < 0 sends the left card to the back of the ring and the next card enters on the
+## right; dir > 0 turns the other way (the last card of the ring enters on the left).
+func _roll_ring(dir: int, e: Array, dropped: String) -> String:
+	var used := 0
+	for x in e:
+		used += 2 if _heavy(x["card_id"]) else 1
+	if dropped != "":
+		if dir > 0:
+			draw_pile.push_front(dropped)
+		else:
+			draw_pile.push_back(dropped)
+	if not draw_pile.is_empty():
+		var id: String = draw_pile.pop_back() if dir > 0 else draw_pile.pop_front()
+		var w := 2 if _heavy(id) else 1
+		if used + w <= slots.size():
+			var entry := {"card_id": id, "life": life_for(id)}
+			if dir > 0:
+				e.push_front(entry)
+			else:
+				e.push_back(entry)
+		elif dir > 0:
+			draw_pile.push_back(id)
+		else:
+			draw_pile.push_front(id)
+	slots.fill(null)
+	var i := 0
+	for x in e:
+		slots[i] = x
+		if _heavy(x["card_id"]) and i + 1 < slots.size():
+			slots[i + 1] = {"card_id": x["card_id"], "tail": true}
+			i += 1
+		i += 1
+	return dropped
+
+## The whole ring in order, starting from the hand's left card (relaxed mode).
+func ring() -> Array:
+	return _entries().map(func(x): return x["card_id"]) + draw_pile
 
 ## Draws one card into the first empty slot (after a card is used).
 func refill_one() -> void:

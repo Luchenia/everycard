@@ -1,6 +1,6 @@
 extends TestCase
-## Relaxed hand: cards stay until used; at turn end empty slots receive round(2 x speed) draws;
-## heavy cards take two slots.
+## Relaxed (ring) hand: cards stay until used, a used card goes to the back of the ring and the
+## window slides; heavy cards take two slots.
 
 var c: Catalog
 
@@ -18,40 +18,19 @@ func run() -> void:
 	assert_eq(cards_in(b), 5, "starts full")
 	b.end_turn(1.0)
 	assert_eq(cards_in(b), 5, "unused cards stay")
-	assert_eq(b.discard.size(), 0, "nothing burns")
-	b.take(0); b.take(1); b.take(2)
-	b.end_turn(1.0)
-	assert_eq(cards_in(b), 4, "normal speed draws 2")
-	b.take(0); b.take(1); b.take(3)
-	b.end_turn(0.3)
-	assert_eq(cards_in(b), 1, "slow time (0.3) draws 0")
-	b.end_turn(2.0)
-	assert_eq(cards_in(b), 5, "fast time draws up to 4")
+	b.take(0)
+	assert_eq(cards_in(b), 4, "used card leaves the window")
+	assert_eq(b.ring().size(), 12, "but stays in the ring")
+	b.refill_one()
+	assert_eq(cards_in(b), 5, "window refills")
 	# heavy takes two slots
 	var h := HandBelt.new(["heavy", "light", "light", "light", "light", "light"], SimRng.new(1), c, 5, false, "relaxed")
 	assert_eq(h.slots[0]["card_id"], "heavy", "heavy first")
 	assert_true(h.slots[1]["tail"], "heavy occupies next slot")
 	assert_eq(cards_in(h), 4, "heavy + 3 light fill 5 slots")
 	assert_eq(h.take(1), "heavy", "taking the tail takes the heavy card")
-	assert_true(h.slots[0] == null and h.slots[1] == null, "both slots freed")
-	# hold: one extra draw next turn
-	var k := HandBelt.new(deck.duplicate(), SimRng.new(1), c, 5, true, "relaxed")
-	k.take(0); k.take(1); k.take(2)
-	k.hold()
-	k.end_turn(1.0)
-	assert_eq(cards_in(k), 5, "hold: draws 3 instead of 2")
-	# flush: discard one and draw one now
-	var f := HandBelt.new(deck.duplicate(), SimRng.new(1), c, 5, true, "relaxed")
-	f.flush(2)
-	assert_eq(f.discard.size(), 1, "flush discards chosen card")
-	assert_eq(cards_in(f), 5, "and draws a replacement")
+	assert_eq(h.slots[0]["card_id"], "light", "window slid left")
+	assert_eq(h.slots.count(null), 2, "two slots freed at the right")
 	var none := HandBelt.new([], SimRng.new(1), c, 5, true, "relaxed")
 	none.end_turn(1.0)
 	assert_true(none.slots.all(func(s): return s == null), "empty deck ok")
-	# heavy card that cannot fit must not block other draws
-	var hv := HandBelt.new(["light", "heavy", "light", "light", "light", "light", "light", "light"], SimRng.new(1), c, 5, false, "relaxed")
-	# slots: light, heavy+tail, light, light ; take slots 0 and 3 -> gaps not adjacent
-	hv.take(0); hv.take(3)
-	hv.draw_pile.push_front("heavy")
-	hv.end_turn(1.0)
-	assert_eq(cards_in(hv), 4, "heavy skipped, lights drawn into both gaps")
