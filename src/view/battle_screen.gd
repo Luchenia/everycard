@@ -122,9 +122,16 @@ func _refresh() -> void:
 			btn.custom_minimum_size = Vector2(118, 170)
 			btn.toggle_mode = true
 			btn.button_pressed = i == selected
-			btn.text = "(빈 칸)" if s == null else _card_text(s["card_id"]) + "\n수명 %.1f%s" % [s["life"], " [곧 사라짐]" if i == b.belt.next_to_burn() else ""]
+			if s != null and s.get("tail", false):
+				btn.text = "(무거운 카드)"
+			elif s == null:
+				btn.text = "(빈 칸)"
+			elif b.belt.mode == "lifespan":
+				btn.text = _card_text(s["card_id"]) + "\n수명 %.1f%s" % [s["life"], " [곧 사라짐]" if i == b.belt.next_to_burn() else ""]
+			else:
+				btn.text = _card_text(s["card_id"])
 			btn.autowrap_mode = TextServer.AUTOWRAP_WORD
-			btn.disabled = s == null or flow.phase != "battle"
+			btn.disabled = s == null or s.get("tail", false) or flow.phase != "battle"
 			btn.pressed.connect(func(): _select(i))
 			hand_box.add_child(btn)
 		var pv := Label.new()
@@ -133,7 +140,7 @@ func _refresh() -> void:
 		pv.modulate = Color(1, 1, 1, 0.6)
 		hand_box.add_child(pv)
 	var tips := Label.new()
-	tips.text = "방향키 이동 · Space 턴 종료\nH 붙잡기(시간 2, 카드 선택 시 그 카드 수명 +2)\nF 가장 짧은 카드 버리기\nA 기본 능력 · 우클릭 취소"
+	tips.text = "방향키 이동 · Space 턴 종료\nH 준비(시간 2, 다음 턴 1장 더)\nF 선택한 카드 버리고 1장 뽑기\nA 기본 능력 · 우클릭 취소"
 	tips.modulate = Color(1, 1, 1, 0.5)
 	hand_box.add_child(tips)
 	_update_info()
@@ -217,7 +224,7 @@ func _unhandled_input(ev: InputEvent) -> void:
 			selected = -1
 			b.cmd_end_turn()
 		KEY_H: b.cmd_hold(selected)
-		KEY_F: b.cmd_flush()
+		KEY_F: b.cmd_flush(selected)
 		KEY_A:
 			if b.human() and b.human().base_ability == "step1":
 				return

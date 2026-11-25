@@ -108,7 +108,7 @@ func test_frozen_enemy_skips() -> void:
 
 func test_hold_one_card() -> void:
 	var b := Battle.new(c, 9, "hero", ["dummy"], LAYOUT)
-	var life: float = b.belt.slots[2]["life"]
-	assert_true(b.cmd_hold(2), "hold a single card")
+	assert_eq(b.belt.mode, Battle.HAND_MODE, "battle uses the configured hand mode")
+	assert_true(b.cmd_hold(2), "hold")
 	assert_eq(b.time_left, 8, "hold costs 2 time")
-	assert_eq(b.belt.slots[2]["life"], life + HandBelt.HOLD_BONUS, "that card lives longer")
+	assert_eq(b.belt._bonus_draws, 1, "relaxed hold: one extra draw next turn")

@@ -1,8 +1,10 @@
 class_name HandBelt
 extends RefCounted
-## Lifespan hand: each card in hand has its own remaining life. At turn end every life drops by
-## the turn speed (the time_scale of the player's cell); burnt-out cards go to the discard pile and
-## their slots refill from the draw pile in place. Heavy cards live longer.
+## The hand. Two modes:
+## - "relaxed" (default): cards stay until used. At turn end, empty slots receive floor(2 x speed)
+##   draws (speed = time_scale of the player's cell). Heavy cards take two slots.
+## - "lifespan": each card has its own remaining life that drops by the speed each turn end;
+##   burnt-out cards leave and every empty slot refills. Heavy cards live longer.
 
 const BASE_LIFE := 3
 const HEAVY_BONUS := 2
@@ -14,9 +16,12 @@ var slots: Array = []      # each: null or {card_id, life}
 var draw_pile: Array = []
 var discard: Array = []
 var _hold := false
-var reverse_next := false  # set by "reverse" meta effects: next turn end restores 1 life instead of decaying
+var reverse_next := false  # "reverse" meta effect: lifespan restores 1 life / relaxed draws 1 more
+var mode := "relaxed"
+var _bonus_draws := 0
 
-func _init(deck: Array, r: SimRng, cat: Catalog, size := 5, shuffle_deck := true) -> void:
+func _init(deck: Array, r: SimRng, cat: Catalog, size := 5, shuffle_deck := true, hand_mode := "relaxed") -> void:
+	mode = hand_mode
 	catalog = cat
 	rng = r
 	draw_pile = deck.duplicate()
@@ -25,6 +30,9 @@ func _init(deck: Array, r: SimRng, cat: Catalog, size := 5, shuffle_deck := true
 	slots.resize(size)
 	slots.fill(null)
 	_fill()
+
+func _heavy(id: String) -> bool:
+	return int(Effects.card_def(id, catalog).get("weight", 1)) > 1
 
 func life_for(id: String) -> float:
 	var w := int(Effects.card_def(id, catalog).get("weight", 1))
@@ -44,20 +52,48 @@ func _draw() -> String:
 		rng.shuffle(draw_pile)
 	return draw_pile.pop_front()
 
-func _fill() -> void:
-	for i in slots.size():
-		if slots[i] == null:
-			var id := _draw()
+## Draws into empty slots, at most max_draws cards (-1 = no limit). In relaxed mode a heavy
+## card needs two adjacent empty slots; if there is no room it waits on top of the draw pile.
+func _fill(max_draws := -1) -> void:
+	var drawn := 0
+	var i := 0
+	while i < slots.size():
+		if max_draws >= 0 and drawn >= max_draws:
+			return
+		if slots[i] != null:
+			i += 1
+			continue
+		var id := preview() if not draw_pile.is_empty() else ""
+		if id == "":
+			id = _draw()
 			if id == "":
 				return
+			draw_pile.push_front(id)
+		if mode == "relaxed" and _heavy(id):
+			if i + 1 >= slots.size() or slots[i + 1] != null:
+				i += 1
+				continue
+			_draw()
 			slots[i] = {"card_id": id, "life": life_for(id)}
+			slots[i + 1] = {"card_id": id, "tail": true}
+			drawn += 1
+			i += 2
+			continue
+		_draw()
+		slots[i] = {"card_id": id, "life": life_for(id)}
+		drawn += 1
+		i += 1
 
 ## Removes the card in a slot (it goes to the discard pile) and returns its id.
 func take(slot: int) -> String:
 	if slot < 0 or slot >= slots.size() or slots[slot] == null:
 		return ""
+	if slots[slot].get("tail", false):
+		slot -= 1
 	var id: String = slots[slot]["card_id"]
 	slots[slot] = null
+	if slot + 1 < slots.size() and slots[slot + 1] != null and slots[slot + 1].get("tail", false):
+		slots[slot + 1] = null
 	discard.append(id)
 	return id
 
@@ -66,6 +102,12 @@ func _burn(i: int) -> void:
 	slots[i] = null
 
 func end_turn(speed: float) -> void:
+	if mode == "relaxed":
+		var n := int(floor(clampf(speed, 0.0, 2.0) * 2.0 + 0.0001)) + _bonus_draws + (1 if reverse_next else 0)
+		_bonus_draws = 0
+		reverse_next = false
+		_fill(n)
+		return
 	var decay := clampf(speed, 0.0, 2.0)
 	if _hold:
 		decay = 0.0
@@ -83,13 +125,24 @@ func end_turn(speed: float) -> void:
 
 ## hold() freezes every card's life this turn; hold(slot) extends one card's life instead.
 func hold(slot := -1) -> void:
+	if mode == "relaxed":
+		_bonus_draws += 1
+		return
 	if slot >= 0 and slot < slots.size() and slots[slot] != null:
 		slots[slot]["life"] += HOLD_BONUS
 	else:
 		_hold = true
 
-## Burns the card closest to burning out right away and refills its slot.
-func flush() -> void:
+## Lifespan: burns the card closest to burning out and refills. Relaxed: discards the given
+## card (or the first one) and draws one replacement now.
+func flush(slot := -1) -> void:
+	if mode == "relaxed":
+		if slot < 0 or slot >= slots.size() or slots[slot] == null:
+			slot = slots.find_custom(func(x): return x != null)
+		if slot >= 0:
+			take(slot)
+		_fill(1)
+		return
 	var best := -1
 	for i in slots.size():
 		if slots[i] != null and (best < 0 or slots[i]["life"] < slots[best]["life"]):
@@ -98,8 +151,10 @@ func flush() -> void:
 		_burn(best)
 	_fill()
 
-## Index of the card that will burn first (for the UI), or -1.
+## Index of the card that will burn first (for the UI), or -1. Always -1 in relaxed mode.
 func next_to_burn() -> int:
+	if mode == "relaxed":
+		return -1
 	var best := -1
 	for i in slots.size():
 		if slots[i] != null and (best < 0 or slots[i]["life"] < slots[best]["life"]):

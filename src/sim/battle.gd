@@ -5,6 +5,7 @@ extends RefCounted
 
 const TURN_TIME := 10
 const HOLD_COST := 2
+const HAND_MODE := "relaxed"   # "relaxed" | "lifespan"
 
 var catalog: Catalog
 var rng: SimRng
@@ -86,7 +87,7 @@ func human() -> Actor:
 func _rebuild_belt() -> void:
 	belt_owner = human()
 	if belt_owner != null:
-		belt = HandBelt.new(belt_owner.deck, rng, catalog)
+		belt = HandBelt.new(belt_owner.deck, rng, catalog, 5, true, HAND_MODE)
 
 func _on_meta(part: Dictionary, user) -> void:
 	if user != human():
@@ -182,10 +183,10 @@ func cmd_hold(slot := -1) -> bool:
 	_log("hold", "손패 붙잡기", {})
 	return true
 
-func cmd_flush() -> bool:
+func cmd_flush(slot := -1) -> bool:
 	if phase != "player":
 		return false
-	belt.flush()
+	belt.flush(slot)
 	_log("flush", "손패 흘려보내기", {})
 	return true
 
