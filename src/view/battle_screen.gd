@@ -64,7 +64,7 @@ func _ready() -> void:
 	log_label.add_theme_font_size_override("normal_font_size", 13)
 	add_child(log_label)
 	hand_box = Control.new()
-	hand_box.position = Vector2(24, 626)
+	hand_box.position = Vector2(24, 620)
 	hand_box.size = Vector2(1232, 180)
 	hand_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(hand_box)
@@ -177,7 +177,7 @@ func _refresh() -> void:
 			btn.size = Vector2(124, 150)
 			btn.pivot_offset = Vector2(62, 300)
 			var k := float(i) - float(n - 1) / 2.0
-			btn.position = Vector2(300 + i * 120, 12 + absf(k) * absf(k) * 6)
+			btn.position = Vector2(300 + i * 120, 8 + absf(k) * absf(k) * 3)
 			btn.rotation = k * 0.035
 			btn.toggle_mode = true
 			btn.add_theme_stylebox_override("normal", _card_style(Color("#3a4058"), Color("#9aa3c4")))
