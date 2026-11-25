@@ -122,7 +122,7 @@
    ]
   },
   "crystal.png": {
-   "what": "[결정] cell: one prism crystal per cell (Luchenia chose A)",
+   "what": "[결정] cell: one floating gem per cell (Luchenia chose B, 2026-11-26), bobs and turns; its own soft shadow is baked in and shrinks as it rises, so draw no extra shadow. If a unit stands in the cell ([속박]), draw it 14px higher so it hovers over the unit head.",
    "frame": [
     16,
     32
@@ -132,10 +132,10 @@
    "loop": true,
    "anchor": [
     8,
-    26
+    27
    ],
    "layer": "y-sorted with units",
-   "also": "soft violet glow; small shadow ellipse 14x5"
+   "also": "soft violet additive glow ~36px"
   },
   "mirror.png": {
    "what": "[거울] object: standing mirror shard, blocks the cell",
@@ -373,27 +373,27 @@
   "cards/card_frame_<family>_<rarity>.png": {
    "what": "12 card frames. family: neutral (slate plate), sword (crimson plate), magic (violet plate). rarity: basic (plain stone), common (bronze), rare (silver + sapphire), legendary (gold + amber).",
    "size": [
-    76,
-    127
+    88,
+    137
    ],
    "boxes": {
     "art_window": [
      12,
-     14,
-     52,
-     47
+     12,
+     64,
+     65
     ],
     "name_plate": [
      10,
-     68,
-     57,
+     84,
+     69,
      11
     ],
     "text_box": [
      8,
-     86,
-     59,
-     33
+     102,
+     71,
+     27
     ],
     "time_badge_centre": [
      11,
@@ -403,10 +403,10 @@
    },
    "text": {
     "name": "fonts/Galmuri9.ttf size 10, colour #F0ECE0, centred",
-    "description": "fonts/Galmuri7.ttf size 8, line height 8, max 4 lines, colour #34281E, centred",
+    "description": "fonts/Galmuri7.ttf size 8, line height 8, max 3 lines, colour #34281E, centred (reference/cardtext2.py)",
     "time": "fonts/Galmuri11-Bold.ttf size 12, #FFF0C8 with 1px dark outline, centred on badge"
    },
-   "check": "19 of 21 current card texts fit in 4 lines. 낙뢰 (6 lines) and 광명 있으라 (5 lines) do not: move trailing keywords like [감전] [반사] [탈진] out of the sentence into small keyword chips (e.g. on the name plate edge), or shorten the sentence. 7px Hangul is small: show the hovered card enlarged."
+   "check": "2026-11-26 Luchenia: art window felt the same size as the text box, so the card is now wider and the art window taller (64x65 vs text 71x27). 18 of 21 texts fit in 3 lines; 낙뢰, 광명 있으라, 중력장 need 4: move trailing keywords ([감전] [반사] [탈진]) into small chips, or shorten 중력장 to e.g. \"3×3 범위의 상대를 중앙으로 끌어당깁니다.\" Show the hovered card enlarged."
   },
   "window_frame.png": {
    "what": "stone window frame, empty centre, 9-slice",

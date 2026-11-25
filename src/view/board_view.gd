@@ -299,7 +299,8 @@ func _draw_top() -> void:
 	for p in g.all_cells():
 		var m := g.get_material(p)
 		if m == "fire" or m == "crystal" or m == "metal":
-			items.append({"y": float(p.y) + 0.75, "fx": ("mirror" if m == "metal" else m), "p": p})
+			var over := m == "crystal" and g.unit_at(p) != null
+			items.append({"y": float(p.y) + (0.97 if over else 0.75), "fx": ("mirror" if m == "metal" else m), "p": p})
 		elif m == "wall":
 			items.append({"y": float(p.y) + 0.95, "block": m, "p": p})
 	for u in battle.actors:
@@ -480,9 +481,21 @@ func _fx(tl: Control, kind: String, p: Vector2i, off: Vector2) -> void:
 		_sprite(tl, sti, ground, Art.frame_at(sti, real - float(ev["t0"])), Color(1, 1, 1, alpha))
 		return
 	var st := Art.fx(kind)
+	if kind == "crystal":
+		# floating gem, own shadow baked in; it hovers over the head of a unit held in the cell
+		if battle.grid.unit_at(p) != null:
+			ground -= Vector2(0, 14 * S)
+		_crystal_glow(tl, ground, alpha)
+		_sprite(tl, st, ground, Art.frame_at(st, clock, p.x * 7 + p.y * 5), Color(1, 1, 1, alpha))
+		return
 	if kind != "fire":
 		tl.draw_rect(Rect2(ground + Vector2(-7 * S, 1 * S), Vector2(14 * S, 3 * S)), Color(0, 0, 0, 0.3 * alpha))
 	_sprite(tl, st, ground, Art.frame_at(st, clock, p.x * 7 + p.y * 5), Color(1, 1, 1, alpha))
+
+func _crystal_glow(tl: Control, ground: Vector2, alpha: float) -> void:
+	var c := ground - Vector2(0, 10 * S)
+	for k in 3:
+		tl.draw_circle(c, (6 + k * 4) * S, Color(0.7, 0.5, 1.0, 0.05 * alpha))
 
 func _block(tl: Control, kind: String, p: Vector2i, off: Vector2) -> void:
 	var r := cell_rect(p)
@@ -533,8 +546,11 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 		var sh := Art.fx("shock")
 		_sprite(tl, sh, f - Vector2(0, st["h"] * 0.45 * S), Art.frame_at(sh, clock * 3.0, u.uid))
 	if u.has_status("crystal"):
-		var cr := Art.fx("crystal")
-		_sprite(tl, cr, f + Vector2(0, 2 * S), Art.frame_at(cr, clock), Color(1, 1, 1, 0.7), false, 1.3)
+		if battle.grid.get_material(u.pos) != "crystal":
+			var cr := Art.fx("crystal")
+			var cg := f - Vector2(0, 14 * S)
+			_crystal_glow(tl, cg, 1.0)
+			_sprite(tl, cr, cg, Art.frame_at(cr, clock, u.uid))
 	if u.has_status("frozen"):
 		tl.draw_rect(Rect2(f - Vector2(st["w"] * 0.4 * S, st["h"] * 0.85 * S), Vector2(st["w"] * 0.8 * S, st["h"] * 0.85 * S)), Color(0.7, 0.9, 1.0, 0.35))
 

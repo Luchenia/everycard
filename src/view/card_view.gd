@@ -8,10 +8,10 @@ extends Control
 signal picked(card_view)
 signal hovered(card_view, on)
 
-const SIZE := Vector2(76, 127)      # art px
-const ART_WIN := Rect2(12, 14, 52, 47)
-const NAME_PLATE := Rect2(10, 68, 57, 11)
-const TEXT_BOX := Rect2(8, 86, 59, 33)
+const SIZE := Vector2(88, 137)      # art px
+const ART_WIN := Rect2(12, 12, 64, 65)
+const NAME_PLATE := Rect2(10, 84, 69, 11)
+const TEXT_BOX := Rect2(8, 102, 71, 27)
 const BADGE := Vector2(11, 11)
 const FXMAP := {"strike": "slash", "spark": "fire", "crystallize": "crystal", "rain": "water_splash", "mirror": "mirror",
 	"frost": "ice_glint", "slow_field": "swamp_bubbles", "gust": "gust_right", "shock": "shock", "hurry": "haste", "haste_field": "haste"}
@@ -35,14 +35,14 @@ func setup(id: String, cat: Catalog, f: Font, z := 1) -> void:
 	desc.bbcode_enabled = true
 	desc.scroll_active = false
 	desc.fit_content = false
-	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	desc.autowrap_mode = TextServer.AUTOWRAP_OFF
 	desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	desc.add_theme_font_override("normal_font", Art.font("Galmuri7"))
 	desc.add_theme_color_override("default_color", Color("#34281E"))
 	desc.add_theme_constant_override("line_separation", 0)
 	var split := CardView.split_chips(def().get("desc", ""))
 	chips = split[1]
-	desc.text = "[center]%s[/center]" % CardView.rich(split[0])
+	desc.text = "[center]%s[/center]" % CardView.rich(CardView.wrap_words(split[0], Art.font("Galmuri7"), 8, TEXT_BOX.size.x - 4))
 	add_child(desc)
 	set_zoom(z)
 	mouse_entered.connect(func(): hovered.emit(self, true))
@@ -52,8 +52,8 @@ func set_zoom(z: int) -> void:
 	zoom = z
 	size = SIZE * z
 	pivot_offset = Vector2(size.x / 2, size.y)
-	desc.position = (TEXT_BOX.position + Vector2(3, 1)) * z
-	desc.size = (TEXT_BOX.size - Vector2(6, 1)) * z
+	desc.position = (TEXT_BOX.position + Vector2(2, 0)) * z
+	desc.size = (TEXT_BOX.size - Vector2(4, -2)) * z
 	desc.add_theme_font_size_override("normal_font_size", 8 * z)
 
 func def() -> Dictionary:
@@ -73,6 +73,21 @@ static func split_chips(text: String) -> Array:
 		out.push_front(t.substr(a + 1, t.length() - a - 2))
 		t = before
 	return [t, out]
+## Korean is wrapped by whole words (어절), never inside one: break lines at spaces only.
+static func wrap_words(text: String, f: Font, px: int, width: float) -> String:
+	var lines := []
+	var cur := ""
+	for w in text.split(" ", false):
+		var trial := w if cur == "" else cur + " " + w
+		if cur != "" and f.get_string_size(trial.replace("[", "").replace("]", ""), HORIZONTAL_ALIGNMENT_LEFT, -1, px).x > width:
+			lines.append(cur)
+			cur = w
+		else:
+			cur = trial
+	if cur != "":
+		lines.append(cur)
+	return "\n".join(lines)
+
 static func rich(text: String) -> String:
 	var out := ""
 	var i := 0
@@ -151,8 +166,8 @@ func _draw() -> void:
 	draw_string_outline(bf, bp, st, HORIZONTAL_ALIGNMENT_CENTER, 18 * z, int(12 * z), int(2 * z), Color("#1a120c"))
 	draw_string(bf, bp, st, HORIZONTAL_ALIGNMENT_CENTER, 18 * z, int(12 * z), Color("#FFF0C8"))
 	if int(c.get("weight", 1)) > 1:
-		draw_rect(Rect2(Vector2(62, 120) * z, Vector2(2, 4) * z), Art.INK)
-		draw_rect(Rect2(Vector2(65, 120) * z, Vector2(2, 4) * z), Art.INK)
+		draw_rect(Rect2(Vector2(74, 130) * z, Vector2(2, 4) * z), Art.INK)
+		draw_rect(Rect2(Vector2(77, 130) * z, Vector2(2, 4) * z), Art.INK)
 	if c.get("rarity", "") in ["legendary", "epic"]:
 		var k2 := fmod(real * 0.35, 1.0)
 		var sx := (-20 + k2 * 116) * z
@@ -166,7 +181,7 @@ func _shine(aw: Rect2, sx: float, z: float) -> PackedVector2Array:
 		pts.append(Vector2(clampf(q.x, aw.position.x, aw.end.x), q.y))
 	return pts
 
-## The effect's own sprite when there is one, otherwise a drawn emblem (sized for a 104x94 window).
+## The effect's own sprite when there is one, otherwise a drawn emblem (sized for a 128x130 window).
 func _picture(aw: Rect2) -> void:
 	if FXMAP.has(card_id):
 		var st := Art.fx(FXMAP[card_id])
@@ -181,7 +196,7 @@ func _picture(aw: Rect2) -> void:
 			return
 	var zz := zoom / 2.0
 	draw_set_transform(aw.get_center(), 0.0, Vector2(zz, zz))
-	_art(Rect2(-52, -47, 104, 94))
+	_art(Rect2(-64, -65, 128, 130))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 ## Card picture. Uses the matching effect sprite where there is one; otherwise a simple emblem.
