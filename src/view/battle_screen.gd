@@ -460,7 +460,9 @@ func _on_card_picked(cv: CardView) -> void:
 	if selected == i:
 		# a selected card that needs no aim plays when clicked again
 		var shape: String = cv.def().get("target", {}).get("shape", "cell")
-		if shape in ["self", "all", "around"] and b.cmd_play(i, b.human().pos):
+		var me := b.human().pos
+		if shape in ["self", "all", "around"] and b.cmd_play(i, me):
+			_fly(i, me)
 			selected = -1
 			_after()
 			return
@@ -469,6 +471,28 @@ func _on_card_picked(cv: CardView) -> void:
 		selected = i
 	_clear_tips()
 	_refresh()
+
+## The played card leaves the hand and flies into its target, shrinking away.
+func _fly(slot: int, target: Vector2i) -> void:
+	var src: CardView = cards[slot] if slot < cards.size() else null
+	if src == null:
+		return
+	var cv := CardView.new()
+	cv.setup(src.card_id, catalog, font)
+	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cv.position = src.position
+	cv.rotation = src.rotation
+	cv.scale = src.scale
+	cv.pivot_offset = CardView.SIZE / 2
+	cv.z_index = 20
+	add_child(cv)
+	var dest := board.position + board.cell_rect(target).get_center() - CardView.SIZE / 2
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(cv, "position", dest, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(cv, "scale", Vector2(0.25, 0.25), 0.22)
+	tw.tween_property(cv, "rotation", 0.0, 0.22)
+	tw.tween_property(cv, "modulate", Color(1, 1, 1, 0.0), 0.22).set_delay(0.08)
+	tw.chain().tween_callback(cv.queue_free)
 
 func _on_board_input(ev: InputEvent) -> void:
 	if flow.phase != "battle" or _replaying():
@@ -489,7 +513,9 @@ func _on_board_input(ev: InputEvent) -> void:
 			selected = -1
 			_refresh()
 		elif ev.button_index == MOUSE_BUTTON_LEFT and cell.x >= 0 and selected >= 0:
+			var played := selected
 			if b.cmd_play(selected, cell):
+				_fly(played, cell)
 				selected = -1
 				_after()
 			else:
