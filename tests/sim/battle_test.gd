@@ -89,6 +89,7 @@ func run() -> void:
 	assert_eq(l.phase, "lost", "dead human loses")
 	test_frozen_enemy_skips()
 	test_hold_one_card()
+	test_review_fixes()
 
 func _scripted(seed_value: int) -> Array:
 	var b := Battle.new(c, seed_value, "hero", ["dummy"], {})
@@ -112,3 +113,31 @@ func test_hold_one_card() -> void:
 	assert_true(b.cmd_hold(2), "hold")
 	assert_eq(b.time_left, 8, "hold costs 2 time")
 	assert_eq(b.belt._bonus_draws, 1, "relaxed hold: one extra draw next turn")
+
+func test_review_fixes() -> void:
+	# C1: guard (1 turn) must still be up when the enemy's telegraph resolves
+	var g := Battle.new(c, 10, "hero", ["dummy"], LAYOUT)
+	var p: Actor = g.human()
+	g.cmd_end_turn()                       # enemy telegraphs
+	p.add_status("guard", 1)               # as the guard card does on the player's turn
+	g.cmd_end_turn()                       # telegraph resolves
+	assert_eq(p.hp, 35, "guard halves the telegraphed hit (10 -> 5)")
+	# C1: burning deals damage once per round, not twice
+	var bt := Battle.new(c, 11, "hero", ["dummy"], LAYOUT)
+	var foe: Actor = bt.actors[1]
+	foe.pattern = []; foe.deck = []
+	foe.add_status("burning", 3)
+	var hp0 := foe.hp
+	bt.cmd_end_turn()
+	assert_eq(hp0 - foe.hp, 3, "burning ticks once per round")
+	# I1: flush once per turn
+	var f := Battle.new(c, 12, "hero", ["dummy"], LAYOUT)
+	assert_true(f.cmd_flush(0), "first flush ok")
+	assert_true(not f.cmd_flush(0), "second flush in same turn refused")
+	# I2: a card gained mid-battle can be drawn this battle
+	var cf := Battle.new(c, 13, "hero", ["dummy"], LAYOUT)
+	var d: Actor = cf.actors[1]
+	d.hp = 1
+	cf.grid.move_unit(d, cf.human().pos + Vector2i(1, 0))
+	Effects.apply({"target": {"shape": "cell"}, "parts": [{"op": "cardify"}]}, cf.human(), d.pos, cf.ctx)
+	assert_eq(cf.belt.preview(), "foe:dummy", "cardified enemy is the next card drawn")

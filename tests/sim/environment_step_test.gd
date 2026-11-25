@@ -94,3 +94,13 @@ func run() -> void:
 	EnvironmentStep.run(g, c, rng, log)
 	assert_true(w.hp < 30, "shocked in water")
 	assert_true(w.has_status("wet"), "wet from water")
+	# I3: fire spreads one cell per step in every direction (no scan-order bias)
+	var gl := fresh(); var ll := []
+	for x in range(0, 9):
+		gl.set_material(Vector2i(x, 0), "oil")
+	gl.set_material(Vector2i(4, 0), "fire")
+	EnvironmentStep.run(gl, c, rng, ll)
+	assert_eq(gl.get_material(Vector2i(6, 0)), "oil", "rightward spread limited to 1 cell")
+	assert_eq(gl.get_material(Vector2i(5, 0)), "fire", "right neighbor caught")
+	assert_eq(gl.get_material(Vector2i(3, 0)), "fire", "left neighbor caught")
+	assert_eq(gl.get_material(Vector2i(2, 0)), "oil", "leftward spread limited to 1 cell")

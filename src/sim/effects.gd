@@ -19,6 +19,7 @@ class BattleContext extends RefCounted:
 	var actors: Array = []
 	var pending: Array = []      # {mode: "delay"|"sustain", ticks, part, user, aim, cells}
 	var on_meta: Callable = Callable()
+	var on_deck_add: Callable = Callable()   # (actor, card_id) -> void, lets Battle put gained cards into the hand
 	var next_uid := 1000
 
 ## Card definition by id, including generated "foe:<actor>" (cardified enemy) and "summon:<actor>" cards.
@@ -54,6 +55,11 @@ static func apply(card: Dictionary, user, aim: Vector2i, ctx: BattleContext) -> 
 		var size: int = int(part.get("size", tgt.get("size", 0)))
 		var cells := Targeting.cells(shape, user.pos, aim, size)
 		apply_part(part, user, aim, cells, ctx)
+
+static func _deck_add(ctx: BattleContext, actor, card_id: String) -> void:
+	actor.deck.append(card_id)
+	if ctx.on_deck_add.is_valid():
+		ctx.on_deck_add.call(actor, card_id)
 
 static func _log(ctx: BattleContext, t: String, msg: String, data := {}) -> void:
 	ctx.log.append({"t": t, "msg": msg, "data": data})
@@ -175,14 +181,14 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 				var i := ctx.rng.next_int(v.deck.size())
 				var cid: String = v.deck[i]
 				v.deck.remove_at(i)
-				user.deck.append(cid)
+				_deck_add(ctx, user, cid)
 				_log(ctx, "steal", "%s의 %s 훔침" % [v.name, cid], {"card": cid})
 			else:
 				_log(ctx, "no_target", "훔칠 카드 없음")
 		"plant_card":
 			var v2 = g.unit_at(aim)
 			if v2 != null:
-				v2.deck.append(part["card_id"])
+				_deck_add(ctx, v2, part["card_id"])
 				_log(ctx, "plant", "%s 덱에 %s" % [v2.name, part["card_id"]], {"card": part["card_id"]})
 		"cardify":
 			var v3 = g.unit_at(aim)
@@ -195,7 +201,7 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 						tags.append(st)
 				if user.summoner:
 					tags = ["summon"]
-				user.deck.append("foe:" + v3.def_id + ("|" + ",".join(tags) if not tags.is_empty() else ""))
+				_deck_add(ctx, user, "foe:" + v3.def_id + ("|" + ",".join(tags) if not tags.is_empty() else ""))
 				_log(ctx, "cardify", "%s 카드가 됨" % v3.name, {"uid": v3.uid})
 			else:
 				_log(ctx, "cardify_failed", "카드화 실패")
@@ -261,10 +267,16 @@ static func _beam(part: Dictionary, user, aim: Vector2i, ctx: BattleContext) -> 
 			reflected = true
 	_log(ctx, "beam", "광선", {"path": path})
 
-## Call once per environment step: advances delayed and sustained effects.
-static func tick_pending(ctx: BattleContext) -> void:
+## Call after every environment step. Sustained effects re-apply each call; their remaining
+## turns (and delays) only count down when count_down is true (once per round in Battle).
+static func tick_pending(ctx: BattleContext, count_down := true) -> void:
 	var keep: Array = []
 	for e in ctx.pending:
+		if not count_down:
+			if e["mode"] == "sustain":
+				apply_part(e["part"], e["user"], e["aim"], e["cells"], ctx)
+			keep.append(e)
+			continue
 		e["ticks"] -= 1
 		if e["mode"] == "sustain":
 			apply_part(e["part"], e["user"], e["aim"], e["cells"], ctx)

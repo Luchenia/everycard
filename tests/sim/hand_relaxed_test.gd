@@ -48,3 +48,10 @@ func run() -> void:
 	var none := HandBelt.new([], SimRng.new(1), c, 5, true, "relaxed")
 	none.end_turn(1.0)
 	assert_true(none.slots.all(func(s): return s == null), "empty deck ok")
+	# heavy card that cannot fit must not block other draws
+	var hv := HandBelt.new(["light", "heavy", "light", "light", "light", "light", "light", "light"], SimRng.new(1), c, 5, false, "relaxed")
+	# slots: light, heavy+tail, light, light ; take slots 0 and 3 -> gaps not adjacent
+	hv.take(0); hv.take(3)
+	hv.draw_pile.push_front("heavy")
+	hv.end_turn(1.0)
+	assert_eq(cards_in(hv), 4, "heavy skipped, lights drawn into both gaps")

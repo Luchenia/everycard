@@ -6,11 +6,15 @@ const CHAIN_CAP := 8
 const MAX_SLIDE := 9
 const STATUS_DOT := {"burning": [3, "fire"], "poisoned": [2, "toxic"]}
 
-static func run(grid: Grid, catalog: Catalog, rng: SimRng, log: Array) -> void:
-	_tick_statuses(grid, log)
+## tick_statuses: statuses (and their damage over time) advance once per round, so Battle passes
+## false for the step between the player's and the enemy's turn.
+static func run(grid: Grid, catalog: Catalog, rng: SimRng, log: Array, tick_statuses := true) -> void:
+	if tick_statuses:
+		_tick_statuses(grid, log)
+	var mat_before: Array = grid.material.duplicate()
 	for p in grid.all_cells():
 		if _ts(grid, p) > 0.0:
-			_react_cell(grid, catalog, p, log)
+			_react_cell(grid, catalog, p, log, mat_before)
 	_enter_effects(grid, log)
 	_forces(grid, log)
 	_spread_and_recover(grid, catalog)
@@ -62,12 +66,14 @@ static func _spread_and_recover(grid: Grid, catalog: Catalog) -> void:
 			v += (dflt - v) * minf(recover * ts, 1.0)
 			grid.set_var(p, id, v)
 
-static func _cond_ok(grid: Grid, p: Vector2i, cond: Dictionary) -> bool:
+static func _cond_ok(grid: Grid, p: Vector2i, cond: Dictionary, mat_snapshot: Array = []) -> bool:
 	if cond.has("material"):
 		return grid.get_material(p) == cond["material"]
 	if cond.has("neighbor_material"):
+		# neighbours are read from the start-of-step snapshot so spread has no scan-order bias
 		for n in grid.neighbors4(p):
-			if grid.get_material(n) == cond["neighbor_material"]:
+			var m: String = mat_snapshot[grid.idx(n)] if not mat_snapshot.is_empty() else grid.get_material(n)
+			if m == cond["neighbor_material"]:
 				return true
 		return false
 	if cond.has("var"):
@@ -85,13 +91,13 @@ static func _cond_ok(grid: Grid, p: Vector2i, cond: Dictionary) -> bool:
 		return u != null and u.has_status(cond["status"])
 	return false
 
-static func cond_all(grid: Grid, p: Vector2i, conds: Array) -> bool:
+static func cond_all(grid: Grid, p: Vector2i, conds: Array, mat_snapshot: Array = []) -> bool:
 	for cond in conds:
-		if not _cond_ok(grid, p, cond):
+		if not _cond_ok(grid, p, cond, mat_snapshot):
 			return false
 	return true
 
-static func _react_cell(grid: Grid, catalog: Catalog, p: Vector2i, log: Array) -> void:
+static func _react_cell(grid: Grid, catalog: Catalog, p: Vector2i, log: Array, mat_before: Array = []) -> void:
 	var fired_once := {}
 	var applied := 0
 	var again := true
@@ -104,7 +110,7 @@ static func _react_cell(grid: Grid, catalog: Catalog, p: Vector2i, log: Array) -
 					changes_material = true
 			if not changes_material and fired_once.has(r["id"]):
 				continue
-			if not cond_all(grid, p, r.get("when", [])):
+			if not cond_all(grid, p, r.get("when", []), mat_before):
 				continue
 			if applied >= CHAIN_CAP:
 				log.append({"t": "chain_cap", "msg": "연쇄 상한 %s" % str(p), "data": {"cell": p}})

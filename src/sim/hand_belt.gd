@@ -31,6 +31,12 @@ func _init(deck: Array, r: SimRng, cat: Catalog, size := 5, shuffle_deck := true
 	slots.fill(null)
 	_fill()
 
+func _has_pair() -> bool:
+	for k in slots.size() - 1:
+		if slots[k] == null and slots[k + 1] == null:
+			return true
+	return false
+
 func _heavy(id: String) -> bool:
 	return int(Effects.card_def(id, catalog).get("weight", 1)) > 1
 
@@ -56,6 +62,7 @@ func _draw() -> String:
 ## card needs two adjacent empty slots; if there is no room it waits on top of the draw pile.
 func _fill(max_draws := -1) -> void:
 	var drawn := 0
+	var skipped := 0
 	var i := 0
 	while i < slots.size():
 		if max_draws >= 0 and drawn >= max_draws:
@@ -70,6 +77,13 @@ func _fill(max_draws := -1) -> void:
 				return
 			draw_pile.push_front(id)
 		if mode == "relaxed" and _heavy(id):
+			if not _has_pair():
+				# no room for a two-slot card: send it to the bottom and try the next card
+				skipped += 1
+				if skipped > draw_pile.size():
+					return
+				draw_pile.push_back(draw_pile.pop_front())
+				continue
 			if i + 1 >= slots.size() or slots[i + 1] != null:
 				i += 1
 				continue

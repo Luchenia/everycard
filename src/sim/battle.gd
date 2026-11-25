@@ -21,6 +21,7 @@ var log: Array = []
 var turn := 1
 var _moved := false
 var _ability_used := false
+var _flushed := false
 
 func _init(cat: Catalog, seed_value: int, player_def: String, enemy_defs: Array, layout: Dictionary = {}) -> void:
 	catalog = cat
@@ -33,6 +34,7 @@ func _init(cat: Catalog, seed_value: int, player_def: String, enemy_defs: Array,
 	ctx.log = log
 	ctx.actors = actors
 	ctx.on_meta = _on_meta
+	ctx.on_deck_add = _on_deck_add
 	var lay := layout if not layout.is_empty() else _random_layout(enemy_defs.size())
 	for m in lay.get("materials", []):
 		grid.set_material(Vector2i(m[0], m[1]), m[2])
@@ -102,6 +104,11 @@ func _on_meta(part: Dictionary, user) -> void:
 					for i in int(part.get("amount", 1)):
 						belt.flush()
 				"reverse": belt.reverse_next = true
+
+## A card gained mid-battle (cardify, steal, plant) becomes the next card the hand draws.
+func _on_deck_add(actor, card_id: String) -> void:
+	if belt != null and actor == belt_owner:
+		belt.draw_pile.push_front(card_id)
 
 static func dist(a: Vector2i, b: Vector2i) -> int:
 	return absi(a.x - b.x) + absi(a.y - b.y)
@@ -183,9 +190,11 @@ func cmd_hold(slot := -1) -> bool:
 	_log("hold", "손패 붙잡기", {})
 	return true
 
+## Once per turn.
 func cmd_flush(slot := -1) -> bool:
-	if phase != "player":
+	if phase != "player" or _flushed:
 		return false
+	_flushed = true
 	belt.flush(slot)
 	_log("flush", "손패 흘려보내기", {})
 	return true
@@ -196,27 +205,30 @@ func cmd_end_turn() -> void:
 	var h := human()
 	if h != null and belt != null:
 		belt.end_turn(_ts(h.pos))
-	_env()
+	_env(false)
 	if _check_end():
 		return
 	phase = "enemy"
 	_enemy_turn()
 	if phase == "enemy":
-		_env()
+		_env(true)
 	if _check_end():
 		return
 	phase = "player"
 	turn += 1
 	_moved = false
 	_ability_used = false
+	_flushed = false
 	h = human()
 	time_left = int(round(TURN_TIME * _ts(h.pos)))
 
 # ---- internals ---------------------------------------------------------------
 
-func _env() -> void:
-	EnvironmentStep.run(grid, catalog, rng, log)
-	Effects.tick_pending(ctx)
+## Two environment steps per round; statuses, durations and delays count down only in the
+## one after the enemy turn, so "1 turn" means one full round.
+func _env(end_of_round: bool) -> void:
+	EnvironmentStep.run(grid, catalog, rng, log, end_of_round)
+	Effects.tick_pending(ctx, end_of_round)
 	_cleanup()
 
 func _enemy_turn() -> void:
