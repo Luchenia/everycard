@@ -16,6 +16,7 @@ var statuses: Dictionary = {}   # status id -> remaining turns
 var team := 1
 var controller := "ai"
 var is_boss := false
+var summoner := false
 var base_ability := "step1"
 var deck: Array = []
 var pattern: Array = []
@@ -33,6 +34,7 @@ static func from_def(def: Dictionary, new_uid: int) -> Actor:
 	a.armor = int(def.get("armor", 0))
 	a.resist = def.get("resist", {}).duplicate()
 	a.is_boss = bool(def.get("is_boss", false))
+	a.summoner = bool(def.get("summoner", false))
 	a.base_ability = def.get("base_ability", "step1")
 	a.deck = Array(def.get("deck", [])).duplicate()
 	a.pattern = Array(def.get("pattern", [])).duplicate()

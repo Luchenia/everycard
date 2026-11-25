@@ -121,6 +121,30 @@ func run() -> void:
 	c5.on_meta = func(part, user): seen.append(part["op"])
 	Effects.apply(card([{"op": "belt", "action": "freeze", "amount": 1}, {"op": "time_budget", "delta": 2}], "self"), a5, Vector2i(0, 0), c5)
 	assert_eq(seen, ["belt", "time_budget"], "meta forwarded")
+	test_cardify_state()
 	# gravity toward aim
 	Effects.apply(card([{"op": "var", "id": "gravity", "mode": "set", "value": {"dir": "toward_aim", "strength": 3}}], "circle", 1), a5, Vector2i(4, 3), c5)
 	assert_eq(c5.grid.get_var(Vector2i(3, 3), "gravity"), Vector2(3, 0), "pulls toward aim")
+
+func test_cardify_state() -> void:
+	var cx := ctx_with([])
+	var me := mk("me", 30, 0); var sl := Actor.from_def(c.actors["slime"], 31)
+	cx.actors = [me, sl]
+	cx.grid.place_unit(me, Vector2i(0, 0)); cx.grid.place_unit(sl, Vector2i(1, 0))
+	sl.hp = 2
+	sl.add_status("burning", 2)
+	Effects.apply(card([{"op": "cardify"}]), me, Vector2i(1, 0), cx)
+	assert_true(me.deck.has("foe:slime|burning"), "state engraved in card id")
+	var fc := Effects.card_def("foe:slime|burning", c)
+	assert_true(fc["parts"].any(func(p): return p["op"] == "material" and p["id"] == "fire"), "burning adds fire")
+	assert_true(not fc["parts"].any(func(p): return p["op"] == "summon"), "normal user: no summon")
+	# summoner character makes a summon-type card
+	var sm := Actor.from_def({"id": "sm", "hp": 30, "summoner": true, "deck": []}, 32)
+	sm.team = 0
+	var sl2 := Actor.from_def(c.actors["slime"], 33)
+	cx.actors.append_array([sm, sl2])
+	cx.grid.place_unit(sm, Vector2i(5, 5)); cx.grid.place_unit(sl2, Vector2i(6, 5))
+	sl2.hp = 1
+	Effects.apply(card([{"op": "cardify"}]), sm, Vector2i(6, 5), cx)
+	assert_true(sm.deck.has("foe:slime|summon"), "summoner gets summon variant")
+	assert_true(Effects.card_def("foe:slime|summon", c)["parts"].any(func(p): return p["op"] == "summon"), "summon part present")

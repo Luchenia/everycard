@@ -2,6 +2,15 @@ class_name Effects
 extends RefCounted
 ## Executes card effect parts against the battle state. Cards are data: {target, parts}.
 
+## Parts a cardified enemy's state adds to its card ("foe:<actor>|<tag>,<tag>").
+const STATE_TAG_PARTS := {
+	"burning": [{"op": "material", "id": "fire"}],
+	"wet": [{"op": "var", "id": "humidity", "mode": "add", "value": 0.5}],
+	"shocked": [{"op": "var", "id": "charge", "mode": "add", "value": 5}],
+	"poisoned": [{"op": "var", "id": "toxicity", "mode": "add", "value": 4}],
+	"guard": [{"op": "status", "id": "guard", "turns": 1, "shape": "self"}],
+}
+
 class BattleContext extends RefCounted:
 	var grid: Grid
 	var catalog: Catalog
@@ -20,12 +29,19 @@ static func card_def(id: String, catalog: Catalog) -> Dictionary:
 		return {"id": id, "name": "소환: " + nm, "time": 3, "weight": 1, "rarity": "common",
 			"target": {"shape": "cell", "range": 2, "size": 0}, "parts": [{"op": "summon", "def_id": aid}]}
 	if id.begins_with("foe:"):
-		var fid := id.substr(4)
+		var spec := id.substr(4).split("|")
+		var fid := spec[0]
+		var tags: Array = Array(spec[1].split(",")) if spec.size() > 1 else []
 		var adef: Dictionary = catalog.actors.get(fid, {})
 		var sig: Dictionary = catalog.cards.get(adef.get("signature", ""), {})
 		if sig.is_empty():
 			return {}
 		var parts: Array = sig.get("parts", []).duplicate(true) + Array(adef.get("trait", [])).duplicate(true)
+		for t in tags:
+			if STATE_TAG_PARTS.has(t):
+				parts += STATE_TAG_PARTS[t].duplicate(true)
+			elif t == "summon":
+				parts = [{"op": "summon", "def_id": fid}]
 		return {"id": id, "name": adef.get("name", fid) + " 카드", "time": int(sig.get("time", 2)) + 1, "weight": 1,
 			"rarity": "rare", "target": sig.get("target", {}).duplicate(), "parts": parts,
 			"desc": "%s의 %s와 성질" % [adef.get("name", fid), sig.get("name", "")]}
@@ -173,7 +189,13 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 			if v3 != null and v3 != user and not v3.is_boss and v3.hp <= int(v3.max_hp * 0.3):
 				g.remove_unit(v3)
 				v3.hp = 0
-				user.deck.append("foe:" + v3.def_id)
+				var tags: Array = []
+				for st in STATE_TAG_PARTS:
+					if v3.has_status(st):
+						tags.append(st)
+				if user.summoner:
+					tags = ["summon"]
+				user.deck.append("foe:" + v3.def_id + ("|" + ",".join(tags) if not tags.is_empty() else ""))
 				_log(ctx, "cardify", "%s 카드가 됨" % v3.name, {"uid": v3.uid})
 			else:
 				_log(ctx, "cardify_failed", "카드화 실패")
