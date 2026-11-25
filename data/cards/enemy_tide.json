@@ -1,0 +1,25 @@
+{
+ "id": "enemy_tide",
+ "name": "해일",
+ "time": 4,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "line",
+  "range": 1,
+  "size": 5
+ },
+ "parts": [
+  {
+   "op": "material",
+   "id": "water"
+  },
+  {
+   "op": "push",
+   "dist": 2,
+   "dir": "away"
+  }
+ ],
+ "desc": "앞쪽 5칸 물과 밀어내기",
+ "telegraph": true
+}

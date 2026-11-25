@@ -1,2 +1,30 @@
-{"id": "walker", "name": "걷는 자", "hp": 60, "mass": 2, "armor": 0, "base_ability": "step1",
- "deck": ["strike", "strike", "strike", "guard", "guard", "step", "heat_wave", "frost", "oil_spill", "spark", "laser", "gust"]}
+{
+ "id": "walker",
+ "name": "걷는 자",
+ "hp": 60,
+ "mass": 2,
+ "armor": 0,
+ "base_ability": "step1",
+ "deck": [
+  "strike",
+  "strike",
+  "strike",
+  "guard",
+  "guard",
+  "step",
+  "heat_wave",
+  "frost",
+  "oil_spill",
+  "spark",
+  "laser",
+  "gust"
+ ],
+ "signature": "strike",
+ "trait": [
+  {
+   "op": "push",
+   "dist": 1,
+   "dir": "away"
+  }
+ ]
+}

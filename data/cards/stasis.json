@@ -1,0 +1,22 @@
+{
+ "id": "stasis",
+ "name": "정지",
+ "time": 5,
+ "weight": 1,
+ "rarity": "rare",
+ "target": {
+  "shape": "cell",
+  "range": 4,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "var",
+   "id": "time_scale",
+   "mode": "set",
+   "value": 0,
+   "turns": 1
+  }
+ ],
+ "desc": "칸 하나의 시간을 멈춤 (적은 다음 턴 행동 불가)"
+}

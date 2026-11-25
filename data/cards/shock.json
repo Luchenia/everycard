@@ -1,0 +1,26 @@
+{
+ "id": "shock",
+ "name": "방전",
+ "time": 3,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "cell",
+  "range": 3,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "var",
+   "id": "charge",
+   "mode": "add",
+   "value": 8
+  },
+  {
+   "op": "damage",
+   "amount": 4,
+   "kind": "electric"
+  }
+ ],
+ "desc": "전하 +8, 전기 피해 4. 물을 타고 퍼짐"
+}

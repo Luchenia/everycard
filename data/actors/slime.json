@@ -1,2 +1,30 @@
-{"id": "slime", "name": "슬라임", "hp": 18, "mass": 1, "armor": 0, "resist": {"electric": -0.5, "physical": 0.2}, "base_ability": "step1",
- "deck": ["enemy_slime_spit", "enemy_ooze"], "pattern": ["enemy_slime_spit", "enemy_ooze", "enemy_slime_spit"]}
+{
+ "id": "slime",
+ "name": "슬라임",
+ "hp": 18,
+ "mass": 1,
+ "armor": 0,
+ "resist": {
+  "electric": -0.5,
+  "physical": 0.2
+ },
+ "base_ability": "step1",
+ "deck": [
+  "enemy_slime_spit",
+  "enemy_ooze"
+ ],
+ "pattern": [
+  "enemy_slime_spit",
+  "enemy_ooze",
+  "enemy_slime_spit"
+ ],
+ "signature": "enemy_slime_spit",
+ "trait": [
+  {
+   "op": "var",
+   "id": "humidity",
+   "mode": "add",
+   "value": 0.4
+  }
+ ]
+}

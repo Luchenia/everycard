@@ -1,0 +1,21 @@
+{
+ "id": "haste_field",
+ "name": "빠른 장",
+ "time": 3,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "self",
+  "range": 0,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "var",
+   "id": "time_scale",
+   "mode": "set",
+   "value": 1.5
+  }
+ ],
+ "desc": "내 칸 시간 속도 1.5"
+}

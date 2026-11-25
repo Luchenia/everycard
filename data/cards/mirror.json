@@ -1,0 +1,19 @@
+{
+ "id": "mirror",
+ "name": "거울 세우기",
+ "time": 2,
+ "weight": 1,
+ "rarity": "basic",
+ "target": {
+  "shape": "cell",
+  "range": 3,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "material",
+   "id": "metal"
+  }
+ ],
+ "desc": "칸 하나에 금속 거울"
+}

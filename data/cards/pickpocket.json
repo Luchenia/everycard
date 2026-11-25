@@ -1,0 +1,18 @@
+{
+ "id": "pickpocket",
+ "name": "소매치기",
+ "time": 3,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "cell",
+  "range": 1,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "steal_card"
+  }
+ ],
+ "desc": "인접한 적의 덱에서 카드 1장을 훔침"
+}

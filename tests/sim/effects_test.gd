@@ -92,10 +92,13 @@ func run() -> void:
 	c4.grid.place_unit(me4, Vector2i(0, 0)); c4.grid.place_unit(sl, Vector2i(1, 0))
 	sl.hp = sl.max_hp / 2
 	Effects.apply(card([{"op": "cardify"}]), me4, Vector2i(1, 0), c4)
-	assert_true(not me4.deck.has("summon:slime"), "cardify fails at 50%")
+	assert_true(not me4.deck.has("foe:slime"), "cardify fails at 50%")
 	sl.hp = int(sl.max_hp * 0.2)
 	Effects.apply(card([{"op": "cardify"}]), me4, Vector2i(1, 0), c4)
-	assert_true(me4.deck.has("summon:slime"), "cardify adds summon card")
+	assert_true(me4.deck.has("foe:slime"), "cardify turns the enemy itself into a card")
+	var fc := Effects.card_def("foe:slime", c)
+	assert_true(fc["parts"].size() >= 2, "foe card = signature move + trait parts")
+	assert_true(not fc["parts"].any(func(p): return p["op"] == "summon"), "slime card does not summon")
 	assert_true(c4.grid.unit_at(Vector2i(1, 0)) == null, "cardified unit removed")
 	# summon card resolves and summons ally
 	var sc := Effects.card_def("summon:slime", c)

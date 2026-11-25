@@ -1,17 +1,147 @@
 [
-  {"id": "temperature", "kind": "scalar", "min": -100, "max": 300, "default": 20, "spread": 0.25, "recover": 0.1},
-  {"id": "pressure", "kind": "scalar", "min": 0, "max": 10, "default": 1, "spread": 0.5, "recover": 0.2},
-  {"id": "gravity", "kind": "vector", "min": 0, "max": 5, "default": [0, 0], "spread": 0, "recover": 0.0},
-  {"id": "wind", "kind": "vector", "min": 0, "max": 5, "default": [0, 0], "spread": 0.2, "recover": 0.3},
-  {"id": "humidity", "kind": "scalar", "min": 0, "max": 1, "default": 0.3, "spread": 0.2, "recover": 0.1},
-  {"id": "oxygen", "kind": "scalar", "min": 0, "max": 2, "default": 1, "spread": 0.4, "recover": 0.2},
-  {"id": "friction", "kind": "scalar", "min": 0, "max": 2, "default": 1, "spread": 0, "recover": 0.2},
-  {"id": "charge", "kind": "scalar", "min": 0, "max": 10, "default": 0, "spread": 0.6, "recover": 0.3, "spread_by_conductivity": true},
-  {"id": "radiation", "kind": "scalar", "min": 0, "max": 10, "default": 0, "spread": 0.1, "recover": 0.05},
-  {"id": "magnetism", "kind": "vector", "min": 0, "max": 5, "default": [0, 0], "spread": 0, "recover": 0.3},
-  {"id": "light", "kind": "scalar", "min": 0, "max": 5, "default": 2, "spread": 0.3, "recover": 0.2},
-  {"id": "noise", "kind": "scalar", "min": 0, "max": 10, "default": 0, "spread": 0.5, "recover": 0.5},
-  {"id": "toxicity", "kind": "scalar", "min": 0, "max": 10, "default": 0, "spread": 0.3, "recover": 0.1},
-  {"id": "time_scale", "kind": "scalar", "min": 0, "max": 3, "default": 1, "spread": 0, "recover": 0.25},
-  {"id": "mana_density", "kind": "scalar", "min": 0, "max": 3, "default": 1, "spread": 0.1, "recover": 0.1}
+ {
+  "id": "temperature",
+  "kind": "scalar",
+  "min": -100,
+  "max": 300,
+  "default": 20,
+  "spread": 0.25,
+  "recover": 0.1
+ },
+ {
+  "id": "pressure",
+  "kind": "scalar",
+  "min": 0,
+  "max": 10,
+  "default": 1,
+  "spread": 0.5,
+  "recover": 0.2
+ },
+ {
+  "id": "gravity",
+  "kind": "vector",
+  "min": 0,
+  "max": 5,
+  "default": [
+   0,
+   0
+  ],
+  "spread": 0,
+  "recover": 0.3
+ },
+ {
+  "id": "wind",
+  "kind": "vector",
+  "min": 0,
+  "max": 5,
+  "default": [
+   0,
+   0
+  ],
+  "spread": 0.2,
+  "recover": 0.3
+ },
+ {
+  "id": "humidity",
+  "kind": "scalar",
+  "min": 0,
+  "max": 1,
+  "default": 0.3,
+  "spread": 0.2,
+  "recover": 0.1
+ },
+ {
+  "id": "oxygen",
+  "kind": "scalar",
+  "min": 0,
+  "max": 2,
+  "default": 1,
+  "spread": 0.4,
+  "recover": 0.2
+ },
+ {
+  "id": "friction",
+  "kind": "scalar",
+  "min": 0,
+  "max": 2,
+  "default": 1,
+  "spread": 0,
+  "recover": 0.2
+ },
+ {
+  "id": "charge",
+  "kind": "scalar",
+  "min": 0,
+  "max": 10,
+  "default": 0,
+  "spread": 0.6,
+  "recover": 0.3,
+  "spread_by_conductivity": true
+ },
+ {
+  "id": "radiation",
+  "kind": "scalar",
+  "min": 0,
+  "max": 10,
+  "default": 0,
+  "spread": 0.1,
+  "recover": 0.05
+ },
+ {
+  "id": "magnetism",
+  "kind": "vector",
+  "min": 0,
+  "max": 5,
+  "default": [
+   0,
+   0
+  ],
+  "spread": 0,
+  "recover": 0.3
+ },
+ {
+  "id": "light",
+  "kind": "scalar",
+  "min": 0,
+  "max": 5,
+  "default": 2,
+  "spread": 0.3,
+  "recover": 0.2
+ },
+ {
+  "id": "noise",
+  "kind": "scalar",
+  "min": 0,
+  "max": 10,
+  "default": 0,
+  "spread": 0.5,
+  "recover": 0.5
+ },
+ {
+  "id": "toxicity",
+  "kind": "scalar",
+  "min": 0,
+  "max": 10,
+  "default": 0,
+  "spread": 0.3,
+  "recover": 0.1
+ },
+ {
+  "id": "time_scale",
+  "kind": "scalar",
+  "min": 0,
+  "max": 3,
+  "default": 1,
+  "spread": 0,
+  "recover": 0.25
+ },
+ {
+  "id": "mana_density",
+  "kind": "scalar",
+  "min": 0,
+  "max": 3,
+  "default": 1,
+  "spread": 0.1,
+  "recover": 0.1
+ }
 ]

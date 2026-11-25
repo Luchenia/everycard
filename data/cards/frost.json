@@ -1,0 +1,21 @@
+{
+ "id": "frost",
+ "name": "냉기",
+ "time": 3,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "circle",
+  "range": 3,
+  "size": 1
+ },
+ "parts": [
+  {
+   "op": "var",
+   "id": "temperature",
+   "mode": "add",
+   "value": -80
+  }
+ ],
+ "desc": "3×3 온도 -80. 물이 얼어붙음"
+}

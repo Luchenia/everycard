@@ -1,0 +1,25 @@
+{
+ "id": "enemy_ember",
+ "name": "화염 뿜기",
+ "time": 3,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "cell",
+  "range": 3,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "damage",
+   "amount": 6,
+   "kind": "fire"
+  },
+  {
+   "op": "material",
+   "id": "fire"
+  }
+ ],
+ "desc": "화염 피해 6, 불",
+ "telegraph": true
+}

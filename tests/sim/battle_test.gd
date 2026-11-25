@@ -87,6 +87,7 @@ func run() -> void:
 	l.human().hp = 0
 	l.cmd_end_turn()
 	assert_eq(l.phase, "lost", "dead human loses")
+	test_frozen_enemy_skips()
 
 func _scripted(seed_value: int) -> Array:
 	var b := Battle.new(c, seed_value, "hero", ["dummy"], {})
@@ -97,3 +98,9 @@ func _scripted(seed_value: int) -> Array:
 	b.cmd_play(1, b.actors[1].pos)
 	b.cmd_end_turn()
 	return [b.grid.duplicate_state()["values"], b.grid.material, b.actors.map(func(a): return [a.hp, a.pos])]
+
+func test_frozen_enemy_skips() -> void:
+	var f := Battle.new(c, 8, "hero", ["dummy"], LAYOUT)
+	Effects.apply(Effects.card_def("stasis", c), f.human(), f.actors[1].pos, f.ctx)
+	f.cmd_end_turn()
+	assert_eq(f.telegraphs.size(), 0, "enemy in stopped time does not act")

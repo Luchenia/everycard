@@ -1,0 +1,25 @@
+{
+ "id": "oil_spill",
+ "name": "기름 뿌리기",
+ "time": 2,
+ "weight": 1,
+ "rarity": "basic",
+ "target": {
+  "shape": "cone",
+  "range": 2,
+  "size": 2
+ },
+ "parts": [
+  {
+   "op": "material",
+   "id": "oil"
+  },
+  {
+   "op": "var",
+   "id": "oxygen",
+   "mode": "add",
+   "value": 0.6
+  }
+ ],
+ "desc": "앞쪽 부채꼴에 기름, 산소 +0.6"
+}

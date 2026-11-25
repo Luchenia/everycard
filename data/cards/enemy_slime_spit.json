@@ -1,0 +1,26 @@
+{
+ "id": "enemy_slime_spit",
+ "name": "끈적이 뱉기",
+ "time": 2,
+ "weight": 1,
+ "rarity": "basic",
+ "target": {
+  "shape": "cell",
+  "range": 3,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "damage",
+   "amount": 4,
+   "kind": "physical"
+  },
+  {
+   "op": "var",
+   "id": "friction",
+   "mode": "add",
+   "value": -0.6
+  }
+ ],
+ "desc": "피해 4, 마찰 감소"
+}

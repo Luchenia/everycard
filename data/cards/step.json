@@ -1,0 +1,19 @@
+{
+ "id": "step",
+ "name": "질주",
+ "time": 1,
+ "weight": 1,
+ "rarity": "basic",
+ "target": {
+  "shape": "cell",
+  "range": 2,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "teleport",
+   "to": "aim"
+  }
+ ],
+ "desc": "2칸 안의 빈 칸으로 이동"
+}

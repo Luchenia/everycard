@@ -1,0 +1,18 @@
+{
+ "id": "body_swap",
+ "name": "몸 바꾸기",
+ "time": 6,
+ "weight": 2,
+ "rarity": "epic",
+ "target": {
+  "shape": "cell",
+  "range": 3,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "swap_bodies"
+  }
+ ],
+ "desc": "대상과 몸을 맞바꿈. 보스 불가"
+}

@@ -1,0 +1,21 @@
+{
+ "id": "laser",
+ "name": "레이저",
+ "time": 4,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "line",
+  "range": 8,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "beam",
+   "damage": 10,
+   "kind": "energy",
+   "length": 9
+  }
+ ],
+ "desc": "직선 광선 10. 금속, 얼음, 결정에 반사, 중력에 휨"
+}

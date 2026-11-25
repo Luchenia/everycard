@@ -1,0 +1,18 @@
+{
+ "id": "bind_soul",
+ "name": "혼 묶기",
+ "time": 5,
+ "weight": 2,
+ "rarity": "rare",
+ "target": {
+  "shape": "cell",
+  "range": 2,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "cardify"
+  }
+ ],
+ "desc": "체력 30% 이하 적을 카드로 만듦"
+}

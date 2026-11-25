@@ -1,0 +1,25 @@
+{
+ "id": "rain",
+ "name": "비",
+ "time": 3,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "circle",
+  "range": 4,
+  "size": 1
+ },
+ "parts": [
+  {
+   "op": "material",
+   "id": "water"
+  },
+  {
+   "op": "var",
+   "id": "humidity",
+   "mode": "add",
+   "value": 0.5
+  }
+ ],
+ "desc": "3×3에 물, 습도 +0.5"
+}

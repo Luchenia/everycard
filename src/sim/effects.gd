@@ -12,13 +12,23 @@ class BattleContext extends RefCounted:
 	var on_meta: Callable = Callable()
 	var next_uid := 1000
 
-## Card definition by id, including generated "summon:<actor>" cards.
+## Card definition by id, including generated "foe:<actor>" (cardified enemy) and "summon:<actor>" cards.
 static func card_def(id: String, catalog: Catalog) -> Dictionary:
 	if id.begins_with("summon:"):
 		var aid := id.substr(7)
 		var nm: String = catalog.actors.get(aid, {}).get("name", aid)
 		return {"id": id, "name": "소환: " + nm, "time": 3, "weight": 1, "rarity": "common",
 			"target": {"shape": "cell", "range": 2, "size": 0}, "parts": [{"op": "summon", "def_id": aid}]}
+	if id.begins_with("foe:"):
+		var fid := id.substr(4)
+		var adef: Dictionary = catalog.actors.get(fid, {})
+		var sig: Dictionary = catalog.cards.get(adef.get("signature", ""), {})
+		if sig.is_empty():
+			return {}
+		var parts: Array = sig.get("parts", []).duplicate(true) + Array(adef.get("trait", [])).duplicate(true)
+		return {"id": id, "name": adef.get("name", fid) + " 카드", "time": int(sig.get("time", 2)) + 1, "weight": 1,
+			"rarity": "rare", "target": sig.get("target", {}).duplicate(), "parts": parts,
+			"desc": "%s의 %s와 성질" % [adef.get("name", fid), sig.get("name", "")]}
 	return catalog.cards.get(id, {})
 
 static func apply(card: Dictionary, user, aim: Vector2i, ctx: BattleContext) -> void:
@@ -163,7 +173,7 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 			if v3 != null and v3 != user and not v3.is_boss and v3.hp <= int(v3.max_hp * 0.3):
 				g.remove_unit(v3)
 				v3.hp = 0
-				user.deck.append("summon:" + v3.def_id)
+				user.deck.append("foe:" + v3.def_id)
 				_log(ctx, "cardify", "%s 카드가 됨" % v3.name, {"uid": v3.uid})
 			else:
 				_log(ctx, "cardify_failed", "카드화 실패")

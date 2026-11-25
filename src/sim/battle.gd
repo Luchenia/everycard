@@ -228,6 +228,9 @@ func _enemy_turn() -> void:
 			return
 		if a.controller != "ai" or not a.alive() or not grid.units.has(a):
 			continue
+		if _ts(a.pos) <= 0.0:
+			_log("frozen", "%s 시간 정지" % a.name, {"uid": a.uid})
+			continue
 		_ai_act(a)
 		_after_action()
 

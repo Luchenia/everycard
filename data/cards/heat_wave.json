@@ -1,0 +1,21 @@
+{
+ "id": "heat_wave",
+ "name": "열파",
+ "time": 4,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "circle",
+  "range": 3,
+  "size": 1
+ },
+ "parts": [
+  {
+   "op": "var",
+   "id": "temperature",
+   "mode": "add",
+   "value": 100
+  }
+ ],
+ "desc": "3×3 온도 +100"
+}

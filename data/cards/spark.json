@@ -1,0 +1,25 @@
+{
+ "id": "spark",
+ "name": "불씨",
+ "time": 2,
+ "weight": 1,
+ "rarity": "basic",
+ "target": {
+  "shape": "cell",
+  "range": 3,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "material",
+   "id": "fire"
+  },
+  {
+   "op": "var",
+   "id": "temperature",
+   "mode": "add",
+   "value": 60
+  }
+ ],
+ "desc": "칸 하나에 불"
+}

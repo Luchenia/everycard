@@ -1,0 +1,20 @@
+{
+ "id": "strike",
+ "name": "타격",
+ "time": 2,
+ "weight": 1,
+ "rarity": "basic",
+ "target": {
+  "shape": "cell",
+  "range": 1,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "damage",
+   "amount": 6,
+   "kind": "physical"
+  }
+ ],
+ "desc": "인접한 적에게 피해 6"
+}

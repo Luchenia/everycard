@@ -1,0 +1,24 @@
+{
+ "id": "gravity_well",
+ "name": "중력 우물",
+ "time": 4,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "circle",
+  "range": 4,
+  "size": 1
+ },
+ "parts": [
+  {
+   "op": "var",
+   "id": "gravity",
+   "mode": "set",
+   "value": {
+    "dir": "toward_aim",
+    "strength": 3
+   }
+  }
+ ],
+ "desc": "3×3 중력이 가운데로 향함"
+}

@@ -1,0 +1,21 @@
+{
+ "id": "compress",
+ "name": "압축",
+ "time": 4,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "circle",
+  "range": 3,
+  "size": 1
+ },
+ "parts": [
+  {
+   "op": "var",
+   "id": "pressure",
+   "mode": "add",
+   "value": 5
+  }
+ ],
+ "desc": "3×3 압력 +5. 주변으로 밀려남"
+}
