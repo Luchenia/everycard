@@ -1,9 +1,9 @@
 {
  "id": "laser",
- "name": "레이저",
+ "name": "광명 있으라",
  "time": 4,
  "weight": 1,
- "rarity": "common",
+ "rarity": "rare",
  "target": {
   "shape": "line",
   "range": 8,
@@ -17,6 +17,7 @@
    "length": 9
   }
  ],
- "desc": "직선 광선 10. 금속, 얼음, 결정에 반사, 중력에 휨",
- "exhaust": 2
+ "desc": "일직선으로 빛을 쏘아 10의 피해를 입힙니다. [반사] [탈진]",
+ "exhaust": 2,
+ "family": "magic"
 }

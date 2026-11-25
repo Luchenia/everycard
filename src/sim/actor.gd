@@ -3,6 +3,7 @@ extends RefCounted
 ## One actor = body (stats, base ability) + deck + controller. Players and enemies are both Actors.
 
 const REFILL_DECK := ["strike", "guard", "step"]
+const CRYSTAL_BONUS := 5
 
 var uid := 0
 var def_id := ""
@@ -22,6 +23,9 @@ var deck: Array = []
 var pattern: Array = []
 var pattern_index := 0
 var next_at := 0   # battle second at which an AI actor acts next
+var shield := 0         # absorbs damage first; gone at shield_until
+var shield_until := 0
+var discount := 0       # seconds taken off the next action that costs time (서두름)
 var pos := Vector2i(-1, -1)
 
 static func from_def(def: Dictionary, new_uid: int) -> Actor:
@@ -58,8 +62,19 @@ func take_damage(amount: int, kind: String) -> int:
 	if has_status("guard"):
 		dmg *= 0.5
 	var dealt: int = max(0, int(round(dmg)))
+	if dealt > 0 and has_status("crystal"):
+		# 결정: a hit shatters the crystal, freeing the unit and dealing extra damage
+		statuses.erase("crystal")
+		dealt += CRYSTAL_BONUS
+	var absorbed: int = mini(shield, dealt)
+	shield -= absorbed
+	dealt -= absorbed
 	hp = max(0, hp - dealt)
 	return dealt
+
+## 속박 (rooted) or encased in crystal: cannot move by itself.
+func rooted() -> bool:
+	return has_status("crystal") or has_status("rooted") or has_status("frozen")
 
 func heal(amount: int) -> void:
 	hp = min(max_hp, hp + amount)

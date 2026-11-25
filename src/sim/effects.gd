@@ -21,6 +21,7 @@ class BattleContext extends RefCounted:
 	var on_meta: Callable = Callable()
 	var on_deck_add: Callable = Callable()   # (actor, card_id) -> void, lets Battle put gained cards into the hand
 	var next_uid := 1000
+	var now := 0   # battle clock (seconds), kept in step by Battle
 
 ## Card definition by id, including generated "foe:<actor>" (cardified enemy) and "summon:<actor>" cards.
 static func card_def(id: String, catalog: Catalog) -> Dictionary:
@@ -163,6 +164,40 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 				_log(ctx, "no_target", "이동할 수 없는 칸")
 		"beam":
 			_beam(part, user, aim, ctx)
+		"shield":
+			user.shield += int(part.get("amount", 0))
+			user.shield_until = ctx.now + int(part.get("secs", 6))
+			_log(ctx, "shield", "%s 보호막 %d" % [user.name, user.shield], {"uid": user.uid, "amount": user.shield})
+		"dash":
+			# runs toward the aim one cell at a time (diagonals allowed), stopping before anything in the way
+			var steps := 0
+			while user.pos != aim and steps < 9:
+				var d := Vector2i(signi(aim.x - user.pos.x), signi(aim.y - user.pos.y))
+				var nxt: Vector2i = user.pos + d
+				if not g.passable(nxt) or g.unit_at(nxt) != null:
+					break
+				g.move_unit(user, nxt)
+				steps += 1
+				if g.mat_def(nxt).get("lethal", false) and not user.is_boss:
+					user.hp = 0
+					_log(ctx, "void", "%s 공허로 추락" % user.name, {"uid": user.uid})
+					break
+			if steps == 0:
+				_log(ctx, "no_target", "막혀서 돌진 못 함")
+			else:
+				_log(ctx, "dash", "%s 돌진 %d칸" % [user.name, steps], {"uid": user.uid, "to": user.pos})
+		"discount":
+			user.discount += int(part.get("amount", 0))
+			_log(ctx, "discount", "%s 다음 행동 %d초 단축" % [user.name, user.discount], {"uid": user.uid})
+		"encase":
+			# 결정: a unit on the cell is encased (rooted, shatters on hit for extra damage); an empty cell grows a crystal
+			for p in cells:
+				var u = g.unit_at(p)
+				if u != null:
+					u.add_status("crystal", int(part.get("turns", 3)))
+					_log(ctx, "status", "%s 결정에 갇힘" % u.name, {"uid": u.uid, "status": "crystal"})
+				elif g.passable(p):
+					g.set_material(p, "crystal")
 		"delay":
 			ctx.pending.append({"mode": "delay", "ticks": int(part.get("ticks", 1)), "part": part["part"], "user": user, "aim": aim, "cells": cells.duplicate()})
 		"if":
@@ -170,7 +205,7 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 				apply_part(part["part"], user, aim, cells, ctx)
 			else:
 				_log(ctx, "condition_false", "조건 불충족")
-		"belt", "time_budget":
+		"belt", "time_budget", "borrow":
 			if ctx.on_meta.is_valid():
 				ctx.on_meta.call(part, user)
 		"swap_bodies":

@@ -95,5 +95,12 @@
   "flammable": false,
   "lethal": true,
   "name": "공허"
+ },
+ {
+  "id": "swamp",
+  "passable": true,
+  "conductivity": 0.6,
+  "flammable": false,
+  "name": "늪"
  }
 ]

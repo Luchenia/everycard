@@ -1,0 +1,20 @@
+{
+ "id": "bullet_time",
+ "name": "불릿타임",
+ "time": 0,
+ "rarity": "legendary",
+ "family": "magic",
+ "desc": "시간 10초를 [가불]받습니다.",
+ "weight": 1,
+ "target": {
+  "shape": "self",
+  "range": 0,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "borrow",
+   "secs": 10
+  }
+ ]
+}

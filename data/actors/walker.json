@@ -1,6 +1,6 @@
 {
  "id": "walker",
- "name": "걷는 자",
+ "name": "방랑자",
  "hp": 60,
  "mass": 2,
  "armor": 0,
@@ -12,12 +12,18 @@
   "guard",
   "guard",
   "step",
-  "heat_wave",
+  "step",
+  "spark",
   "frost",
   "oil_spill",
-  "spark",
+  "shock",
+  "gust",
+  "crystallize",
+  "haste_field",
+  "bullet_time",
+  "mirror",
   "laser",
-  "gust"
+  "rain"
  ],
  "signature": "strike",
  "trait": [

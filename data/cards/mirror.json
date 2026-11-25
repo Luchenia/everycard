@@ -1,9 +1,9 @@
 {
  "id": "mirror",
- "name": "거울 세우기",
+ "name": "거울",
  "time": 2,
  "weight": 1,
- "rarity": "basic",
+ "rarity": "common",
  "target": {
   "shape": "cell",
   "range": 3,
@@ -15,5 +15,6 @@
    "id": "metal"
   }
  ],
- "desc": "칸 하나에 금속 거울"
+ "desc": "1×1 크기의 [거울]을 설치합니다.",
+ "family": "magic"
 }

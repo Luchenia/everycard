@@ -1,9 +1,9 @@
 {
  "id": "pickpocket",
  "name": "소매치기",
- "time": 3,
+ "time": 2,
  "weight": 1,
- "rarity": "common",
+ "rarity": "rare",
  "target": {
   "shape": "cell",
   "range": 1,
@@ -14,5 +14,6 @@
    "op": "steal_card"
   }
  ],
- "desc": "인접한 적의 덱에서 카드 1장을 훔침"
+ "desc": "적의 카드 한 장을 훔칩니다.",
+ "family": "neutral"
 }

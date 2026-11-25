@@ -28,6 +28,14 @@ static func cells(shape: String, origin: Vector2i, aim: Vector2i, size: int) -> 
 			for y in range(aim.y - size, aim.y + size + 1):
 				for x in range(aim.x - size, aim.x + size + 1):
 					out.append(Vector2i(x, y))
+		"around":   # square of radius `size` around the user
+			for y in range(origin.y - size, origin.y + size + 1):
+				for x in range(origin.x - size, origin.x + size + 1):
+					out.append(Vector2i(x, y))
+		"square":   # size x size block with the aim at its top-left
+			for y in range(aim.y, aim.y + max(size, 1)):
+				for x in range(aim.x, aim.x + max(size, 1)):
+					out.append(Vector2i(x, y))
 		"cross":
 			out.append(aim)
 			for d in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:

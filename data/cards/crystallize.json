@@ -1,0 +1,20 @@
+{
+ "id": "crystallize",
+ "name": "결정화",
+ "time": 3,
+ "rarity": "rare",
+ "family": "magic",
+ "desc": "1×1 칸을 [결정] 상태로 만듭니다.",
+ "weight": 1,
+ "target": {
+  "shape": "cell",
+  "range": 3,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "encase",
+   "turns": 3
+  }
+ ]
+}

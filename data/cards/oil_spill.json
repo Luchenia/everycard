@@ -1,25 +1,20 @@
 {
  "id": "oil_spill",
- "name": "기름 뿌리기",
+ "name": "기름 투척",
  "time": 2,
  "weight": 1,
- "rarity": "basic",
+ "rarity": "common",
  "target": {
-  "shape": "cone",
-  "range": 2,
-  "size": 2
+  "shape": "circle",
+  "range": 3,
+  "size": 1
  },
  "parts": [
   {
    "op": "material",
    "id": "oil"
-  },
-  {
-   "op": "var",
-   "id": "oxygen",
-   "mode": "add",
-   "value": 0.6
   }
  ],
- "desc": "앞쪽 부채꼴에 기름, 산소 +0.6"
+ "desc": "3×3 범위를 [기름] 상태로 만듭니다.",
+ "family": "neutral"
 }

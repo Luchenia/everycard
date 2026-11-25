@@ -9,7 +9,8 @@ static func budget(rarity: String, catalog: Catalog) -> float:
 static func area_cells(shape: String, size: int) -> int:
 	match shape:
 		"line": return max(size, 1)
-		"circle": return (2 * size + 1) * (2 * size + 1)
+		"circle", "around": return (2 * size + 1) * (2 * size + 1)
+		"square": return max(size, 1) * max(size, 1)
 		"cross": return 4 * size + 1
 		"cone": return max(size, 1) * max(size, 1)
 		"all": return Grid.W * Grid.H
@@ -26,6 +27,10 @@ static func part_score(part: Dictionary, catalog: Catalog) -> float:
 		"damage", "heal": return float(part.get("amount", 0)) * float(o.get("per_amount", 1))
 		"beam": return float(part.get("damage", 0)) * float(o.get("per_damage", 1))
 		"push": return float(part.get("dist", 1)) * float(o.get("per_dist", 1))
+		"shield": return float(part.get("amount", 0)) * float(o.get("per_amount", 1))
+		"discount": return float(part.get("amount", 0)) * float(o.get("per_amount", 1))
+		"borrow": return float(part.get("secs", 0)) * float(o.get("per_sec", 1))
+		"dash": return float(o.get("flat", 0))
 		"belt": return float(part.get("amount", 1)) * float(o.get("per_amount", 1))
 		"time_budget": return absf(float(part.get("delta", 0))) * float(o.get("per_delta", 1))
 		"delay", "if": return part_score(part.get("part", {}), catalog) * float(o.get("inner_factor", 1))

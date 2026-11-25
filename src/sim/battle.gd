@@ -21,6 +21,8 @@ var now := 0                 # battle clock in seconds
 var phase := "player"        # player | won | lost
 var telegraphs: Array = []   # {actor_uid, card_id, aim, cells, fire_at, track, foe_uid}
 var log: Array = []
+var borrow_left := 0          # 불릿타임: borrowed seconds still to spend while the world stays frozen
+var borrow_used := 0          # borrowed seconds spent so far (repaid x1.5 as exhaustion)
 var frames: Array = []        # one per passed second: {t, pos {uid: Vector2i}, hp {uid: int}} for the view to replay
 
 func _init(cat: Catalog, seed_value: int, player_def: String, enemy_defs: Array, layout: Dictionary = {}) -> void:
@@ -101,6 +103,11 @@ func _rebuild_belt() -> void:
 		belt.per_round = int(cfg["draws_per_round"])
 
 func _on_meta(part: Dictionary, user) -> void:
+	if part.get("op", "") == "borrow":
+		if user == human():
+			borrow_left += int(part.get("secs", 10))
+			_log("borrow", "%s 시간 %d초 가불" % [user.name, borrow_left], {"secs": borrow_left})
+		return
 	if user != human():
 		return
 	match part["op"]:
@@ -155,7 +162,7 @@ func _can_act() -> bool:
 ## Basic character's personal ability: one tile, move_time seconds. Resolves when the move ends.
 func cmd_move(dir: Vector2i) -> bool:
 	var h := human()
-	if not _can_act() or h.base_ability != "step1" or absi(dir.x) + absi(dir.y) != 1:
+	if not _can_act() or h.base_ability != "step1" or absi(dir.x) + absi(dir.y) != 1 or h.rooted():
 		return false
 	var to: Vector2i = h.pos + dir
 	if not grid.passable(to) or grid.unit_at(to) != null:
@@ -163,7 +170,7 @@ func cmd_move(dir: Vector2i) -> bool:
 	var secs := action_secs(int(cfg["move_time"]), h)
 	if secs < 0:
 		return false
-	advance(secs, func():
+	_spend(secs, func():
 		if grid.passable(to) and grid.unit_at(to) == null:
 			grid.move_unit(h, to)
 			if grid.mat_def(to).get("lethal", false):
@@ -188,7 +195,7 @@ func cmd_ability(aim: Vector2i) -> bool:
 				return false
 		_:
 			return false
-	advance(secs, func():
+	_spend(secs, func():
 		match h.base_ability:
 			"heat_self":
 				grid.add_var(h.pos, "temperature", 60)
@@ -211,7 +218,7 @@ func can_play(slot: int, aim: Vector2i) -> bool:
 	if card.is_empty() or action_secs(int(card.get("time", 0)), h) < 0:
 		return false
 	var shape: String = card.get("target", {}).get("shape", "cell")
-	if shape != "self" and shape != "all":
+	if shape != "self" and shape != "all" and shape != "around":
 		if not grid.in_bounds(aim) or dist(h.pos, aim) > int(card.get("target", {}).get("range", 1)):
 			return false
 	return true
@@ -227,14 +234,14 @@ func cmd_play(slot: int, aim: Vector2i) -> bool:
 	var card := Effects.card_def(id, catalog)
 	var secs := action_secs(int(card.get("time", 0)), h)
 	_log("play", "%s: %s (%d초)" % [h.name, card.get("name", id), secs], {"card": id, "aim": aim})
-	advance(secs, func():
+	_spend(secs, func():
 		_log("land", "%s 발동" % card.get("name", id), {"card": id})
 		Effects.apply(card, h, aim, ctx)
 		_after_action())
 	var ex := int(card.get("exhaust", 0))
 	if ex > 0 and phase == "player":
 		_log("exhaust", "%s 탈진 %d초" % [h.name, ex], {"secs": ex})
-		advance(ex)
+		_spend(ex, Callable(), false)
 	return true
 
 ## Mouse-wheel roll: the end card on that side is discarded and a new card enters on the other
@@ -248,7 +255,7 @@ func cmd_wheel(dir: int) -> bool:
 	var secs := action_secs(w * int(cfg["wheel_time"]), h)
 	if secs < 0:
 		return false
-	advance(secs, func():
+	_spend(secs, func():
 		var dropped := belt.roll(dir)
 		_log("wheel", "손패 굴리기%s" % ("" if dropped == "" else " (버림: %s)" % Effects.card_def(dropped, catalog).get("name", dropped)), {"dropped": dropped}))
 	return true
@@ -257,8 +264,43 @@ func cmd_wheel(dir: int) -> bool:
 func cmd_wait(secs := 1) -> bool:
 	if not _can_act() or secs <= 0:
 		return false
+	if borrow_left > 0:   # waiting ends the borrowed time early: the debt comes due now
+		_repay()
+		return true
 	advance(secs)
 	return true
+
+func borrowing() -> bool:
+	return borrow_left > 0
+
+## Spends `secs` of the human's time on an action. A pending 서두름 discount comes off first;
+## while time is borrowed (불릿타임) the action happens with the world frozen.
+func _spend(secs: int, on_done: Callable = Callable(), discountable := true) -> void:
+	var h := human()
+	if discountable and h != null and h.discount > 0 and secs > 0:
+		var cut := mini(h.discount, secs)
+		secs -= cut
+		h.discount = 0
+	if borrow_left > 0 and secs <= borrow_left:
+		borrow_left -= secs
+		borrow_used += secs
+		advance(0, on_done)
+		_frame()
+		if borrow_left == 0:
+			_repay()
+		return
+	if borrow_left > 0:
+		_repay()
+	advance(secs, on_done)
+
+## Ends borrowed time: the character is exhausted for 1.5x the borrowed seconds it used.
+func _repay() -> void:
+	var debt := int(ceil(float(borrow_used) * 1.5))
+	borrow_left = 0
+	borrow_used = 0
+	if debt > 0 and phase == "player":
+		_log("exhaust", "가불 상환: 탈진 %d초" % debt, {"secs": debt})
+		advance(debt)
 
 # ---- clock -----------------------------------------------------------------
 
@@ -275,6 +317,7 @@ func advance(secs: int, on_done: Callable = Callable()) -> void:
 		if phase != "player":
 			return
 		now += 1
+		ctx.now = now
 		if i == secs - 1 and on_done.is_valid():
 			if human() != null and human() == actor:
 				on_done.call()
@@ -296,6 +339,9 @@ func _frame() -> void:
 	frames.append({"t": now, "pos": pos, "hp": hp})
 
 func _world_second() -> void:
+	for a in actors:
+		if a.shield > 0 and now >= a.shield_until:
+			a.shield = 0
 	if now % int(cfg["env_every"]) == 0:
 		EnvironmentStep.run(grid, catalog, rng, log, true)
 		Effects.tick_pending(ctx, true)
@@ -402,7 +448,7 @@ func _ai_act(a: Actor) -> void:
 	var aim: Vector2i = choice["aim"]
 	var foe: Actor = choice["foe"]
 	var shape: String = tgt.get("shape", "cell")
-	if shape != "self" and shape != "all" and dist(a.pos, aim) > int(tgt.get("range", 1)):
+	if shape != "self" and shape != "all" and shape != "around" and dist(a.pos, aim) > int(tgt.get("range", 1)):
 		_ai_step_toward(a, aim)
 		a.next_at = now + maxi(1, action_secs(int(cfg["move_time"]), a))
 		return
@@ -420,6 +466,8 @@ func _ai_act(a: Actor) -> void:
 		a.next_at = now + secs
 
 func _ai_step_toward(a: Actor, target: Vector2i) -> void:
+	if a.rooted():
+		return
 	var best := a.pos
 	var best_d := dist(a.pos, target)
 	for n in grid.neighbors4(a.pos):
@@ -473,7 +521,7 @@ func preview(slot: int, aim: Vector2i) -> Dictionary:
 	var h := human()
 	var card := Effects.card_def(belt.slots[slot]["card_id"], catalog)
 	var gsnap := grid.duplicate_state()
-	var asnap := actors.map(func(a): return [a, a.hp, a.statuses.duplicate(), a.deck.duplicate(), a.controller, a.team])
+	var asnap := actors.map(func(a): return [a, a.hp, a.statuses.duplicate(), a.deck.duplicate(), a.controller, a.team, a.shield, a.shield_until, a.discount])
 	var rstate = rng.get_state()
 	var tmp := Effects.BattleContext.new()
 	tmp.grid = grid
@@ -497,6 +545,7 @@ func preview(slot: int, aim: Vector2i) -> Dictionary:
 	grid.restore_state(gsnap)
 	for s in asnap:
 		s[0].hp = s[1]; s[0].statuses = s[2]; s[0].deck = s[3]; s[0].controller = s[4]; s[0].team = s[5]
+		s[0].shield = s[6]; s[0].shield_until = s[7]; s[0].discount = s[8]
 	rng.set_state(rstate)
 	return {"cells": cells, "damage_by_uid": dmg, "moved_by_uid": moved,
-		"secs": action_secs(int(card.get("time", 0)), h), "exhaust": int(card.get("exhaust", 0))}
+		"secs": maxi(0, action_secs(int(card.get("time", 0)), h) - (h.discount if int(card.get("time", 0)) > 0 else 0)), "exhaust": int(card.get("exhaust", 0))}

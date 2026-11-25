@@ -1,9 +1,9 @@
 {
  "id": "compress",
- "name": "압축",
- "time": 4,
+ "name": "짓누르기",
+ "time": 3,
  "weight": 1,
- "rarity": "common",
+ "rarity": "rare",
  "target": {
   "shape": "circle",
   "range": 3,
@@ -17,5 +17,6 @@
    "value": 5
   }
  ],
- "desc": "3×3 압력 +5. 주변으로 밀려남"
+ "desc": "3×3 범위를 [짓누름] 상태로 만듭니다.",
+ "family": "magic"
 }

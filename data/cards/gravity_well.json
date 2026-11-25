@@ -1,9 +1,9 @@
 {
  "id": "gravity_well",
- "name": "중력 우물",
- "time": 4,
+ "name": "중력장",
+ "time": 3,
  "weight": 1,
- "rarity": "common",
+ "rarity": "rare",
  "target": {
   "shape": "circle",
   "range": 4,
@@ -20,5 +20,6 @@
    }
   }
  ],
- "desc": "3×3 중력이 가운데로 향함"
+ "desc": "3×3 범위 안에 있는 상대를 중앙으로 끌어당깁니다.",
+ "family": "magic"
 }

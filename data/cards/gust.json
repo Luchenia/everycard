@@ -1,6 +1,6 @@
 {
  "id": "gust",
- "name": "돌풍",
+ "name": "폭풍",
  "time": 3,
  "weight": 1,
  "rarity": "common",
@@ -20,5 +20,6 @@
    }
   }
  ],
- "desc": "앞쪽 4칸에 강한 바람"
+ "desc": "앞쪽 4칸을 [돌풍] 상태로 만듭니다.",
+ "family": "magic"
 }

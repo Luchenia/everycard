@@ -1,7 +1,7 @@
 {
  "id": "shock",
- "name": "방전",
- "time": 3,
+ "name": "낙뢰",
+ "time": 2,
  "weight": 1,
  "rarity": "common",
  "target": {
@@ -18,9 +18,10 @@
   },
   {
    "op": "damage",
-   "amount": 4,
+   "amount": 5,
    "kind": "electric"
   }
  ],
- "desc": "전하 +8, 전기 피해 4. 물을 타고 퍼짐"
+ "desc": "1×1 칸에 번개를 떨어뜨려 5의 피해를 입힙니다. [감전]",
+ "family": "magic"
 }

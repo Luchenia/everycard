@@ -1,9 +1,9 @@
 {
  "id": "bind_soul",
- "name": "혼 묶기",
- "time": 5,
+ "name": "영혼 봉인",
+ "time": 4,
  "weight": 2,
- "rarity": "rare",
+ "rarity": "legendary",
  "target": {
   "shape": "cell",
   "range": 2,
@@ -14,5 +14,6 @@
    "op": "cardify"
   }
  ],
- "desc": "체력 30% 이하 적을 카드로 만듦"
+ "desc": "약해진 적을 카드로 [봉인]합니다.",
+ "family": "magic"
 }
