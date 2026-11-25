@@ -8,7 +8,7 @@ const STATE_TAG_PARTS := {
 	"wet": [{"op": "var", "id": "humidity", "mode": "add", "value": 0.5}],
 	"shocked": [{"op": "var", "id": "charge", "mode": "add", "value": 5}],
 	"poisoned": [{"op": "var", "id": "toxicity", "mode": "add", "value": 4}],
-	"guard": [{"op": "status", "id": "guard", "turns": 1, "shape": "self"}],
+	"guard": [{"op": "status", "id": "guard", "turns": 3, "shape": "self"}],
 }
 
 class BattleContext extends RefCounted:
@@ -48,12 +48,16 @@ static func card_def(id: String, catalog: Catalog) -> Dictionary:
 			"desc": "%s의 %s와 성질" % [adef.get("name", fid), sig.get("name", "")]}
 	return catalog.cards.get(id, {})
 
-static func apply(card: Dictionary, user, aim: Vector2i, ctx: BattleContext) -> void:
+## cells_override: fixed cells for parts without their own shape (a telegraph hits exactly the
+## cells it showed, e.g. a safe-zone attack).
+static func apply(card: Dictionary, user, aim: Vector2i, ctx: BattleContext, cells_override: Array = []) -> void:
 	var tgt: Dictionary = card.get("target", {})
 	for part in card.get("parts", []):
 		var shape: String = part.get("shape", tgt.get("shape", "cell"))
 		var size: int = int(part.get("size", tgt.get("size", 0)))
-		var cells := Targeting.cells(shape, user.pos, aim, size)
+		var cells: Array = Targeting.cells(shape, user.pos, aim, size)
+		if not cells_override.is_empty() and not part.has("shape"):
+			cells = cells_override
 		apply_part(part, user, aim, cells, ctx)
 
 static func _deck_add(ctx: BattleContext, actor, card_id: String) -> void:

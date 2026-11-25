@@ -10,13 +10,15 @@
  },
  "base_ability": "step1",
  "deck": [
+  "enemy_bite",
   "enemy_slime_spit",
   "enemy_ooze"
  ],
  "pattern": [
+  "enemy_bite",
   "enemy_slime_spit",
-  "enemy_ooze",
-  "enemy_slime_spit"
+  "enemy_bite",
+  "enemy_ooze"
  ],
  "signature": "enemy_slime_spit",
  "trait": [

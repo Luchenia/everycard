@@ -13,8 +13,8 @@
   {
    "op": "status",
    "id": "guard",
-   "turns": 1
+   "turns": 3
   }
  ],
- "desc": "1턴 동안 받는 피해 절반"
+ "desc": "약 6초 동안 받는 피해 절반"
 }

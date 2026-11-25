@@ -19,6 +19,7 @@ var _hold := false
 var reverse_next := false  # "reverse" meta effect: lifespan restores 1 life / relaxed draws 1 more
 var mode := "relaxed"
 var _bonus_draws := 0
+var per_round := 2   # relaxed: draws per round at normal speed (scaled by the speed)
 
 func _init(deck: Array, r: SimRng, cat: Catalog, size := 5, shuffle_deck := true, hand_mode := "relaxed") -> void:
 	mode = hand_mode
@@ -117,7 +118,7 @@ func _burn(i: int) -> void:
 
 func end_turn(speed: float) -> void:
 	if mode == "relaxed":
-		var n := int(floor(clampf(speed, 0.0, 2.0) * 2.0 + 0.0001)) + _bonus_draws + (1 if reverse_next else 0)
+		var n := int(floor(clampf(speed, 0.0, 2.0) * per_round + 0.0001)) + _bonus_draws + (1 if reverse_next else 0)
 		_bonus_draws = 0
 		reverse_next = false
 		_fill(n)
@@ -174,3 +175,57 @@ func next_to_burn() -> int:
 		if slots[i] != null and (best < 0 or slots[i]["life"] < slots[best]["life"]):
 			best = i
 	return best
+
+## Card ids in hand, left to right (a heavy card once).
+func _entries() -> Array:
+	var out: Array = []
+	for s in slots:
+		if s != null and not s.get("tail", false):
+			out.append(s)
+	return out
+
+## The card a roll in this direction would discard ("" if the hand is empty).
+## dir > 0 rolls right (rightmost card leaves), dir < 0 rolls left (leftmost leaves).
+func end_card(dir: int) -> String:
+	var e := _entries()
+	if e.is_empty():
+		return ""
+	return e[-1]["card_id"] if dir > 0 else e[0]["card_id"]
+
+## Wheel roll: the end card on the `dir` side is discarded, the rest slide toward it and a new
+## card enters on the opposite end. Returns the discarded id ("" if the hand was empty).
+func roll(dir: int) -> String:
+	var e := _entries()
+	var dropped := ""
+	if not e.is_empty():
+		var out: Dictionary = e.pop_back() if dir > 0 else e.pop_front()
+		dropped = out["card_id"]
+		discard.append(dropped)
+	var used := 0
+	for x in e:
+		used += 2 if (mode == "relaxed" and _heavy(x["card_id"])) else 1
+	var tries := draw_pile.size() + discard.size() + 1
+	while tries > 0:
+		tries -= 1
+		var id := _draw()
+		if id == "":
+			break
+		var w := 2 if (mode == "relaxed" and _heavy(id)) else 1
+		if used + w > slots.size():
+			draw_pile.push_back(id)
+			continue
+		var entry := {"card_id": id, "life": life_for(id)}
+		if dir > 0:
+			e.push_front(entry)
+		else:
+			e.push_back(entry)
+		break
+	slots.fill(null)
+	var i := 0
+	for x in e:
+		slots[i] = x
+		if mode == "relaxed" and _heavy(x["card_id"]) and i + 1 < slots.size():
+			slots[i + 1] = {"card_id": x["card_id"], "tail": true}
+			i += 1
+		i += 1
+	return dropped

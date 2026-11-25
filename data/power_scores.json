@@ -1,6 +1,7 @@
 {
-  "budgets": {"basic": 8, "common": 12, "rare": 18, "epic": 28},
+  "budgets": {"basic": 8, "common": 12, "rare": 18, "epic": 28, "boss": 120},
   "time_credit": 2.5,
+  "exhaust_credit": 3.0,
   "area_exponent": 0.6,
   "turns_factor": 1.0,
   "ops": {

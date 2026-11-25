@@ -1,0 +1,21 @@
+{
+ "id": "enemy_cross",
+ "name": "십자 균열",
+ "time": 3,
+ "weight": 1,
+ "rarity": "rare",
+ "target": {
+  "shape": "cross",
+  "range": 4,
+  "size": 2
+ },
+ "parts": [
+  {
+   "op": "damage",
+   "amount": 6,
+   "kind": "physical"
+  }
+ ],
+ "desc": "십자 범위, 3초 뒤 피해 6",
+ "telegraph": true
+}

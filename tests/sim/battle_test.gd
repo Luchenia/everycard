@@ -1,79 +1,187 @@
 extends TestCase
+## Timeline battle: one shared clock, actions cost seconds, enemies act on the same clock.
 
 var c: Catalog
 
 func setup_catalog() -> void:
 	c = Catalog.load_dir("res://data")
-	c.cards["t4"] = {"id": "t4", "time": 4, "weight": 1, "rarity": "common", "target": {"shape": "cell", "range": 9}, "parts": [{"op": "damage", "amount": 3, "kind": "physical"}]}
-	c.cards["tele"] = {"id": "tele", "time": 2, "weight": 1, "rarity": "common", "telegraph": true, "target": {"shape": "cell", "range": 9}, "parts": [{"op": "damage", "amount": 10, "kind": "physical"}]}
+	c.config = {"round_time": 10, "grid_w": 9, "grid_h": 7, "env_every": 2, "move_time": 1, "wheel_time": 1, "draws_per_round": 2}
+	c.cards["t3"] = {"id": "t3", "time": 3, "weight": 1, "rarity": "common", "target": {"shape": "cell", "range": 9}, "parts": [{"op": "damage", "amount": 3, "kind": "true"}]}
+	c.cards["tx"] = {"id": "tx", "time": 1, "exhaust": 3, "weight": 1, "rarity": "common", "target": {"shape": "cell", "range": 9}, "parts": [{"op": "damage", "amount": 1, "kind": "true"}]}
+	c.cards["bite"] = {"id": "bite", "time": 2, "weight": 1, "telegraph": true, "target": {"shape": "cell", "range": 9}, "parts": [{"op": "damage", "amount": 10, "kind": "true"}]}
+	c.cards["slam"] = {"id": "slam", "time": 2, "weight": 1, "telegraph": true, "target": {"shape": "circle", "range": 9, "size": 1}, "parts": [{"op": "damage", "amount": 10, "kind": "true"}]}
+	c.cards["quake"] = {"id": "quake", "time": 3, "weight": 1, "telegraph": true, "safe": 3, "target": {"shape": "all", "range": 0}, "parts": [{"op": "damage", "amount": 10, "kind": "true"}]}
+	c.cards["snipe"] = {"id": "snipe", "time": 3, "weight": 1, "telegraph": true, "track": true, "target": {"shape": "cell", "range": 9}, "parts": [{"op": "damage", "amount": 10, "kind": "true"}]}
 	c.cards["swap"] = {"id": "swap", "time": 2, "weight": 1, "rarity": "epic", "target": {"shape": "cell", "range": 9}, "parts": [{"op": "swap_bodies"}]}
 	c.cards["kill"] = {"id": "kill", "time": 1, "weight": 1, "rarity": "epic", "target": {"shape": "cell", "range": 9}, "parts": [{"op": "damage", "amount": 999, "kind": "true"}]}
-	c.actors["hero"] = {"id": "hero", "hp": 40, "mass": 2, "base_ability": "step1", "deck": ["t4", "t4", "t4", "t4", "t4", "t4"]}
-	c.actors["dummy"] = {"id": "dummy", "hp": 20, "mass": 1, "base_ability": "step1", "deck": ["tele"], "pattern": ["tele"]}
+	c.actors["hero"] = {"id": "hero", "hp": 40, "mass": 2, "base_ability": "step1", "deck": ["t3", "t3", "t3", "t3", "t3", "t3", "t3", "t3", "t3"]}
+	c.actors["hero_x"] = {"id": "hero_x", "hp": 40, "mass": 2, "base_ability": "step1", "deck": ["tx", "tx", "tx", "tx", "tx"]}
+	c.actors["idle"] = {"id": "idle", "hp": 30, "mass": 1, "deck": [], "pattern": []}
+	c.actors["biter"] = {"id": "biter", "hp": 30, "mass": 1, "deck": ["bite"], "pattern": ["bite"]}
+	c.actors["slammer"] = {"id": "slammer", "hp": 30, "mass": 1, "deck": ["slam"], "pattern": ["slam"]}
+	c.actors["quaker"] = {"id": "quaker", "hp": 30, "mass": 1, "deck": ["quake"], "pattern": ["quake"]}
+	c.actors["sniper"] = {"id": "sniper", "hp": 30, "mass": 1, "deck": ["snipe"], "pattern": ["snipe"]}
 	c.actors["swapper"] = {"id": "swapper", "hp": 40, "mass": 2, "base_ability": "step1", "deck": ["swap", "swap", "swap", "swap", "swap", "swap"]}
-	c.actors["dummy_killer"] = {"id": "dummy_killer", "hp": 20, "mass": 1, "deck": ["kill", "kill", "kill", "kill", "kill"], "pattern": ["tele"]}
+	c.actors["dummy_killer"] = {"id": "dummy_killer", "hp": 20, "mass": 1, "deck": ["kill", "kill", "kill", "kill", "kill"], "pattern": ["noop"]}
+	c.cards["noop"] = {"id": "noop", "time": 5, "weight": 1, "target": {"shape": "self"}, "parts": []}
 
 const LAYOUT := {"player_pos": [1, 3], "enemy_pos": [[7, 3]], "materials": []}
 
-func slot_of(b: Battle, id: String) -> int:
-	for i in b.belt.slots.size():
-		if b.belt.slots[i] != null and b.belt.slots[i]["card_id"] == id:
-			return i
-	return -1
-
 func run() -> void:
 	setup_catalog()
-	var b := Battle.new(c, 1, "hero", ["dummy"], LAYOUT)
+	test_move_costs_one_second()
+	test_card_time_advances_clock()
+	test_slow_cell_doubles_duration()
+	test_frozen_player_can_wait()
+	test_round_boundary_draws()
+	test_die_during_windup_no_effect()
+	test_exhaust_passes_time()
+	test_telegraph_fires_after_card_time()
+	test_move_dodges_one_tile_attack()
+	test_area_attack_needs_two_moves()
+	test_safe_zone_leaves_safe_cells()
+	test_tracking_locks_one_second_before()
+	test_frozen_enemy_delays_telegraph()
+	test_pattern_index_only_on_use()
+	test_body_swap_and_win()
+	test_determinism()
+	test_preview_restores()
+	test_gained_card_drawn_next()
+	test_time_budget_delays_foes()
+	test_config_grid_size()
+
+func test_move_costs_one_second() -> void:
+	var b := Battle.new(c, 1, "hero", ["idle"], LAYOUT)
+	assert_true(b.cmd_move(Vector2i.UP), "move")
+	assert_eq(b.now, 1, "move costs 1 second")
+	assert_eq(b.human().pos, Vector2i(1, 2), "moved up")
+	assert_true(b.cmd_move(Vector2i.UP), "can keep moving while time allows")
+	assert_eq(b.now, 2, "second move another second")
+
+func test_card_time_advances_clock() -> void:
+	var b := Battle.new(c, 1, "hero", ["idle"], LAYOUT)
 	var foe: Actor = b.actors[1]
-	assert_eq(b.time_left, 10, "turn time 10")
-	assert_true(b.cmd_play(0, foe.pos), "first t4")
-	assert_true(b.cmd_play(1, foe.pos), "second t4")
-	var snap := b.grid.duplicate_state()
+	assert_true(b.cmd_play(0, foe.pos), "play t3")
+	assert_eq(b.now, 3, "3-second card advances 3 seconds")
+	assert_eq(foe.hp, 27, "effect landed")
+	assert_true(not b.cmd_play(0, Vector2i(30, 30)), "out of range rejected")
+	assert_eq(b.now, 3, "rejected play costs nothing")
+
+func test_slow_cell_doubles_duration() -> void:
+	var b := Battle.new(c, 1, "hero", ["idle"], LAYOUT)
+	b.grid.set_var(b.human().pos, "time_scale", 0.5)
+	assert_eq(b.action_secs(1, b.human()), 2, "half speed: 1s action takes 2s")
+	b.cmd_move(Vector2i.UP)
+	assert_eq(b.now, 2, "slow move took 2 seconds")
+
+func test_frozen_player_can_wait() -> void:
+	var b := Battle.new(c, 1, "hero", ["idle"], LAYOUT)
+	b.grid.set_var(b.human().pos, "time_scale", 0.0)
+	assert_true(not b.cmd_move(Vector2i.UP), "frozen player cannot move")
+	assert_true(not b.cmd_play(0, b.actors[1].pos), "frozen player cannot play")
+	assert_true(b.cmd_wait(), "but can wait")
+	assert_eq(b.now, 1, "waiting passes time")
+
+func test_round_boundary_draws() -> void:
+	var b := Battle.new(c, 1, "hero", ["idle"], LAYOUT)
+	b.cmd_play(0, b.actors[1].pos)
+	b.cmd_play(1, b.actors[1].pos)
+	var empty_before := b.belt.slots.count(null)
+	assert_eq(empty_before, 2, "two slots used")
+	assert_eq(b.next_draw_at(), 10, "next draw at 10s")
+	b.cmd_wait(4)
+	assert_eq(b.belt.slots.count(null), 0, "round boundary refilled the hand")
+
+func test_die_during_windup_no_effect() -> void:
+	var b := Battle.new(c, 1, "hero", ["biter"], LAYOUT)
+	var foe: Actor = b.actors[1]
+	# biter telegraphs at 1s and fires at 3s
+	b.human().hp = 5
+	b.cmd_wait(1)
+	assert_eq(b.telegraphs.size(), 1, "enemy telegraphed at 1s")
 	var hp := foe.hp
-	assert_true(not b.cmd_play(2, foe.pos), "third t4 rejected (time 2 left)")
-	assert_eq(foe.hp, hp, "rejected play changed nothing")
-	assert_eq(b.time_left, 2, "time unchanged after rejection")
-	assert_true(b.belt.slots[2] != null, "card still in hand")
-	assert_eq(b.grid.duplicate_state()["material"], snap["material"], "grid unchanged")
-	assert_true(not b.cmd_play(3, Vector2i(20, 20)), "out of range rejected")
-	# move once per turn
-	assert_true(b.cmd_move(Vector2i.UP), "move once")
-	assert_true(not b.cmd_move(Vector2i.UP), "second move rejected")
-	# telegraph: stay -> hit
-	var s := Battle.new(c, 2, "hero", ["dummy"], LAYOUT)
-	var p: Actor = s.human()
-	s.cmd_end_turn()
-	assert_eq(s.telegraphs.size(), 1, "enemy telegraphed")
-	assert_eq(p.hp, 40, "telegraph does not hit immediately")
-	s.cmd_end_turn()
-	assert_eq(p.hp, 30, "stayed on telegraphed cell -> hit")
-	# telegraph: dodge -> no damage
-	var d := Battle.new(c, 2, "hero", ["dummy"], LAYOUT)
-	var p2: Actor = d.human()
-	d.cmd_end_turn()
-	d.cmd_move(Vector2i.UP)
-	d.cmd_end_turn()
-	assert_eq(p2.hp, 40, "dodged telegraph")
-	# time_scale on player cell sets next turn budget
-	var t := Battle.new(c, 3, "hero", ["dummy"], LAYOUT)
-	t.grid.set_var(t.human().pos, "time_scale", 0.3)
-	t.cmd_end_turn()
-	var ts := float(t.grid.get_var(t.human().pos, "time_scale"))
-	assert_eq(t.time_left, int(round(10.0 * ts)), "budget follows cell time_scale")
-	assert_true(t.time_left < 10, "slowed turn has less time")
-	# determinism
-	var r1 := _scripted(7)
-	var r2 := _scripted(7)
-	assert_eq(r1, r2, "same seed + same commands -> same result")
-	# preview does not change state
-	var pv := Battle.new(c, 4, "hero", ["dummy"], LAYOUT)
-	var before := pv.grid.duplicate_state()
-	var fhp: int = pv.actors[1].hp
-	var info := pv.preview(0, pv.actors[1].pos)
-	assert_true(info["damage_by_uid"].get(pv.actors[1].uid, 0) > 0, "preview predicts damage")
-	assert_eq(pv.actors[1].hp, fhp, "preview restored hp")
-	assert_eq(pv.grid.duplicate_state()["values"]["temperature"], before["values"]["temperature"], "preview restored grid")
-	# body swap, then defeat own old body -> won
+	b.cmd_play(0, foe.pos)   # wind-up 1s..4s; the bite lands at 3s
+	assert_eq(b.phase, "lost", "player died during wind-up")
+	assert_eq(foe.hp, hp, "effect never landed")
+
+func test_exhaust_passes_time() -> void:
+	var b := Battle.new(c, 1, "hero_x", ["idle"], LAYOUT)
+	b.cmd_play(0, b.actors[1].pos)
+	assert_eq(b.now, 4, "1s card + 3s exhaustion")
+
+func test_telegraph_fires_after_card_time() -> void:
+	var b := Battle.new(c, 1, "hero", ["biter"], LAYOUT)
+	var p := b.human()
+	b.cmd_wait(1)
+	assert_eq(b.telegraphs.size(), 1, "telegraph posted at 1s")
+	assert_eq(b.telegraphs[0]["fire_at"], 3, "fires 2s later")
+	b.cmd_wait(1)
+	assert_eq(p.hp, 40, "not yet")
+	b.cmd_wait(1)
+	assert_eq(p.hp, 30, "hit at 3s")
+
+func test_move_dodges_one_tile_attack() -> void:
+	var b := Battle.new(c, 1, "hero", ["biter"], LAYOUT)
+	var p := b.human()
+	b.cmd_wait(2)
+	b.cmd_move(Vector2i.UP)   # finishes at 3s, before the bite resolves
+	assert_eq(p.hp, 40, "one move dodges a one-tile attack, even on the last second")
+
+func test_area_attack_needs_two_moves() -> void:
+	var b := Battle.new(c, 1, "hero", ["slammer"], LAYOUT)
+	var p := b.human()
+	b.cmd_wait(2)
+	b.cmd_move(Vector2i.UP)
+	assert_eq(p.hp, 30, "one move is not enough to leave a 3x3")
+	var b2 := Battle.new(c, 1, "hero", ["slammer"], LAYOUT)
+	b2.cmd_wait(1)
+	b2.cmd_move(Vector2i.UP)
+	b2.cmd_move(Vector2i.UP)
+	assert_eq(b2.human().hp, 40, "two moves leave the 3x3")
+
+func test_safe_zone_leaves_safe_cells() -> void:
+	var b := Battle.new(c, 1, "hero", ["quaker"], LAYOUT)
+	b.cmd_wait(1)
+	var t: Dictionary = b.telegraphs[0]
+	var total := Grid.W * Grid.H
+	assert_true(t["cells"].size() <= total - 3 and t["cells"].size() >= total - 4, "all but the safe cells (and the attacker)")
+	var safe_near := false
+	for x in Grid.W:
+		for y in Grid.H:
+			var q := Vector2i(x, y)
+			if not t["cells"].has(q) and Battle.dist(q, b.human().pos) <= 2 and q != b.human().pos:
+				safe_near = true
+	assert_true(safe_near, "a safe cell within two moves of the target")
+
+func test_tracking_locks_one_second_before() -> void:
+	var b := Battle.new(c, 1, "hero", ["sniper"], LAYOUT)
+	var p := b.human()
+	b.cmd_wait(1)                 # telegraph at 1s, fires at 4s
+	b.cmd_move(Vector2i.UP)       # 2s: still tracking
+	assert_eq(b.telegraphs[0]["aim"], p.pos, "aim follows the target")
+	b.cmd_move(Vector2i.UP)       # 3s: aim updates one last time, then locks
+	var locked: Vector2i = b.telegraphs[0]["aim"]
+	assert_eq(locked, p.pos, "locked on the 3s position")
+	b.cmd_move(Vector2i.UP)       # 4s: moves first, then the shot lands on the locked cell
+	assert_eq(p.hp, 40, "moving in the final second dodges the locked shot")
+
+func test_frozen_enemy_delays_telegraph() -> void:
+	var b := Battle.new(c, 1, "hero", ["biter"], LAYOUT)
+	b.cmd_wait(1)
+	Effects.apply(Effects.card_def("stasis", c), b.human(), b.actors[1].pos, b.ctx)
+	b.cmd_wait(2)
+	assert_eq(b.human().hp, 40, "frozen attacker's telegraph waits")
+	assert_eq(b.telegraphs.size(), 1, "telegraph still pending")
+
+func test_pattern_index_only_on_use() -> void:
+	var lay := {"player_pos": [0, 3], "enemy_pos": [[8, 3]], "materials": []}
+	c.cards["near"] = {"id": "near", "time": 1, "weight": 1, "target": {"shape": "cell", "range": 1}, "parts": []}
+	c.actors["walker2"] = {"id": "walker2", "hp": 10, "mass": 1, "deck": ["near"], "pattern": ["near"]}
+	var b := Battle.new(c, 1, "hero", ["walker2"], lay)
+	b.cmd_wait(2)
+	assert_eq(b.actors[1].pattern_index, 0, "approaching does not use up the pattern")
+
+func test_body_swap_and_win() -> void:
 	var w := Battle.new(c, 5, "swapper", ["dummy_killer"], LAYOUT)
 	var old_body: Actor = w.human()
 	var target: Actor = w.actors[1]
@@ -82,62 +190,48 @@ func run() -> void:
 	assert_eq(w.belt.slots[0]["card_id"], "kill", "hand rebuilt from new body's deck")
 	assert_true(w.cmd_play(0, old_body.pos), "attack old body")
 	assert_eq(w.phase, "won", "defeating old body wins")
-	# empty enemy list -> immediate win; human death -> lost
-	var l := Battle.new(c, 6, "hero", ["dummy"], LAYOUT)
-	l.human().hp = 0
-	l.cmd_end_turn()
-	assert_eq(l.phase, "lost", "dead human loses")
-	test_frozen_enemy_skips()
-	test_hold_one_card()
-	test_review_fixes()
 
 func _scripted(seed_value: int) -> Array:
-	var b := Battle.new(c, seed_value, "hero", ["dummy"], {})
+	var b := Battle.new(c, seed_value, "hero", ["slammer", "biter"], {})
 	b.cmd_play(0, b.actors[1].pos)
-	b.cmd_end_turn()
 	b.cmd_move(Vector2i.DOWN)
-	b.cmd_end_turn()
+	b.cmd_wheel(1)
 	b.cmd_play(1, b.actors[1].pos)
-	b.cmd_end_turn()
-	return [b.grid.duplicate_state()["values"], b.grid.material, b.actors.map(func(a): return [a.hp, a.pos])]
+	b.cmd_wait(5)
+	return [b.now, b.grid.duplicate_state()["values"], b.grid.material, b.actors.map(func(a): return [a.hp, a.pos])]
 
-func test_frozen_enemy_skips() -> void:
-	var f := Battle.new(c, 8, "hero", ["dummy"], LAYOUT)
-	Effects.apply(Effects.card_def("stasis", c), f.human(), f.actors[1].pos, f.ctx)
-	f.cmd_end_turn()
-	assert_eq(f.telegraphs.size(), 0, "enemy in stopped time does not act")
+func test_determinism() -> void:
+	assert_eq(_scripted(7), _scripted(7), "same seed + same commands -> same result")
 
-func test_hold_one_card() -> void:
-	var b := Battle.new(c, 9, "hero", ["dummy"], LAYOUT)
-	assert_eq(b.belt.mode, Battle.HAND_MODE, "battle uses the configured hand mode")
-	assert_true(b.cmd_hold(2), "hold")
-	assert_eq(b.time_left, 8, "hold costs 2 time")
-	assert_eq(b.belt._bonus_draws, 1, "relaxed hold: one extra draw next turn")
+func test_preview_restores() -> void:
+	var pv := Battle.new(c, 4, "hero", ["idle"], LAYOUT)
+	var fhp: int = pv.actors[1].hp
+	var info := pv.preview(0, pv.actors[1].pos)
+	assert_true(info["damage_by_uid"].get(pv.actors[1].uid, 0) > 0, "preview predicts damage")
+	assert_eq(info["secs"], 3, "preview shows seconds")
+	assert_eq(pv.actors[1].hp, fhp, "preview restored hp")
+	assert_eq(pv.now, 0, "preview does not advance time")
 
-func test_review_fixes() -> void:
-	# C1: guard (1 turn) must still be up when the enemy's telegraph resolves
-	var g := Battle.new(c, 10, "hero", ["dummy"], LAYOUT)
-	var p: Actor = g.human()
-	g.cmd_end_turn()                       # enemy telegraphs
-	p.add_status("guard", 1)               # as the guard card does on the player's turn
-	g.cmd_end_turn()                       # telegraph resolves
-	assert_eq(p.hp, 35, "guard halves the telegraphed hit (10 -> 5)")
-	# C1: burning deals damage once per round, not twice
-	var bt := Battle.new(c, 11, "hero", ["dummy"], LAYOUT)
-	var foe: Actor = bt.actors[1]
-	foe.pattern = []; foe.deck = []
-	foe.add_status("burning", 3)
-	var hp0 := foe.hp
-	bt.cmd_end_turn()
-	assert_eq(hp0 - foe.hp, 3, "burning ticks once per round")
-	# I1: flush once per turn
-	var f := Battle.new(c, 12, "hero", ["dummy"], LAYOUT)
-	assert_true(f.cmd_flush(0), "first flush ok")
-	assert_true(not f.cmd_flush(0), "second flush in same turn refused")
-	# I2: a card gained mid-battle can be drawn this battle
-	var cf := Battle.new(c, 13, "hero", ["dummy"], LAYOUT)
+func test_gained_card_drawn_next() -> void:
+	var cf := Battle.new(c, 13, "hero", ["idle"], LAYOUT)
 	var d: Actor = cf.actors[1]
 	d.hp = 1
 	cf.grid.move_unit(d, cf.human().pos + Vector2i(1, 0))
+	c.actors["idle"]["signature"] = "t3"
 	Effects.apply({"target": {"shape": "cell"}, "parts": [{"op": "cardify"}]}, cf.human(), d.pos, cf.ctx)
-	assert_eq(cf.belt.preview(), "foe:dummy", "cardified enemy is the next card drawn")
+	assert_eq(cf.belt.preview(), "foe:idle", "cardified enemy is the next card drawn")
+
+func test_time_budget_delays_foes() -> void:
+	var b := Battle.new(c, 1, "hero", ["biter"], LAYOUT)
+	b.cmd_wait(1)
+	Effects.apply({"target": {"shape": "self"}, "parts": [{"op": "time_budget", "delta": 3}]}, b.human(), b.human().pos, b.ctx)
+	assert_eq(b.telegraphs[0]["fire_at"], 6, "telegraph pushed back 3 seconds")
+
+func test_config_grid_size() -> void:
+	var c2 := Catalog.load_dir("res://data")
+	c2.config = {"grid_w": 12, "grid_h": 8, "round_time": 8}
+	var b := Battle.new(c2, 1, "walker", ["slime"], {})
+	assert_eq(b.grid.material.size(), 96, "grid follows config")
+	assert_eq(b.next_draw_at(), 8, "round length follows config")
+	Grid.W = 9
+	Grid.H = 7

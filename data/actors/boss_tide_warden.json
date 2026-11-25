@@ -11,13 +11,17 @@
  "base_ability": "step1",
  "deck": [
   "enemy_tide",
+  "enemy_snipe",
+  "enemy_quake",
   "shock",
   "enemy_slam",
   "rain"
  ],
  "pattern": [
   "rain",
+  "enemy_snipe",
   "enemy_tide",
+  "enemy_quake",
   "shock",
   "enemy_slam"
  ],

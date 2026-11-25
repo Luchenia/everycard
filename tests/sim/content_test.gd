@@ -26,5 +26,5 @@ func run() -> void:
 		var id: String = all_ids[rng.next_int(all_ids.size())]
 		var aim := Vector2i(rng.next_int(Grid.W), rng.next_int(Grid.H))
 		Effects.apply(Effects.card_def(id, c), h, aim, b.ctx)
-		b.cmd_end_turn()
+		b.cmd_wait(10)
 		assert_true(b.phase in ["player", "won", "lost"], "battle continues after %s" % id)

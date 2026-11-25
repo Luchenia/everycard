@@ -10,11 +10,12 @@
  "base_ability": "pull1",
  "deck": [
   "enemy_slam",
+  "enemy_cross",
   "compress"
  ],
  "pattern": [
   "enemy_slam",
-  "enemy_slam",
+  "enemy_cross",
   "compress"
  ],
  "signature": "enemy_slam",

@@ -6,7 +6,7 @@ func win(flow: RunFlow) -> void:
 	for a in flow.battle.actors:
 		if a.team == 1:
 			a.hp = 0
-	flow.battle.cmd_end_turn()
+	flow.battle.cmd_wait(10)
 	flow.update()
 
 func run() -> void:
@@ -32,7 +32,7 @@ func run() -> void:
 	# loss
 	var l := RunFlow.new(c, 12)
 	l.battle.human().hp = 0
-	l.battle.cmd_end_turn()
+	l.battle.cmd_wait(10)
 	l.update()
 	assert_eq(l.phase, "game_over", "loss -> game over")
 	# win after body swap: next battle uses the new body

@@ -1,0 +1,22 @@
+{
+ "id": "enemy_snipe",
+ "name": "조준 사격",
+ "time": 2,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "cell",
+  "range": 6,
+  "size": 0
+ },
+ "track": true,
+ "parts": [
+  {
+   "op": "damage",
+   "amount": 6,
+   "kind": "physical"
+  }
+ ],
+ "desc": "대상을 따라가다 1초 전에 고정, 피해 6",
+ "telegraph": true
+}

@@ -60,9 +60,10 @@ static func score(card: Dictionary, catalog: Catalog) -> float:
 			var shape: String = part.get("shape", tgt.get("shape", "cell"))
 			var size: int = int(part.get("size", tgt.get("size", 0)))
 			s *= pow(float(area_cells(shape, size)), float(pw.get("area_exponent", 0.6)))
-		s *= 1.0 + float(part.get("turns", 0)) * float(pw.get("turns_factor", 1))
+		if part.get("op", "") != "status":   # status duration is already in part_score
+			s *= 1.0 + float(part.get("turns", 0)) * float(pw.get("turns_factor", 1))
 		total += s
-	return total - float(card.get("time", 0)) * float(pw.get("time_credit", 2.5))
+	return total - float(card.get("time", 0)) * float(pw.get("time_credit", 2.5)) - float(card.get("exhaust", 0)) * float(pw.get("exhaust_credit", 3.0))
 
 static func check(card: Dictionary, catalog: Catalog) -> Dictionary:
 	var s := score(card, catalog)

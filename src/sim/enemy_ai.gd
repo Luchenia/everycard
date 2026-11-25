@@ -1,6 +1,7 @@
 class_name EnemyAI
 extends RefCounted
 ## Picks the next card from an AI actor's pattern and aims at the nearest actor of another team.
+## Does not advance the pattern: Battle does that only when the card is actually used.
 
 static func nearest_foe(actor: Actor, battle) -> Actor:
 	var best: Actor = null
@@ -14,7 +15,7 @@ static func nearest_foe(actor: Actor, battle) -> Actor:
 			best = a
 	return best
 
-## Returns {card_id, aim} or {} when there is nothing to do.
+## Returns {card_id, aim, foe} or {} when there is nothing to do.
 static func choose(actor: Actor, battle) -> Dictionary:
 	var seq: Array = actor.pattern if not actor.pattern.is_empty() else actor.deck
 	if seq.is_empty():
@@ -23,8 +24,7 @@ static func choose(actor: Actor, battle) -> Dictionary:
 	if foe == null:
 		return {}
 	var card_id: String = seq[actor.pattern_index % seq.size()]
-	actor.pattern_index += 1
 	var card := Effects.card_def(card_id, battle.catalog)
 	var shape: String = card.get("target", {}).get("shape", "cell")
 	var aim: Vector2i = actor.pos if shape == "self" else foe.pos
-	return {"card_id": card_id, "aim": aim}
+	return {"card_id": card_id, "aim": aim, "foe": foe}

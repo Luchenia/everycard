@@ -1,0 +1,9 @@
+{
+  "round_time": 10,
+  "grid_w": 9,
+  "grid_h": 7,
+  "env_every": 2,
+  "move_time": 1,
+  "wheel_time": 1,
+  "draws_per_round": 2
+}

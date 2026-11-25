@@ -3,8 +3,8 @@ extends RefCounted
 ## Battlefield state: per-cell variable values, per-cell material, unit positions.
 ## Units are any object with a `pos: Vector2i` field (Actor in practice).
 
-const W := 9
-const H := 7
+static var W := 9   # set from data/battle.json by Battle
+static var H := 7
 
 var catalog: Catalog
 var values: Dictionary = {}   # var id -> Array (scalar float or Vector2), index = y * W + x

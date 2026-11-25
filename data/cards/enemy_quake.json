@@ -1,0 +1,22 @@
+{
+ "id": "enemy_quake",
+ "name": "대지진",
+ "time": 4,
+ "weight": 1,
+ "rarity": "boss",
+ "target": {
+  "shape": "all",
+  "range": 0,
+  "size": 0
+ },
+ "safe": 3,
+ "parts": [
+  {
+   "op": "damage",
+   "amount": 9,
+   "kind": "physical"
+  }
+ ],
+ "desc": "안전한 3칸만 빼고 전부, 4초 뒤 피해 9",
+ "telegraph": true
+}

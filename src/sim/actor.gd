@@ -21,6 +21,7 @@ var base_ability := "step1"
 var deck: Array = []
 var pattern: Array = []
 var pattern_index := 0
+var next_at := 0   # battle second at which an AI actor acts next
 var pos := Vector2i(-1, -1)
 
 static func from_def(def: Dictionary, new_uid: int) -> Actor:

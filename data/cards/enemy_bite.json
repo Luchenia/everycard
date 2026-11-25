@@ -1,0 +1,21 @@
+{
+ "id": "enemy_bite",
+ "name": "물기",
+ "time": 1,
+ "weight": 1,
+ "rarity": "basic",
+ "target": {
+  "shape": "cell",
+  "range": 1,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "damage",
+   "amount": 5,
+   "kind": "physical"
+  }
+ ],
+ "desc": "1칸, 1초 뒤 피해 5",
+ "telegraph": true
+}
