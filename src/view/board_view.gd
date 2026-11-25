@@ -2,7 +2,7 @@ class_name BoardView
 extends Control
 ## Draws the grid: materials, variable overlays, units, enemy telegraphs and the card preview.
 
-const CELL := 72
+const AREA := Vector2(648, 504)   # board area; the cell size follows the grid size
 const MAT_COLORS := {
 	"none": Color("#2b2f3a"), "water": Color("#2d5f9e"), "ice": Color("#a9d8f0"), "steam": Color("#8c97a6"),
 	"oil": Color("#3b2f1e"), "fire": Color("#e0631b"), "gas_flammable": Color("#6f8f2a"), "smoke": Color("#55555c"),
@@ -13,8 +13,13 @@ var battle: Battle
 var hover := Vector2i(-1, -1)
 var preview: Dictionary = {}
 var font: Font
+var CELL := 72
 
 func _ready() -> void:
+	fit()
+
+func fit() -> void:
+	CELL = int(minf(AREA.x / Grid.W, AREA.y / Grid.H))
 	custom_minimum_size = Vector2(Grid.W * CELL, Grid.H * CELL)
 	size = custom_minimum_size
 	mouse_filter = Control.MOUSE_FILTER_PASS
@@ -56,9 +61,12 @@ func _draw() -> void:
 			draw_string(font, r.position + Vector2(4, 14), "P%.0f" % pr, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.WHITE)
 		draw_rect(r, Color(0, 0, 0, 0.35), false, 1)
 	for t in battle.telegraphs:
+		var left: int = int(t["fire_at"]) - battle.now
+		var hot := Color(1, 0.25, 0.1) if left <= 1 else Color(1, 0.55, 0.1)
 		for p in t["cells"]:
-			draw_rect(_rect(p, 3), Color(1, 0.55, 0.1), false, 3)
-			draw_string(font, _rect(p).get_center() + Vector2(-4, 6), "!", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(1, 0.6, 0.1))
+			draw_rect(_rect(p, 3), Color(hot, 0.18))
+			draw_rect(_rect(p, 3), hot, false, 3)
+			draw_string(font, _rect(p).position + Vector2(CELL - 30, 18), "%d초" % left, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, hot)
 	for u in g.units:
 		var r2 := _rect(u.pos, 10)
 		var col := Color("#4aa3ff") if u.controller == "human" else (Color("#58d26b") if u.team == 0 else Color("#ff5a5a"))
