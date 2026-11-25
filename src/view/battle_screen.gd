@@ -289,6 +289,9 @@ func _unhandled_input(ev: InputEvent) -> void:
 				b.cmd_ability(b.human().pos)
 			else:
 				ability_mode = true
+				selected = -1
+				_refresh()
+				return
 		_: return
 	_after()
 

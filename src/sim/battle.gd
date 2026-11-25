@@ -262,6 +262,7 @@ func cmd_wait(secs := 1) -> bool:
 ## Runs the world `secs` seconds. on_done (the player's finishing action) resolves at the start
 ## of the last second, before the world reacts in that second. secs 0 = resolve immediately.
 func advance(secs: int, on_done: Callable = Callable()) -> void:
+	var actor := human()   # the body that started the action; if control moved away, it is cancelled
 	if secs <= 0:
 		if on_done.is_valid():
 			on_done.call()
@@ -272,7 +273,7 @@ func advance(secs: int, on_done: Callable = Callable()) -> void:
 			return
 		now += 1
 		if i == secs - 1 and on_done.is_valid():
-			if human() != null:
+			if human() != null and human() == actor:
 				on_done.call()
 				_after_action()
 			if phase != "player":
@@ -284,7 +285,11 @@ func _world_second() -> void:
 		EnvironmentStep.run(grid, catalog, rng, log, true)
 		Effects.tick_pending(ctx, true)
 		_after_action()
+	if phase != "player":
+		return
 	_resolve_telegraphs()
+	if phase != "player":
+		return
 	for a in actors.duplicate():
 		if phase != "player":
 			return
@@ -327,7 +332,9 @@ func _resolve_telegraphs() -> void:
 		_log("telegraph_hit", "%s: %s" % [a.name, Effects.card_def(t["card_id"], catalog).get("name", "")], {"cells": t["cells"]})
 		Effects.apply(Effects.card_def(t["card_id"], catalog), a, t["aim"], ctx, t["cells"])
 		a.next_at = maxi(a.next_at, now + 1)
-		_cleanup()
+		_after_action()
+		if phase != "player":
+			break
 	telegraphs = keep
 
 ## Tracking attacks follow their target until one second before they fire, then lock.
@@ -336,10 +343,18 @@ func _track_telegraphs() -> void:
 		if not t.get("track", false) or int(t["fire_at"]) - now < 1:
 			continue
 		var a: Actor = _actor(t["actor_uid"])
-		var f: Actor = _actor(t.get("foe_uid", -1))
-		if a == null or f == null or not f.alive() or not grid.units.has(f):
+		if a == null:
 			continue
+		var f: Actor = _actor(t.get("foe_uid", -1))
+		if f == null or not f.alive() or not grid.units.has(f) or f.team == a.team:
+			# the target died or changed sides (body swap): follow the nearest foe instead
+			f = EnemyAI.nearest_foe(a, self)
+			if f == null:
+				continue
+			t["foe_uid"] = f.uid
 		var card := Effects.card_def(t["card_id"], catalog)
+		if dist(a.pos, f.pos) > int(card.get("target", {}).get("range", 1)):
+			continue   # out of range: keep the last aim
 		t["aim"] = f.pos
 		t["cells"] = _attack_cells(card, a, f.pos, f)
 

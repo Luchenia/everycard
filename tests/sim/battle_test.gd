@@ -49,6 +49,7 @@ func run() -> void:
 	test_gained_card_drawn_next()
 	test_time_budget_delays_foes()
 	test_config_grid_size()
+	test_review_fixes()
 
 func test_move_costs_one_second() -> void:
 	var b := Battle.new(c, 1, "hero", ["idle"], LAYOUT)
@@ -235,3 +236,28 @@ func test_config_grid_size() -> void:
 	assert_eq(b.next_draw_at(), 8, "round length follows config")
 	Grid.W = 9
 	Grid.H = 7
+
+func test_review_fixes() -> void:
+	# telegraph kill on an odd second (no env step) ends the battle
+	var b := Battle.new(c, 1, "hero", ["biter"], LAYOUT)
+	b.human().hp = 5
+	b.cmd_wait(1)
+	b.cmd_wait(2)   # bite fires at 3s
+	assert_eq(b.phase, "lost", "telegraph kill ends the battle")
+	# an action winding up is cancelled if control moved to another body meanwhile
+	var w2 := Battle.new(c, 3, "hero", ["idle"], LAYOUT)
+	var f2: Actor = w2.actors[1]
+	w2.human().pattern = ["noop"]   # the left-behind body idles once it becomes AI
+	w2.cmd_play(0, f2.pos)          # 0s -> 3s
+	var hp2 := f2.hp
+	var s0 := w2.belt.slots.find_custom(func(x): return x != null)
+	# swap control in the middle of the wind-up through a delayed swap
+	w2.ctx.pending.append({"mode": "delay", "ticks": 1, "part": {"op": "swap_bodies"}, "user": w2.human(), "aim": f2.pos, "cells": [f2.pos]})
+	w2.cmd_play(s0, f2.pos)
+	assert_true(w2.human() == f2, "control moved mid wind-up")
+	assert_eq(f2.hp, hp2, "the old body's card did not land")
+	# rolling with an empty draw pile does not hand back the dropped card
+	var r := HandBelt.new(["strike", "guard", "step", "frost", "spark"], SimRng.new(1), c, 5, false)
+	r.discard = []
+	assert_eq(r.roll(1), "spark", "dropped spark")
+	assert_true(not r.slots.map(func(x): return x["card_id"] if x else "").has("spark"), "spark not drawn straight back")

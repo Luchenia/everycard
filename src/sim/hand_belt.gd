@@ -200,7 +200,6 @@ func roll(dir: int) -> String:
 	if not e.is_empty():
 		var out: Dictionary = e.pop_back() if dir > 0 else e.pop_front()
 		dropped = out["card_id"]
-		discard.append(dropped)
 	var used := 0
 	for x in e:
 		used += 2 if (mode == "relaxed" and _heavy(x["card_id"])) else 1
@@ -220,6 +219,8 @@ func roll(dir: int) -> String:
 		else:
 			e.push_back(entry)
 		break
+	if dropped != "":
+		discard.append(dropped)   # after drawing, so the wheel never hands the same card straight back
 	slots.fill(null)
 	var i := 0
 	for x in e:
