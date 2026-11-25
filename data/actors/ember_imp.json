@@ -1,0 +1,2 @@
+{"id": "ember_imp", "name": "불 도깨비", "hp": 22, "mass": 1, "armor": 0, "resist": {"fire": 0.8, "cold": -0.5}, "base_ability": "heat_self",
+ "deck": ["enemy_ember", "spark", "enemy_ember"], "pattern": ["enemy_ember", "spark", "enemy_ember"]}

@@ -1,0 +1,37 @@
+extends TestCase
+
+func run() -> void:
+	var c := Catalog.load_dir("res://data")
+	assert_true(c.actors.has("walker") and c.actors.has("slime") and c.actors.has("boss_tide_warden"), "actor defs loaded")
+	var p := Actor.from_def(c.actors["walker"], 1)
+	p.controller = "human"; p.team = 0
+	assert_eq(p.uid, 1, "uid")
+	assert_eq(p.hp, p.max_hp, "full hp")
+	assert_eq(p.base_ability, "step1", "walker ability")
+	assert_true(p.deck.size() > 0, "walker deck")
+	var s := Actor.from_def(c.actors["slime"], 2)
+	assert_eq(s.team, 1, "enemy default team")
+	assert_eq(s.controller, "ai", "enemy default ai")
+	assert_true(s.base_ability != "", "enemies have a base ability too")
+	# damage with resistance and armor
+	var t := Actor.from_def({"id": "t", "hp": 50, "mass": 1, "armor": 0, "resist": {"fire": 0.5}, "deck": []}, 9)
+	assert_eq(t.take_damage(10, "fire"), 5, "fire resist halves")
+	assert_eq(t.hp, 45, "hp reduced")
+	var a := Actor.from_def({"id": "a", "hp": 50, "mass": 1, "armor": 2, "deck": []}, 10)
+	assert_eq(a.take_damage(5, "physical"), 3, "armor subtracts physical")
+	assert_eq(a.take_damage(1, "physical"), 0, "armor floors at 0")
+	# body swap
+	assert_true(Actor.swap_bodies(p, s), "swap ok")
+	assert_eq(s.controller, "human", "slime now human")
+	assert_eq(s.team, 0, "slime now team 0")
+	assert_eq(p.controller, "ai", "old body ai")
+	assert_eq(p.team, 1, "old body team 1")
+	assert_eq(p.deck, Array(c.actors["walker"]["deck"]), "deck stays with body")
+	var boss := Actor.from_def(c.actors["boss_tide_warden"], 3)
+	assert_true(boss.is_boss, "boss flag")
+	assert_true(not Actor.swap_bodies(s, boss), "boss swap refused")
+	assert_eq(s.controller, "human", "unchanged after refusal")
+	assert_eq(boss.controller, "ai", "boss unchanged")
+	var empty := Actor.from_def({"id": "e", "hp": 10, "mass": 1, "deck": []}, 11)
+	assert_true(Actor.swap_bodies(s, empty), "swap with empty-deck enemy")
+	assert_eq(empty.deck, ["strike", "guard", "step"], "empty deck refilled")
