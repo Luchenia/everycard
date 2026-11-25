@@ -1,125 +1,569 @@
 class_name BoardView
 extends Control
-## Draws the grid: materials, variable overlays, units, enemy telegraphs and the card preview.
+## The dungeon room: floor and walls, ground states (one connected surface per kind), effects,
+## units with their hp right under them, enemy attack warnings (always on top of effects), aiming
+## and the bullet-time look while the player thinks.
+##
+## Layers, back to front: floor (this node) -> liquids (shader) -> top layer: cell auras, y-sorted
+## effects and units, warnings, hp bars, aiming, damage numbers, bullet-time veil.
 
-const AREA := Vector2(780, 520)   # board area; the cell size follows the grid size
-const MAT_COLORS := {
-	"none": Color("#2b2f3a"), "water": Color("#2d5f9e"), "ice": Color("#a9d8f0"), "steam": Color("#8c97a6"),
-	"oil": Color("#3b2f1e"), "fire": Color("#e0631b"), "gas_flammable": Color("#6f8f2a"), "smoke": Color("#55555c"),
-	"wall": Color("#6b6257"), "metal": Color("#b9c2cc"), "crystal": Color("#b48ce6"), "void": Color("#05040a"),
-}
+const LIQ := {"water": 1, "oil": 2, "swamp": 3, "ice": 4}
+const C := Art.CELL
+const S := Art.S
 
 var battle: Battle
+var font: Font
 var hover := Vector2i(-1, -1)
 var preview: Dictionary = {}
-var range_cells: Array = []    # cells the selected card can reach
+var range_cells: Array = []      # cells the selected card can reach
+var aiming := false              # a card is selected: tall effects go see-through so cells stay readable
 var shown_pos: Dictionary = {}   # uid -> Vector2 (cell coords, fractional while replaying)
 var shown_hp: Dictionary = {}    # uid -> hp at the replayed second
-var shown_now := -1              # replayed second
+var shown_now := -1
 var replaying := false
-var _clock := 0.0
-var font: Font
-var CELL := 72
+
+var origin := Vector2(C, C * 2)  # top-left of cell (0,0) inside this control
+var clock := 0.0                 # effect time: crawls while paused (bullet time), runs during replay
+var real := 0.0
+var liquid: ColorRect
+var top: Control
+var _state_img: Image
+var _state_tex: ImageTexture
+var _floor: PackedInt32Array = PackedInt32Array()
+var _wall: PackedInt32Array = PackedInt32Array()
+var _floor_for: Battle
+var popups: Array = []           # {p: Vector2 local, text, col, t0}
+var flashes: Dictionary = {}     # uid -> real time of last hit
+var _last_hp: Dictionary = {}
+var shake_until := 0.0
+var fizzle: Dictionary = {}      # {cell, t0}: an out-of-range click
 
 func _ready() -> void:
+	mouse_filter = Control.MOUSE_FILTER_PASS
+	liquid = ColorRect.new()
+	liquid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var mat := ShaderMaterial.new()
+	mat.shader = load("res://src/view/liquid.gdshader")
+	liquid.material = mat
+	add_child(liquid)
+	top = Control.new()
+	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top.draw.connect(_draw_top)
+	add_child(top)
 	fit()
 
 func fit() -> void:
-	CELL = int(minf(AREA.x / Grid.W, AREA.y / Grid.H))
-	custom_minimum_size = Vector2(Grid.W * CELL, Grid.H * CELL)
-	size = custom_minimum_size
-	mouse_filter = Control.MOUSE_FILTER_PASS
+	size = Vector2((Grid.W + 2) * C, (Grid.H + 3) * C)
+	custom_minimum_size = size
+	if liquid:
+		liquid.position = origin
+		liquid.size = Vector2(Grid.W, Grid.H) * C
+		top.size = size
+		(liquid.material as ShaderMaterial).set_shader_parameter("grid", Vector2(Grid.W, Grid.H))
+	_state_img = Image.create(Grid.W, Grid.H, false, Image.FORMAT_RGBA8)
+	_state_tex = ImageTexture.create_from_image(_state_img)
 
 func _process(delta: float) -> void:
-	_clock += delta
+	real += delta
+	var speed := 1.0 if replaying else (0.0 if battle != null and battle.borrowing() else 0.14)
+	clock += delta * speed
+	if battle != null:
+		_update_liquids()
+		_track_hits()
 	queue_redraw()
+	if top:
+		top.queue_redraw()
 
 func cell_at(local: Vector2) -> Vector2i:
-	var p := Vector2i(int(floor(local.x / CELL)), int(floor(local.y / CELL)))
+	var q := (local - origin) / C
+	var p := Vector2i(int(floor(q.x)), int(floor(q.y)))
 	return p if p.x >= 0 and p.y >= 0 and p.x < Grid.W and p.y < Grid.H else Vector2i(-1, -1)
 
-func _rect(p: Vector2i, inset := 0.0) -> Rect2:
-	return Rect2(Vector2(p) * CELL + Vector2(inset, inset), Vector2(CELL - inset * 2, CELL - inset * 2))
+func cell_rect(p: Vector2i, inset := 0.0) -> Rect2:
+	return Rect2(origin + Vector2(p) * C + Vector2(inset, inset), Vector2(C - inset * 2, C - inset * 2))
+
+func feet(cp: Vector2) -> Vector2:
+	return origin + (cp + Vector2(0.5, 1.0)) * C - Vector2(0, 3 * S)
+
+func shake(secs := 0.25) -> void:
+	shake_until = real + secs
+
+func out_of_range_click(p: Vector2i) -> void:
+	fizzle = {"cell": p, "t0": real}
+	shake(0.22)
+
+# ---- floor --------------------------------------------------------------------------------------
+
+func _build_floor() -> void:
+	_floor_for = battle
+	var rnd := RandomNumberGenerator.new()
+	rnd.seed = hash(battle.rng.get_state()) if battle.rng else 1
+	var blobs := []
+	for i in rnd.randi_range(3, 6):
+		blobs.append([rnd.randf_range(0, Grid.W), rnd.randf_range(0, Grid.H), rnd.randf_range(1.2, 2.6)])
+	_floor.resize(Grid.W * Grid.H)
+	for y in Grid.H:
+		for x in Grid.W:
+			var inblob := false
+			for b in blobs:
+				if pow(x - b[0], 2) + pow(y - b[1], 2) < b[2] * b[2]:
+					inblob = true
+			var r := rnd.randf()
+			var t := 0
+			if inblob and r < 0.75: t = 8 + rnd.randi_range(0, 3)
+			elif r < 0.88: t = rnd.randi_range(0, 3)
+			elif r < 0.95: t = 4 + rnd.randi_range(0, 3)
+			else: t = 12 + rnd.randi_range(0, 3)
+			_floor[y * Grid.W + x] = t
+	_wall.resize((Grid.W + 2) * (Grid.H + 3))
+	for i in _wall.size():
+		_wall[i] = rnd.randi_range(0, 3) if rnd.randf() < 0.8 else rnd.randi_range(4, 15)
+
+func _tile(tex: Texture2D, idx: int, at: Vector2, mod := Color.WHITE) -> void:
+	draw_texture_rect_region(tex, Rect2(at, Vector2(C, C)), Rect2(idx * Art.T, 0, Art.T, Art.T), mod)
 
 func _draw() -> void:
 	if battle == null:
 		return
+	if _floor_for != battle or _floor.size() != Grid.W * Grid.H:
+		_build_floor()
+	var off := _shake_off()
+	var stone := Art.tex("res://assets/art/floor/stone.png")
+	var wall := Art.tex("res://assets/art/floor/wall.png")
+	var face := Art.tex("res://assets/art/floor/wall_face.png")
+	draw_rect(Rect2(Vector2.ZERO, size), Color("#0a090d"))
+	var W := Grid.W
+	var H := Grid.H
+	# walls: top row, faces, sides, bottom
+	for x in range(-1, W + 1):
+		_tile(wall, _wall[(x + 1)], origin + off + Vector2(x * C, -2 * C))
+	if face:
+		for x in range(0, W, 2):
+			var fw := mini(2, W - x)
+			draw_texture_rect_region(face, Rect2(origin + off + Vector2(x * C, -C), Vector2(fw * C, C)), Rect2(0, 0, fw * Art.T, Art.T),
+				Color.WHITE if (x / 2) % 2 == 0 else Color(0.92, 0.92, 0.96))
+	for y in range(-1, H + 1):
+		_tile(wall, _wall[(y + 2) * (W + 2)], origin + off + Vector2(-C, y * C))
+		_tile(wall, _wall[(y + 2) * (W + 2) + W + 1], origin + off + Vector2(W * C, y * C))
+	for x in range(0, W):
+		_tile(wall, _wall[(H + 2) * (W + 2) + x + 1], origin + off + Vector2(x * C, H * C), Color(0.85, 0.85, 0.9))
+	# floor
 	var g := battle.grid
 	for p in g.all_cells():
-		var r := _rect(p)
-		draw_rect(r, MAT_COLORS.get(g.get_material(p), Color.MAGENTA))
-		var t := float(g.get_var(p, "temperature"))
-		if t > 40.0:
-			draw_rect(r, Color(1, 0.2, 0.1, clampf((t - 40.0) / 260.0, 0.0, 0.6)))
-		elif t < 5.0:
-			draw_rect(r, Color(0.3, 0.6, 1, clampf((5.0 - t) / 100.0, 0.0, 0.6)))
-		var ts := float(g.get_var(p, "time_scale"))
-		if absf(ts - 1.0) > 0.05:
-			draw_arc(r.get_center(), CELL * 0.38, 0, TAU * clampf(ts / 2.0, 0.05, 1.0), 24, Color(0.85, 0.85, 0.9, 0.7), 3)
-		var ch := float(g.get_var(p, "charge"))
-		if ch > 0.5:
-			for k in int(min(ch, 6)):
-				draw_circle(r.position + Vector2(8 + k * 9, CELL - 8), 3, Color(1, 0.95, 0.2))
-		var force := EnvironmentStep.force_at(g, p)
-		if force.length() > 0.4:
-			var c := r.get_center()
-			var tip := c + force.normalized() * minf(CELL * 0.45, 10 + force.length() * 6)
-			draw_line(c, tip, Color(0.9, 1, 0.9, 0.8), 2)
-			draw_circle(tip, 3, Color(0.9, 1, 0.9, 0.8))
-		var pr := float(g.get_var(p, "pressure"))
-		if pr > 2.0:
-			draw_string(font, r.position + Vector2(4, 14), "P%.0f" % pr, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.WHITE)
-		draw_rect(r, Color(0, 0, 0, 0.35), false, 1)
-	for t in battle.telegraphs:
-		var left: int = int(t["fire_at"]) - (shown_now if replaying else battle.now)
-		var hot := Color(1, 0.25, 0.1) if left <= 1 else Color(1, 0.55, 0.1)
-		for p in t["cells"]:
-			draw_rect(_rect(p, 3), Color(hot, 0.18))
-			draw_rect(_rect(p, 3), hot, false, 3)
-			draw_string(font, _rect(p).position + Vector2(CELL - 30, 18), "%d초" % left, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, hot)
-	for u in battle.actors:
-		if replaying:
-			if not shown_pos.has(u.uid):
-				continue
-		elif not g.units.has(u):
+		var at := origin + off + Vector2(p) * C
+		var m := g.get_material(p)
+		if m == "void":
+			draw_rect(Rect2(at, Vector2(C, C)), Color("#040307"))
+			draw_rect(Rect2(at, Vector2(C, 4 * S)), Color("#1b1824"))
 			continue
-		var cp: Vector2 = shown_pos.get(u.uid, Vector2(u.pos)) if replaying else Vector2(u.pos)
-		var hp: int = shown_hp.get(u.uid, u.hp) if replaying else u.hp
-		var origin := cp * CELL
-		var center := origin + Vector2(CELL, CELL) * 0.5
-		# bullet time: while the player thinks, everything breathes very slowly
-		var breathe: float = 1.0 if replaying else 1.0 + 0.04 * sin(_clock * 0.9 + u.uid)
-		var col: Color = Color("#4aa3ff") if u.controller == "human" else (Color("#58d26b") if u.team == 0 else Color("#ff5a5a"))
-		draw_circle(center, CELL * 0.3 * breathe, col)
-		if u.is_boss:
-			draw_arc(center, CELL * 0.34 * breathe, 0, TAU, 24, Color.GOLD, 3)
-		var nm: String = u.name.substr(0, 2)
-		var np := center + Vector2(-CELL * 0.22, 5)
-		draw_string_outline(font, np, nm, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 4, Color(0, 0, 0, 0.9))
-		draw_string(font, np, nm, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
-		draw_string_outline(font, origin + Vector2(4, CELL - 4), "%d" % hp, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, 4, Color(0, 0, 0, 0.9))
-		draw_string(font, origin + Vector2(4, CELL - 4), "%d" % hp, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.WHITE)
-		var sx := 4.0
-		for s in u.statuses:
-			draw_string(font, origin + Vector2(CELL - 12 - sx, 14), s.substr(0, 1).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.YELLOW)
-			sx += 10
+		_tile(stone, _floor[p.y * W + p.x], at)
+		var temp := float(g.get_var(p, "temperature"))
+		if m == "fire":
+			var fl := 0.5 + 0.5 * sin(clock * 6.0 + p.x * 2.1 + p.y)
+			draw_rect(Rect2(at, Vector2(C, C)), Color(0.47, 0.12, 0.04, 0.3 + 0.1 * fl))
+			draw_rect(Rect2(at + Vector2(1, 1), Vector2(C - 2, C - 2)), Color(1.0, 0.47, 0.16, 0.45 + 0.15 * fl), false, S)
+		elif temp > 70.0:
+			draw_rect(Rect2(at, Vector2(C, C)), Color(1, 0.35, 0.1, clampf((temp - 70.0) / 400.0, 0.0, 0.3)))
+		elif temp < -5.0 and m != "ice":
+			draw_rect(Rect2(at, Vector2(C, C)), Color(0.6, 0.85, 1.0, clampf((-5.0 - temp) / 150.0, 0.0, 0.35)))
+	# shadow cast by the back wall
+	draw_rect(Rect2(origin + off, Vector2(W * C, 6 * S)), Color(0, 0, 0, 0.27))
+	draw_rect(Rect2(origin + off, Vector2(3 * S, H * C)), Color(0, 0, 0, 0.18))
+
+func _shake_off() -> Vector2:
+	if real >= shake_until:
+		return Vector2.ZERO
+	var k := (shake_until - real) / 0.25
+	return Vector2(sin(real * 90.0) * 5.0 * k, cos(real * 70.0) * 2.0 * k).round()
+
+func _update_liquids() -> void:
+	if _state_img == null or _state_img.get_width() != Grid.W or _state_img.get_height() != Grid.H:
+		fit()
+	var g := battle.grid
+	for p in g.all_cells():
+		var code: int = LIQ.get(g.get_material(p), 0)
+		_state_img.set_pixel(p.x, p.y, Color8(code, 0, 0, 255))
+	_state_tex.update(_state_img)
+	var mat := liquid.material as ShaderMaterial
+	mat.set_shader_parameter("state", _state_tex)
+	mat.set_shader_parameter("t", clock * 3.0)
+	liquid.position = origin + _shake_off()
+
+# ---- hits and numbers ---------------------------------------------------------------------------
+
+func _hp_of(u: Actor) -> int:
+	return int(shown_hp.get(u.uid, u.hp)) if replaying else u.hp
+
+func _pos_of(u: Actor) -> Vector2:
+	return shown_pos.get(u.uid, Vector2(u.pos)) if replaying else Vector2(u.pos)
+
+var _track_for: Battle
+
+func _track_hits() -> void:
+	if _track_for != battle:
+		_track_for = battle
+		reset_tracking()
+	for u in battle.actors:
+		var hp := _hp_of(u)
+		if _last_hp.has(u.uid) and hp < int(_last_hp[u.uid]):
+			popups.append({"p": feet(_pos_of(u)) - Vector2(0, 30 * S), "text": "%d" % (int(_last_hp[u.uid]) - hp),
+				"col": Color("#ff5a4a"), "t0": real})
+			flashes[u.uid] = real
+		elif _last_hp.has(u.uid) and hp > int(_last_hp[u.uid]):
+			popups.append({"p": feet(_pos_of(u)) - Vector2(0, 30 * S), "text": "+%d" % (hp - int(_last_hp[u.uid])),
+				"col": Color("#7ee08a"), "t0": real})
+		_last_hp[u.uid] = hp
+	popups = popups.filter(func(q): return real - q["t0"] < 1.0)
+
+func reset_tracking() -> void:
+	_last_hp.clear()
+	popups.clear()
+
+# ---- top layer ----------------------------------------------------------------------------------
+
+func _draw_top() -> void:
+	if battle == null:
+		return
+	var g := battle.grid
+	var off := _shake_off()
+	var tl := top
+	# cell auras (inside their cells)
+	for p in g.all_cells():
+		_aura(tl, p, off)
+	# reach of the selected card
 	for p in range_cells:
-		draw_rect(_rect(p, 2), Color(1, 1, 0.8, 0.10))
-		draw_rect(_rect(p, 2), Color(1, 1, 0.8, 0.35), false, 1)
+		var r := cell_rect(p, 2 * S)
+		r.position += off
+		tl.draw_rect(r, Color(1, 0.95, 0.75, 0.10))
+		_corners(tl, r, Color(1, 0.95, 0.75, 0.55), 3 * S)
 	if not preview.is_empty():
 		for p in preview.get("cells", []):
-			draw_rect(_rect(p, 1), Color(1, 1, 1, 0.9), false, 2)
-		for uid in preview.get("damage_by_uid", {}):
-			for u in battle.actors:
-				if u.uid == uid and g.units.has(u):
-					draw_string(font, _rect(u.pos).position + Vector2(CELL - 30, CELL - 6), "-%d" % preview["damage_by_uid"][uid], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 0.3, 0.3))
-	if hover.x >= 0:
-		draw_rect(_rect(hover), Color(1, 1, 1, 0.5), false, 2)
+			var r2 := cell_rect(p, S)
+			r2.position += off
+			tl.draw_rect(r2, Color(Art.GOLD, 0.22))
+			tl.draw_rect(r2, Color(Art.GOLD, 0.9), false, S)
+	# y-sorted effects and units
+	var items := []
+	for p in g.all_cells():
+		var m := g.get_material(p)
+		if m == "fire" or m == "crystal":
+			items.append({"y": float(p.y) + 0.9, "fx": m, "p": p})
+		elif m == "wall" or m == "metal":
+			items.append({"y": float(p.y) + 0.95, "block": m, "p": p})
+	for u in battle.actors:
+		if replaying and not shown_pos.has(u.uid):
+			continue
+		if not replaying and not g.units.has(u):
+			continue
+		items.append({"y": _pos_of(u).y + 0.95, "unit": u})
+	items.sort_custom(func(a, b): return a["y"] < b["y"])
+	for it in items:
+		if it.has("fx"):
+			_fx(tl, it["fx"], it["p"], off)
+		elif it.has("block"):
+			_block(tl, it["block"], it["p"], off)
+		else:
+			_unit(tl, it["unit"], off)
+	# enemy warnings: always above effects and units
+	for t in battle.telegraphs:
+		_telegraph(tl, t, off)
+	# hp bars and states, never hidden behind sprites
+	for it in items:
+		if it.has("unit"):
+			_hp_bar(tl, it["unit"], off)
+	_aim(tl, off)
+	for q in popups:
+		var k: float = (real - q["t0"]) / 1.0
+		var pp: Vector2 = q["p"] + Vector2(0, -26 * k) + off
+		var col: Color = q["col"]
+		col.a = 1.0 - k * k
+		var fs := 22 if k < 0.15 else 18
+		tl.draw_string_outline(font, pp - Vector2(10, 0), q["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 6, Color(0, 0, 0, col.a))
+		tl.draw_string(font, pp - Vector2(10, 0), q["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+	# bullet time: a cool veil and slowly drifting motes while the player decides
 	if not replaying:
-		# bullet time: cool tint and slowly drifting motes while the player decides
-		draw_rect(Rect2(Vector2.ZERO, size), Color(0.35, 0.55, 1.0, 0.07))
-		for k in 14:
-			var sp := 4.0 + float(k % 5)
-			var px := fmod(float(k) * 97.0 + _clock * sp, size.x)
-			var py := fmod(float(k) * 53.0 + _clock * sp * 0.6, size.y)
-			draw_circle(Vector2(px, py), 1.5 + float(k % 3) * 0.5, Color(0.8, 0.9, 1.0, 0.35))
+		var borrowing := battle.borrowing()
+		tl.draw_rect(Rect2(origin, Vector2(Grid.W, Grid.H) * C), Color(0.6, 0.3, 1.0, 0.13) if borrowing else Color(0.35, 0.55, 1.0, 0.06))
+		for k2 in 18:
+			var sp := 4.0 + float(k2 % 5)
+			var px := fmod(float(k2) * 97.0 + clock * 18.0 * sp, Grid.W * C)
+			var py := fmod(float(k2) * 53.0 + clock * 11.0 * sp, Grid.H * C)
+			tl.draw_rect(Rect2(origin + Vector2(px, py).snapped(Vector2(S, S)), Vector2(S, S)),
+				Color(0.85, 0.7, 1.0, 0.5) if borrowing else Color(0.8, 0.9, 1.0, 0.35))
+
+func _corners(tl: Control, r: Rect2, col: Color, L: float) -> void:
+	var w := float(S)
+	for c in [[r.position, Vector2(1, 1)], [Vector2(r.end.x, r.position.y), Vector2(-1, 1)],
+			[Vector2(r.position.x, r.end.y), Vector2(1, -1)], [r.end, Vector2(-1, -1)]]:
+		var o: Vector2 = c[0]
+		var d: Vector2 = c[1]
+		tl.draw_rect(Rect2(o + Vector2(0 if d.x > 0 else -L, 0 if d.y > 0 else -w), Vector2(L, w)), col)
+		tl.draw_rect(Rect2(o + Vector2(0 if d.x > 0 else -w, 0 if d.y > 0 else -L), Vector2(w, L)), col)
+
+## Variable states shown inside the cell they belong to: time, charge, wind, crush.
+func _aura(tl: Control, p: Vector2i, off: Vector2) -> void:
+	var g := battle.grid
+	var r := cell_rect(p)
+	r.position += off
+	var c := r.get_center()
+	var ts := float(g.get_var(p, "time_scale"))
+	if ts <= 0.01:
+		tl.draw_rect(r.grow(-S), Color(0.75, 0.75, 0.85, 0.28))
+		_hand(tl, c, 0.0, Color(0.9, 0.9, 1.0, 0.7))
+	elif ts < 0.95:
+		tl.draw_rect(r.grow(-S), Color(0.45, 0.35, 0.7, 0.10 + (1.0 - ts) * 0.12))
+		_hand(tl, c, real * 0.6 * ts, Color(0.75, 0.65, 1.0, 0.55))
+	elif ts > 1.05:
+		tl.draw_rect(r.grow(-S), Color(1.0, 0.8, 0.3, 0.12))
+		_hand(tl, c, real * 4.0 * ts, Color(1.0, 0.85, 0.4, 0.7))
+	var ch := float(g.get_var(p, "charge"))
+	if ch > 0.5:
+		var seed := int(real * 10.0) + p.x * 7 + p.y * 13
+		if seed % 3 != 0:
+			var a := r.position + Vector2((seed * 37) % 10 + 3, (seed * 11) % 6 + 2) * S
+			var pts := PackedVector2Array([a])
+			for i in 4:
+				a += Vector2(((seed + i) % 3 - 1) * 2, 2) * S
+				pts.append(a)
+			tl.draw_polyline(pts, Color(1.0, 0.95, 0.4, 0.9), S)
+	var f := EnvironmentStep.force_at(g, p)
+	if f.length() > 0.4:
+		var d := f.normalized()
+		for i in 3:
+			var k := fmod(real * 1.6 + i / 3.0 + (p.x + p.y) * 0.13, 1.0)
+			var lane := Vector2(-d.y, d.x) * (i - 1) * 4.0 * S
+			var s0 := c + lane + d * (k - 0.5) * (C - 8 * S)
+			tl.draw_line(s0, s0 + d * 4 * S, Color(0.92, 1.0, 0.95, 0.6 * sin(k * PI)), S)
+	var pr := float(g.get_var(p, "pressure"))
+	if pr > 2.0:
+		var k2 := fmod(real * 0.8, 1.0)
+		tl.draw_rect(r.grow(-S - k2 * 6 * S), Color(0.8, 0.7, 1.0, 0.5 * (1.0 - k2)), false, S)
+
+func _hand(tl: Control, c: Vector2, ang: float, col: Color) -> void:
+	tl.draw_arc(c, 5 * S, 0, TAU, 16, Color(col, col.a * 0.5), S)
+	tl.draw_line(c, c + Vector2(sin(ang), -cos(ang)) * 4 * S, col, S)
+
+func _fx(tl: Control, kind: String, p: Vector2i, off: Vector2) -> void:
+	var spec: Dictionary = Art.FX[kind]
+	var tex := Art.tex(spec["path"])
+	var base := origin + off + (Vector2(p) + Vector2(0.5, 1.0)) * C
+	var alpha := 0.35 if aiming else 1.0
+	if tex == null:
+		return
+	var n := Art.frames(tex, spec["w"])
+	var i := int(clock * float(spec["fps"]) + p.x * 7 + p.y * 5) % n
+	var src := Art.frame_rect(tex, spec["w"], i)
+	var anchor := Vector2(spec["ax"], spec["ay"])
+	# cell bottom-centre sits 4 art px above the cell's bottom edge
+	var at := base - Vector2(0, 4 * S) - anchor * S
+	if kind == "crystal":
+		tl.draw_rect(Rect2(base - Vector2(6 * S, 6 * S), Vector2(12 * S, 3 * S)), Color(0, 0, 0, 0.35 * alpha))
+	tl.draw_texture_rect_region(tex, Rect2(at, src.size * S), src, Color(1, 1, 1, alpha))
+
+func _block(tl: Control, kind: String, p: Vector2i, off: Vector2) -> void:
+	var r := cell_rect(p)
+	r.position += off
+	if kind == "wall":
+		var wall := Art.tex("res://assets/art/floor/wall.png")
+		tl.draw_rect(Rect2(r.position + Vector2(0, C - 3 * S), Vector2(C, 4 * S)), Color(0, 0, 0, 0.35))
+		tl.draw_texture_rect_region(wall, Rect2(r.position - Vector2(0, C * 0.5), Vector2(C, C)), Rect2((p.x * 3 + p.y) % 4 * Art.T, 0, Art.T, Art.T))
+		tl.draw_rect(Rect2(r.position + Vector2(0, C * 0.5), Vector2(C, C * 0.5 - S)), Color("#2a2a36"))
+		tl.draw_rect(Rect2(r.position + Vector2(0, C * 0.5), Vector2(C, S)), Color("#191922"))
+	else:
+		# mirror pane: silver frame, glassy face with a moving glint
+		var a := 0.4 if aiming else 1.0
+		var fr := Rect2(r.position + Vector2(3 * S, -4 * S), Vector2(10 * S, 17 * S))
+		tl.draw_rect(Rect2(fr.position + Vector2(-S, fr.size.y), Vector2(fr.size.x + 2 * S, 2 * S)), Color(0, 0, 0, 0.35 * a))
+		tl.draw_rect(fr, Color(Color("#c8d0dc"), a))
+		tl.draw_rect(fr.grow(-S), Color(Color("#6e8fae"), a))
+		var gx := fmod(real * 0.5, 1.0) * fr.size.x
+		tl.draw_line(fr.position + Vector2(gx, S), fr.position + Vector2(gx - 4 * S, fr.size.y - S), Color(1, 1, 1, 0.6 * a), S)
+		tl.draw_rect(fr, Color(Art.INK, a), false, S)
+
+func _unit(tl: Control, u: Actor, off: Vector2) -> void:
+	var cp := _pos_of(u)
+	var f := feet(cp) + off
+	var tex := Art.unit_tex(u.def_id)
+	var sz := Vector2(tex.get_width(), tex.get_height()) * S
+	# moving between cells: a little hop
+	var frac := absf(cp.x - round(cp.x)) + absf(cp.y - round(cp.y))
+	var hop := -sin(minf(frac * 2.0, 1.0) * PI) * 3 * S if replaying else 0.0
+	var breathe := 1.0 + 0.035 * sin(real * (2.2 if replaying else 0.9) + u.uid)
+	var hit := flashes.has(u.uid) and real - float(flashes[u.uid]) < 0.3
+	var jolt := Vector2(sin(real * 80.0) * 2 * S, 0) if hit else Vector2.ZERO
+	tl.draw_rect(Rect2(f - Vector2(sz.x * 0.3, S), Vector2(sz.x * 0.6, 3 * S)), Color(0, 0, 0, 0.35))
+	var flip := _faces_left(u)
+	var h2 := sz.y * breathe
+	var rect := Rect2(f + jolt - Vector2(sz.x / 2, h2) + Vector2(0, hop), Vector2(sz.x, h2))
+	var mod := Color(1, 0.45, 0.45) if hit else Color.WHITE
+	if flip:
+		rect = Rect2(rect.position, Vector2(-rect.size.x, rect.size.y))   # drawn mirrored over the same spot
+	tl.draw_texture_rect(tex, rect, false, mod)
+	if u.has_status("crystal"):
+		var ct := Art.tex(Art.FX["crystal"]["path"])
+		if ct:
+			var src := Art.frame_rect(ct, 16, int(clock * 20.0) % Art.frames(ct, 16))
+			var cs := src.size * S * 1.25
+			tl.draw_texture_rect_region(ct, Rect2(f - Vector2(cs.x / 2, cs.y - 2 * S), cs), src, Color(1, 1, 1, 0.7))
+	if u.has_status("frozen"):
+		tl.draw_rect(Rect2(f - Vector2(sz.x * 0.4, sz.y * 0.85), Vector2(sz.x * 0.8, sz.y * 0.85)), Color(0.7, 0.9, 1.0, 0.35))
+
+func _faces_left(u: Actor) -> bool:
+	var best := 999
+	var dx := 0
+	for o in battle.actors:
+		if o == u or o.team == u.team or not battle.grid.units.has(o):
+			continue
+		var d := Battle.dist(o.pos, u.pos)
+		if d < best:
+			best = d
+			dx = o.pos.x - u.pos.x
+	return dx < 0
+
+func _hp_bar(tl: Control, u: Actor, off: Vector2) -> void:
+	var f := feet(_pos_of(u)) + off + Vector2(0, 3 * S)
+	var hp := _hp_of(u)
+	var w := 18 * S
+	var r := Rect2(f - Vector2(w / 2, 0), Vector2(w, 3 * S))
+	tl.draw_rect(r.grow(S), Art.INK)
+	tl.draw_rect(r, Color("#3a1418"))
+	var mine := u.controller == "human"
+	var fill := Color("#e04848") if not mine else Color("#58c46a")
+	tl.draw_rect(Rect2(r.position, Vector2(w * clampf(float(hp) / u.max_hp, 0, 1), r.size.y)), fill)
+	tl.draw_rect(Rect2(r.position, Vector2(w * clampf(float(hp) / u.max_hp, 0, 1), S)), fill.lightened(0.3))
+	if u.shield > 0:
+		var sw := w * clampf(float(u.shield) / u.max_hp, 0.05, 1)
+		tl.draw_rect(Rect2(r.position - Vector2(0, S), Vector2(sw, r.size.y + 2 * S)), Color(0.55, 0.8, 1.0, 0.85))
+	var txt := "%d" % hp + ("+%d" % u.shield if u.shield > 0 else "")
+	var tp := Vector2(r.end.x + 2 * S, r.end.y + 2)
+	tl.draw_string_outline(font, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, 5, Art.INK)
+	tl.draw_string(font, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#bfe3ff") if u.shield > 0 else Color.WHITE)
+	# states as small marks above the head
+	var marks := []
+	for s in ["burning", "wet", "frozen", "crystal", "shocked", "rooted"]:
+		if u.has_status(s):
+			marks.append(s)
+	var tex := Art.unit_tex(u.def_id)
+	var head := feet(_pos_of(u)) + off - Vector2(0, tex.get_height() * S + 4 * S)
+	for i in marks.size():
+		_mark(tl, marks[i], head + Vector2((i - (marks.size() - 1) / 2.0) * 7 * S, 0))
+	# predicted damage of the aimed card
+	if preview.has("damage_by_uid") and preview["damage_by_uid"].has(u.uid):
+		var dmg := int(preview["damage_by_uid"][u.uid])
+		var pulse := 0.7 + 0.3 * sin(real * 6.0)
+		var dp := r.position + Vector2(0, -4 * S)
+		tl.draw_string_outline(font, dp, "-%d" % dmg, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, 6, Art.INK)
+		tl.draw_string(font, dp, "-%d" % dmg, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1, 0.35, 0.3, pulse))
+
+func _mark(tl: Control, s: String, c: Vector2) -> void:
+	var col: Color = {"burning": Color("#ff8a3a"), "wet": Color("#5aa8ff"), "frozen": Color("#bfe8ff"),
+		"crystal": Color("#b48cff"), "shocked": Color("#ffe14a"), "rooted": Color("#b0a090")}[s]
+	tl.draw_circle(c, 3 * S, Art.INK)
+	tl.draw_circle(c, 2 * S, col)
+
+func _telegraph(tl: Control, t: Dictionary, off: Vector2) -> void:
+	var left: int = int(t["fire_at"]) - (shown_now if replaying else battle.now)
+	var hot := left <= 1
+	var pulse := 0.5 + 0.5 * sin(real * (9.0 if hot else 4.0))
+	var col := Art.DANGER if hot else Color("#ff8a3a")
+	var cells: Array = t["cells"]
+	var centre := Vector2.ZERO
+	var box := Rect2()
+	for p in cells:
+		box = cell_rect(p) if box.size == Vector2.ZERO else box.merge(cell_rect(p))
+		var r := cell_rect(p, S)
+		r.position += off
+		tl.draw_rect(r, Color(col, 0.16 + 0.12 * pulse))
+		_corners(tl, r, Color(col, 0.75 + 0.25 * pulse), 4 * S)
+		centre += r.get_center()
+	if cells.is_empty():
+		return
+	centre /= cells.size()
+	var a: Actor = battle._actor(t["actor_uid"])
+	if a == null or not battle.grid.units.has(a):
+		return
+	var from := feet(_pos_of(a)) + off - Vector2(0, 8 * S)
+	# afterimage of the attacker where the blow will land
+	if cells.size() <= 4:
+		var tex := Art.unit_tex(a.def_id)
+		var sz := Vector2(tex.get_width(), tex.get_height()) * S
+		var ghost_at := centre + Vector2(0, C * 0.5 - 3 * S)
+		tl.draw_texture_rect(tex, Rect2(ghost_at - Vector2(sz.x / 2, sz.y), sz), false, Color(1, 0.3, 0.25, 0.22 + 0.15 * pulse))
+	# chevrons running from the attacker to the area
+	var d := centre - from
+	var L := d.length()
+	if L > C * 0.8:
+		var dir := d / L
+		var nrm := Vector2(-dir.y, dir.x)
+		var step := C * 0.55
+		var shift := fmod(real * (2.0 if hot else 1.0), 1.0) * step
+		var s := step * 0.6 + shift
+		while s < L - C * 0.35:
+			var pnt := from + dir * s
+			var k := s / L
+			var cc := Color(col, 0.35 + 0.6 * k)
+			var tip := pnt + dir * 3 * S
+			tl.draw_polyline(PackedVector2Array([pnt - dir * 2 * S + nrm * 3 * S, tip, pnt - dir * 2 * S - nrm * 3 * S]), Color(Art.INK, cc.a), 3 * S)
+			tl.draw_polyline(PackedVector2Array([pnt - dir * 2 * S + nrm * 3 * S, tip, pnt - dir * 2 * S - nrm * 3 * S]), cc, S)
+			s += step
+	# seconds left: a badge on the area's top-right corner, clear of the heads standing in it
+	var bp := Vector2(box.end.x, box.position.y) + off + Vector2(-2 * S, 2 * S)
+	tl.draw_circle(bp, 9 * S * (1.0 + (0.12 * pulse if hot else 0.0)) * 0.7, Art.INK)
+	tl.draw_circle(bp, 8 * S * 0.7, col)
+	var txt := "%d" % maxi(left, 0)
+	tl.draw_string(font, bp + Vector2(-5 if txt.length() == 1 else -9, 7), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Art.INK)
+
+## Aiming: the hovered cell, and when it is out of reach a line that falls short and fizzles.
+func _aim(tl: Control, off: Vector2) -> void:
+	var h := battle.human()
+	if not fizzle.is_empty() and real - float(fizzle["t0"]) < 0.6:
+		var k := (real - float(fizzle["t0"])) / 0.6
+		var fr := cell_rect(fizzle["cell"], S + k * 4 * S)
+		fr.position += off
+		tl.draw_line(fr.position, fr.end, Color(Art.DANGER, 1.0 - k), 2 * S)
+		tl.draw_line(Vector2(fr.end.x, fr.position.y), Vector2(fr.position.x, fr.end.y), Color(Art.DANGER, 1.0 - k), 2 * S)
+	if hover.x < 0 or h == null or replaying:
+		return
+	var hr := cell_rect(hover)
+	hr.position += off
+	if not aiming:
+		_corners(tl, hr.grow(-S), Color(1, 1, 1, 0.55), 3 * S)
+		return
+	if hover in range_cells or range_cells.is_empty():
+		_corners(tl, hr.grow(-S), Color(Art.GOLD, 0.95), 4 * S)
+		return
+	# out of reach: the shot travels as far as it can, then droops and fizzles
+	var from := feet(_pos_of(h)) + off - Vector2(0, 8 * S)
+	var to := hr.get_center()
+	var last := from
+	var n := 24
+	var reach_k := 0.0
+	for i in range(1, n + 1):
+		var k := float(i) / n
+		var q := from.lerp(to, k)
+		var cq := cell_at(q - off)
+		if cq.x >= 0 and (cq in range_cells or cq == h.pos):
+			reach_k = k
+	last = from.lerp(to, reach_k)
+	var dash := 3 * S
+	var segs := int(from.distance_to(last) / (dash * 2))
+	for i in segs:
+		var a := from.lerp(last, float(i * 2) / maxi(1, segs * 2))
+		var b := from.lerp(last, float(i * 2 + 1) / maxi(1, segs * 2))
+		tl.draw_line(a, b, Art.INK, 3 * S)
+		tl.draw_line(a, b, Color(Art.GOLD, 0.95), 2 * S)
+	# the rest of the way: faint, sagging red dots that never arrive
+	var rest := to - last
+	for i in 6:
+		var k := float(i + 1) / 7.0
+		var q := last + rest * k * 0.55 + Vector2(0, k * k * 10 * S)
+		tl.draw_rect(Rect2(q.snapped(Vector2(S, S)), Vector2(2 * S, 2 * S)), Color(Art.DANGER, 0.75 * (1.0 - k)))
+	var puff := fmod(real * 1.5, 1.0)
+	tl.draw_arc(last, (2 + puff * 5) * S, 0, TAU, 12, Color(Art.DANGER, 0.85 * (1.0 - puff)), 2 * S)
+	tl.draw_rect(hr.grow(-2 * S), Color(Art.DANGER, 0.08))
+	var droop := Rect2(hr.position + Vector2(0, 2 * S), hr.size).grow(-2 * S)
+	var dots := 10
+	for i in dots:
+		var k := float(i) / dots
+		tl.draw_rect(Rect2(droop.position + Vector2(droop.size.x * k, 0), Vector2(S * 2, S)), Color(Art.DANGER, 0.5))
+		tl.draw_rect(Rect2(droop.position + Vector2(droop.size.x * k, droop.size.y), Vector2(S * 2, S)), Color(Art.DANGER, 0.5))

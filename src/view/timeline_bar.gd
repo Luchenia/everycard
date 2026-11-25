@@ -1,48 +1,85 @@
 class_name TimelineBar
 extends Control
-## Top bar: the next seconds of the shared clock. Shows when telegraphs fire, when each enemy acts
-## next, when the hand refills, and how long the selected card (plus exhaustion) would take.
+## The next seconds of the shared clock, drawn as a track: enemy blows (red, with who), when each
+## enemy moves next, when the hand refills, how far the selected card (and its exhaustion) reach,
+## and borrowed time while 불릿타임 is running.
 
+const SECS := 12
 var battle: Battle
 var font: Font
-var span_secs := 0      # selected card: seconds of wind-up
-var span_exhaust := 0   # selected card: seconds of exhaustion after it
+var span_secs := 0
+var span_exhaust := 0
+var real := 0.0
+
+func _process(d: float) -> void:
+	real += d
+	queue_redraw()
 
 func _draw() -> void:
 	if battle == null:
 		return
-	var n := maxi(battle.round_time(), 10)
-	var w := size.x / n
-	draw_rect(Rect2(Vector2.ZERO, size), Color("#1d2029"))
-	if span_secs > 0 or span_exhaust > 0:
-		draw_rect(Rect2(0, 0, minf(span_secs, n) * w, size.y), Color(0.35, 0.6, 1, 0.35))
-		draw_rect(Rect2(span_secs * w, 0, minf(span_exhaust, n - span_secs) * w, size.y), Color(0.6, 0.6, 0.6, 0.35))
-	for i in n + 1:
-		var x := i * w
-		draw_line(Vector2(x, 0), Vector2(x, size.y), Color(1, 1, 1, 0.12), 1)
-		if i > 0:
-			draw_string(font, Vector2(x - 18, size.y - 4), "+%d" % i, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.35))
-	var draw_at := battle.next_draw_at() - battle.now
-	if draw_at <= n:
-		var xd := draw_at * w
-		draw_line(Vector2(xd - 1, 0), Vector2(xd - 1, size.y), Color(0.4, 0.7, 1), 2)
-		draw_string(font, Vector2(xd - 34, 12), "카드+", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.5, 0.8, 1))
+	var S := 2.0
+	var w := (size.x - 40) / SECS
+	var x0 := 36.0
+	var y := size.y - 14.0
+	# hourglass = now
+	var hg := Vector2(16, y)
+	draw_colored_polygon(PackedVector2Array([hg + Vector2(-8, -12), hg + Vector2(8, -12), hg + Vector2(0, 0)]), Color("#e8c070"))
+	draw_colored_polygon(PackedVector2Array([hg + Vector2(-8, 12), hg + Vector2(8, 12), hg + Vector2(0, 0)]), Color("#b08840"))
+	draw_rect(Rect2(hg + Vector2(-9, -14), Vector2(18, 3)), Art.INK)
+	draw_rect(Rect2(hg + Vector2(-9, 11), Vector2(18, 3)), Art.INK)
+	# track
+	var track := Rect2(x0, y - 6, w * SECS, 12)
+	draw_rect(track.grow(2), Art.INK)
+	draw_rect(track, Color("#2a2733"))
+	if battle.borrowing():
+		var bl := battle.borrow_left
+		for i in bl:
+			draw_rect(Rect2(x0 + i * w + 2, y - 5, w - 4, 10), Color(0.62, 0.42, 1.0, 0.85 - 0.04 * i))
+		var debt := int(ceil(battle.borrow_used * 1.5))
+		for i in mini(debt, SECS):
+			draw_rect(Rect2(x0 + i * w + 2, y + 8, w - 4, 3), Color(0.6, 0.6, 0.7, 0.6))
+	elif span_secs > 0 or span_exhaust > 0:
+		draw_rect(Rect2(x0, y - 5, minf(span_secs, SECS) * w, 10), Color(Art.GOLD, 0.8))
+		for i in mini(span_exhaust, SECS - span_secs):
+			var r := Rect2(x0 + (span_secs + i) * w, y - 5, w, 10)
+			draw_rect(r, Color(0.5, 0.5, 0.58, 0.6))
+			draw_line(r.position + Vector2(2, 10), r.position + Vector2(10, 0), Color(0.2, 0.2, 0.25, 0.8), 2)
+	for i in SECS + 1:
+		var x := x0 + i * w
+		draw_rect(Rect2(x - 1, y - 6, 2, 12 if i % 5 == 0 else 4), Color(1, 1, 1, 0.25))
+		if i > 0 and i % 5 == 0:
+			draw_string(font, Vector2(x - 4, y + 22), "%d" % i, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.4))
+	# hand refill: a little card
+	var dr := battle.next_draw_at() - battle.now
+	if dr >= 1 and dr <= SECS:
+		var xc := x0 + dr * w
+		draw_rect(Rect2(xc - 5, y - 22, 10, 14), Art.INK)
+		draw_rect(Rect2(xc - 4, y - 21, 8, 12), Color("#9cc8f0"))
+	# enemies' next moves
 	for a in battle.actors:
-		if a.controller != "ai" or not a.alive() or not battle.grid.units.has(a):
+		if a.controller != "ai" or not a.alive() or not battle.grid.units.has(a) or battle._busy(a):
 			continue
 		var d: int = a.next_at - battle.now
-		if d >= 1 and d <= n and not battle._busy(a):
-			var xa := d * w
-			draw_colored_polygon(PackedVector2Array([Vector2(xa - 5, 2), Vector2(xa + 5, 2), Vector2(xa, 10)]), Color(1, 0.4, 0.4))
-			draw_string(font, Vector2(xa + 6, 11), a.name.substr(0, 2), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 0.6, 0.6))
+		if d >= 1 and d <= SECS:
+			_face(a, Vector2(x0 + d * w, y - 14), 0.45)
+	# enemy blows
 	for t in battle.telegraphs:
 		var d2: int = int(t["fire_at"]) - battle.now
-		if d2 < 0 or d2 > n:
+		if d2 < 0 or d2 > SECS:
 			continue
-		var xt := d2 * w
+		var xt := x0 + d2 * w
+		var hot := d2 <= 1
+		var pulse := 0.5 + 0.5 * sin(real * (9.0 if hot else 4.0))
+		var col := Art.DANGER if hot else Color("#ff8a3a")
+		var dia := PackedVector2Array([Vector2(xt, y - 10), Vector2(xt + 9, y), Vector2(xt, y + 10), Vector2(xt - 9, y)])
+		draw_colored_polygon(dia, Art.INK)
+		draw_colored_polygon(PackedVector2Array([Vector2(xt, y - 7), Vector2(xt + 6, y), Vector2(xt, y + 7), Vector2(xt - 6, y)]), Color(col, 0.7 + 0.3 * pulse))
 		var a2: Actor = battle._actor(t["actor_uid"])
-		draw_circle(Vector2(xt, size.y * 0.55), 8, Color(1, 0.5, 0.1))
-		draw_string(font, Vector2(xt - 3, size.y * 0.55 + 5), "!", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.BLACK)
-		var label: String = Effects.card_def(t["card_id"], battle.catalog).get("name", "")
-		draw_string(font, Vector2(xt + 10, size.y * 0.55 + 5), ("%s " % a2.name.substr(0, 2) if a2 else "") + label, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 0.7, 0.4))
-	draw_rect(Rect2(Vector2.ZERO, size), Color(1, 1, 1, 0.25), false, 1)
+		if a2:
+			_face(a2, Vector2(xt, y - 14), 1.0)
+
+func _face(a: Actor, at: Vector2, alpha: float) -> void:
+	var tex := Art.unit_tex(a.def_id)
+	var sz := Vector2(tex.get_width(), tex.get_height()) * minf(1.0, 18.0 / tex.get_height())
+	draw_texture_rect(tex, Rect2(at - Vector2(sz.x / 2, sz.y), sz), false, Color(1, 1, 1, alpha))

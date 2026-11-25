@@ -1,25 +1,32 @@
 extends Control
-## Prototype screen: timeline bar, board, fanned hand, cell inspector, battle log, reward and end screens.
-## Keys: arrows move (1 s), mouse wheel or Q/E roll the hand, Space wait 1 s, A base ability, right click cancel.
+## Battle screen: clock track on top, the dungeon room filling the middle, the hand as a ring of
+## cards at the bottom. Almost no text: hovering a card or a cell explains its [keywords].
+## Keys: arrows move (1 s), mouse wheel or Q/E turn the ring, Space wait 1 s, right click cancel.
+
+const SEC_REAL := 0.35   # real seconds one game second takes when replayed
+const RING_R := 1500.0
+const RING_STEP := 0.098
+const HAND_Y := 794.0
 
 var catalog: Catalog
 var flow: RunFlow
 var board: BoardView
 var font: Font
-var hand_box: Control
 var timeline: TimelineBar
-var info: Label
-var log_label: RichTextLabel
-var status: Label
-var overlay: VBoxContainer
+var hand_layer: Control
+var hud: Control
+var tips: VBoxContainer
+var overlay: Control
 var selected := -1
-var ability_mode := false
-var shown_log := 0
-var log_timer := 0.0
 var seed_value := 0
-const SEC_REAL := 0.35   # real seconds one game second takes when replayed
 var shown_frame := 0
 var replay_t := 0.0
+var cards: Array = []          # CardView per hand slot (null for empty / heavy tail)
+var hovered_card: CardView
+var spin := 0.0                # ring turn animation (radians, eases to 0)
+var wiggle_until := 0.0
+var real := 0.0
+var cell_hover_t := 0.0
 
 func _ready() -> void:
 	font = load("res://assets/fonts/Galmuri11.ttf")
@@ -28,57 +35,49 @@ func _ready() -> void:
 	th.default_font_size = 14
 	theme = th
 	catalog = Catalog.load_dir("res://data")
-	var args := OS.get_cmdline_user_args()
 	seed_value = int(Time.get_unix_time_from_system()) % 100000
-	for a in args:
+	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--seed="):
 			seed_value = int(a.substr(7))
 	var bg := ColorRect.new()
-	bg.color = Color("#14161c")
+	bg.color = Color("#0a090d")
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
 	board = BoardView.new()
 	board.font = font
-	board.position = Vector2(24, 96)
 	add_child(board)
+	board.gui_input.connect(_on_board_input)
 	timeline = TimelineBar.new()
 	timeline.font = font
-	timeline.position = Vector2(24, 44)
-	timeline.size = Vector2(1232, 40)
+	timeline.size = Vector2(560, 46)
+	timeline.position = Vector2(360, 0)
 	timeline.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(timeline)
-	board.gui_input.connect(_on_board_input)
-	status = Label.new()
-	status.position = Vector2(24, 14)
-	status.add_theme_font_size_override("font_size", 18)
-	add_child(status)
-	info = Label.new()
-	info.position = Vector2(824, 96)
-	info.size = Vector2(432, 230)
-	info.autowrap_mode = TextServer.AUTOWRAP_WORD
-	add_child(info)
-	log_label = RichTextLabel.new()
-	log_label.position = Vector2(824, 330)
-	log_label.size = Vector2(432, 280)
-	log_label.scroll_following = true
-	log_label.add_theme_font_size_override("normal_font_size", 13)
-	add_child(log_label)
-	hand_box = Control.new()
-	hand_box.position = Vector2(24, 620)
-	hand_box.size = Vector2(1232, 180)
-	hand_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(hand_box)
-	overlay = VBoxContainer.new()
-	overlay.position = Vector2(360, 220)
-	overlay.add_theme_constant_override("separation", 10)
+	hud = Control.new()
+	hud.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.draw.connect(_draw_hud)
+	add_child(hud)
+	hand_layer = Control.new()
+	hand_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hand_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(hand_layer)
+	tips = VBoxContainer.new()
+	tips.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tips.add_theme_constant_override("separation", 4)
+	tips.z_index = 10
+	add_child(tips)
+	overlay = Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(overlay)
 	_new_run()
 
 func _new_run() -> void:
 	flow = RunFlow.new(catalog, seed_value)
 	shown_frame = flow.battle.frames.size() - 1
-	shown_log = 0
-	log_label.clear()
+	board.reset_tracking()
 	_refresh()
 
 func _replaying() -> bool:
@@ -114,182 +113,326 @@ func _step_replay(delta: float) -> void:
 		board.shown_pos[uid] = p0.lerp(p1, e)
 	board.shown_hp = a["hp"] if k < 0.5 else b["hp"]
 	board.shown_now = int(a["t"])
-	status.text = "전투 %d/3   %d초 ▶ 진행 중" % [flow.index + 1, int(a["t"])]
 
 func _process(delta: float) -> void:
+	real += delta
 	if flow == null or flow.battle == null:
 		return
 	_step_replay(delta)
-	log_timer -= delta
-	if log_timer <= 0.0 and shown_log < flow.battle.log.size():
-		var e: Dictionary = flow.battle.log[shown_log]
-		shown_log += 1
-		log_timer = 0.15 if e["t"] in ["reaction", "damage", "collision", "moved", "void", "death"] else 0.0
-		log_label.append_text(_fmt(e) + "\n")
+	spin = move_toward(spin, 0.0, delta * 1.6)
+	_layout_hand()
+	if board.hover.x >= 0 and selected < 0 and hovered_card == null:
+		cell_hover_t += delta
+		if cell_hover_t > 0.35 and tips.get_child_count() == 0:
+			_cell_tips(board.hover)
+	hud.queue_redraw()
 
-func _fmt(e: Dictionary) -> String:
-	var col: String = {"damage": "#ff8080", "reaction": "#ffd27f", "chain_cap": "#ff4040", "death": "#ff4040", "telegraph": "#ffa040",
-		"swap": "#80c0ff", "cardify": "#c090ff", "play": "#ffffff", "land": "#ffffff", "telegraph_hit": "#ff8040",
-		"exhaust": "#c0c0c0", "round": "#80b0ff"}.get(e["t"], "#a0a8b8")
-	return "[color=%s]%s[/color]" % [col, e["msg"]]
-
-func _card_text(id: String) -> String:
-	var c := Effects.card_def(id, catalog)
-	var ex := int(c.get("exhaust", 0))
-	return "%s\n%d초%s %s\n%s" % [c.get("name", id), int(c.get("time", 0)), (" +탈진 %d초" % ex) if ex > 0 else "",
-		"●●" if int(c.get("weight", 1)) > 1 else "●", c.get("desc", "")]
+# ---- layout -------------------------------------------------------------------------------------
 
 func _refresh() -> void:
 	for ch in overlay.get_children():
 		ch.queue_free()
-	for ch in hand_box.get_children():
-		ch.queue_free()
 	var b := flow.battle
 	board.battle = b
 	board.fit()
+	board.position = Vector2(round((1280 - board.size.x) / 2), 30)
 	board.preview = {}
-	board.queue_redraw()
+	board.aiming = selected >= 0
 	timeline.battle = b
 	_update_span()
+	_build_hand()
+	hand_layer.visible = flow.phase == "battle"
 	if flow.phase == "reward":
-		_overlay_title("승리! 카드 한 장을 고르세요")
-		for i in flow.rewards.size():
-			var btn := Button.new()
-			btn.text = _card_text(flow.rewards[i]).replace("\n", "  ")
-			btn.pressed.connect(func(): _pick_reward(i))
-			overlay.add_child(btn)
+		_reward_overlay()
 	elif flow.phase in ["game_over", "victory"]:
-		_overlay_title("패배" if flow.phase == "game_over" else "3연전 클리어!")
-		var again := Button.new()
-		again.text = "새 판 시작"
-		again.pressed.connect(func():
-			seed_value += 1
-			_new_run())
-		overlay.add_child(again)
-	var h := b.human()
-	status.text = "전투 %d/3   %d초 (다음 카드 %d초 뒤)   %s%s" % [flow.index + 1, b.now, b.next_draw_at() - b.now,
-		("몸: " + h.name + " 체력 " + str(h.hp) + "/" + str(h.max_hp)) if h else "", "   [능력 조준 중]" if ability_mode else ""]
-	if b.belt:
-		var n: int = b.belt.slots.size()
-		for i in n:
-			var s = b.belt.slots[i]
-			var btn := Button.new()
-			btn.size = Vector2(124, 150)
-			btn.pivot_offset = Vector2(62, 300)
-			var k := float(i) - float(n - 1) / 2.0
-			btn.position = Vector2(300 + i * 120, 8 + absf(k) * absf(k) * 3)
-			btn.rotation = k * 0.035
-			btn.toggle_mode = true
-			btn.add_theme_stylebox_override("normal", _card_style(Color("#3a4058"), Color("#9aa3c4")))
-			btn.add_theme_stylebox_override("hover", _card_style(Color("#4a5272"), Color("#d0d6f0")))
-			btn.add_theme_stylebox_override("pressed", _card_style(Color("#5a4a20"), Color("#ffd060")))
-			btn.add_theme_stylebox_override("disabled", _card_style(Color("#24272f"), Color("#3a3f4c")))
-			btn.button_pressed = i == selected
-			if s != null and s.get("tail", false):
-				btn.text = "(무거운 카드)"
-			elif s == null:
-				btn.text = "(빈 칸)"
-			elif b.belt.mode == "lifespan":
-				btn.text = _card_text(s["card_id"]) + "\n수명 %.1f%s" % [s["life"], " [곧 사라짐]" if i == b.belt.next_to_burn() else ""]
-			else:
-				btn.text = _card_text(s["card_id"])
-			btn.autowrap_mode = TextServer.AUTOWRAP_WORD
-			btn.disabled = s == null or s.get("tail", false) or flow.phase != "battle"
-			btn.pressed.connect(func(): _select(i))
-			hand_box.add_child(btn)
-		var lw := Label.new()
-		lw.position = Vector2(220, 70)
-		lw.text = "◀ 휠\n" + _roll_cost(-1)
-		lw.modulate = Color(1, 1, 1, 0.6)
-		hand_box.add_child(lw)
-		var rw := Label.new()
-		rw.position = Vector2(950, 70)
-		rw.text = "휠 ▶\n" + _roll_cost(1)
-		rw.modulate = Color(1, 1, 1, 0.6)
-		hand_box.add_child(rw)
-	var tips := Label.new()
-	tips.position = Vector2(1010, 20)
-	tips.text = "방향키 이동 (1초)\n휠 / Q·E 손패 굴리기\nSpace 1초 기다리기\nA 기본 능력 · 우클릭 취소"
-	tips.modulate = Color(1, 1, 1, 0.5)
-	hand_box.add_child(tips)
-	_update_info()
+		_end_overlay()
 
-func _card_style(bg: Color, border: Color) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = bg
-	sb.border_color = border
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(6)
-	sb.content_margin_left = 6
-	sb.content_margin_right = 6
-	return sb
-
-func _roll_cost(dir: int) -> String:
+func _build_hand() -> void:
+	for ch in hand_layer.get_children():
+		ch.queue_free()
+	cards = []
+	hovered_card = null
+	_clear_tips()
 	var b := flow.battle
-	var id := b.belt.end_card(dir)
-	var w := maxi(1, int(Effects.card_def(id, catalog).get("weight", 1))) if id != "" else 1
-	return "%d초" % (w * int(b.cfg["wheel_time"]))
-
-func _update_range() -> void:
-	var b := flow.battle
-	board.range_cells = []
-	if selected < 0 or b.belt == null or selected >= b.belt.slots.size() or b.belt.slots[selected] == null or b.human() == null:
+	if b.belt == null:
 		return
-	for p in b.grid.all_cells():
-		if b.can_play(selected, p):
-			board.range_cells.append(p)
+	for i in b.belt.slots.size():
+		var s = b.belt.slots[i]
+		if s == null or s.get("tail", false):
+			cards.append(null)
+			continue
+		var cv := CardView.new()
+		cv.setup(s["card_id"], catalog, font)
+		cv.set_meta("slot", i)
+		cv.picked.connect(_on_card_picked)
+		cv.hovered.connect(_on_card_hover)
+		hand_layer.add_child(cv)
+		cards.append(cv)
+	# the ring goes on past the window: the next card on each side shows faintly
+	var ring: Array = b.belt.draw_pile
+	if not ring.is_empty():
+		for side in [-1, 1]:
+			var id: String = ring[ring.size() - 1] if side < 0 else ring[0]
+			var g := CardView.new()
+			g.setup(id, catalog, font)
+			g.ghost = true
+			g.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			g.set_meta("ghost", side)
+			hand_layer.add_child(g)
+			hand_layer.move_child(g, 0)
+	_layout_hand()
+
+func _layout_hand() -> void:
+	var b := flow.battle
+	var n := cards.size()
+	var aiming := selected >= 0
+	var wig := sin(real * 60.0) * 0.03 if real < wiggle_until else 0.0
+	for ch in hand_layer.get_children():
+		var cv := ch as CardView
+		if cv == null:
+			continue
+		var k := 0.0
+		var lift := 0.0
+		var sc := 1.0
+		var alpha := 1.0
+		if cv.has_meta("ghost"):
+			k = (float(n - 1) / 2.0 + 1.0) * float(cv.get_meta("ghost"))
+			sc = 0.82
+			alpha = 0.32
+		else:
+			var i: int = cv.get_meta("slot")
+			k = float(i) - float(n - 1) / 2.0
+			cv.lit = i == selected
+			if i == selected:
+				lift = 46.0
+				sc = 1.06
+			elif cv == hovered_card and not aiming:
+				lift = 30.0
+				sc = 1.12
+		if aiming:
+			alpha = 0.62 if cv.lit else 0.24
+		var a := k * RING_STEP + spin
+		var base := Vector2(640, HAND_Y + RING_R) + Vector2(sin(a), -cos(a)) * RING_R
+		cv.pivot_offset = Vector2(CardView.SIZE.x / 2, CardView.SIZE.y)
+		cv.position = base - Vector2(CardView.SIZE.x / 2, CardView.SIZE.y) - Vector2(0, lift)
+		cv.rotation = a + (wig if cv.lit else 0.0)
+		cv.scale = Vector2(sc, sc)
+		cv.modulate = Color(1, 1, 1, alpha)
+		cv.z_index = 5 if (cv == hovered_card or cv.lit) else 0
+
+# ---- hud ----------------------------------------------------------------------------------------
+
+func _draw_hud() -> void:
+	var b := flow.battle
+	# fight pips (top-left)
+	for i in 3:
+		var c := Vector2(24 + i * 22, 20)
+		var dia := PackedVector2Array([c + Vector2(0, -8), c + Vector2(8, 0), c + Vector2(0, 8), c + Vector2(-8, 0)])
+		hud.draw_colored_polygon(dia, Art.INK)
+		var col := Color("#e0b040") if i < flow.index else (Color("#ff6a4a") if i == flow.index else Color("#3a3644"))
+		if i == 2:
+			col = col if i <= flow.index else Color("#5a2a3a")
+		hud.draw_colored_polygon(PackedVector2Array([c + Vector2(0, -5), c + Vector2(5, 0), c + Vector2(0, 5), c + Vector2(-5, 0)]), col)
+	# small icons (top-right): help and deck size
+	var hc := Vector2(1252, 20)
+	hud.draw_circle(hc, 12, Art.INK)
+	hud.draw_circle(hc, 10, Color("#3a3644"))
+	hud.draw_string(font, hc + Vector2(-4, 6), "?", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 1, 1, 0.8))
+	var dc := Vector2(1214, 20)
+	hud.draw_rect(Rect2(dc - Vector2(9, 12), Vector2(18, 24)), Art.INK)
+	hud.draw_rect(Rect2(dc - Vector2(7, 10), Vector2(14, 20)), Color("#9cc8f0"))
+	if b.belt:
+		hud.draw_string(font, dc + Vector2(-16, 26), "%d" % b.belt.ring().size(), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.5))
+	var h := b.human()
+	if h != null and h.discount > 0:
+		var p := board.position + board.feet(Vector2(h.pos)) - Vector2(-26, 90)
+		hud.draw_string_outline(font, p, "-%d초" % h.discount, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 5, Art.INK)
+		hud.draw_string(font, p, "-%d초" % h.discount, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#bfe8ff"))
 
 func _update_span() -> void:
-	_update_range()
 	var b := flow.battle
+	board.range_cells = []
 	timeline.span_secs = 0
 	timeline.span_exhaust = 0
-	if selected >= 0 and b.belt != null and selected < b.belt.slots.size() and b.belt.slots[selected] != null:
-		var c := Effects.card_def(b.belt.slots[selected]["card_id"], catalog)
-		timeline.span_secs = maxi(0, b.action_secs(int(c.get("time", 0)), b.human())) if b.human() else 0
-		timeline.span_exhaust = int(c.get("exhaust", 0))
-	timeline.queue_redraw()
+	if selected < 0 or b.belt == null or selected >= b.belt.slots.size() or b.belt.slots[selected] == null or b.human() == null:
+		return
+	var c := Effects.card_def(b.belt.slots[selected]["card_id"], catalog)
+	var shape: String = c.get("target", {}).get("shape", "cell")
+	if not shape in ["self", "all", "around"]:
+		for p in b.grid.all_cells():
+			if b.can_play(selected, p):
+				board.range_cells.append(p)
+	var secs := maxi(0, b.action_secs(int(c.get("time", 0)), b.human()))
+	if secs > 0:
+		secs = maxi(0, secs - b.human().discount)
+	timeline.span_secs = secs
+	timeline.span_exhaust = int(c.get("exhaust", 0))
 
-func _overlay_title(t: String) -> void:
+# ---- tips ---------------------------------------------------------------------------------------
+
+func _clear_tips() -> void:
+	for ch in tips.get_children():
+		ch.queue_free()
+	tips.visible = false
+
+func _tip(title: String, text: String, accent: Color) -> void:
+	var pc := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color("#1b1822f0")
+	sb.border_color = accent
+	sb.set_border_width_all(2)
+	sb.content_margin_left = 10
+	sb.content_margin_right = 10
+	sb.content_margin_top = 6
+	sb.content_margin_bottom = 8
+	pc.add_theme_stylebox_override("panel", sb)
+	pc.custom_minimum_size = Vector2(230, 0)
+	pc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var rt := RichTextLabel.new()
+	rt.bbcode_enabled = true
+	rt.fit_content = true
+	rt.scroll_active = false
+	rt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rt.custom_minimum_size = Vector2(210, 0)
+	rt.add_theme_font_size_override("normal_font_size", 13)
+	rt.text = "[color=#%s]%s[/color]\n%s" % [accent.to_html(false), title, CardView.rich(text).replace("#9a3d12", "#ffcf6a")]
+	pc.add_child(rt)
+	tips.add_child(pc)
+	tips.visible = true
+
+func _keyword_tips(text: String) -> void:
+	var kw: Dictionary = catalog.keywords.get("keywords", {})
+	var seen := []
+	var queue := CardView.keywords_in(text)
+	while not queue.is_empty() and seen.size() < 5:
+		var k: String = queue.pop_front()
+		if k in seen or not kw.has(k):
+			continue
+		seen.append(k)
+		_tip(k, kw[k], Color("#ffcf6a"))
+
+func _on_card_hover(cv: CardView, on: bool) -> void:
+	if on:
+		hovered_card = cv
+		_clear_tips()
+		if selected < 0:
+			_keyword_tips(cv.def().get("desc", ""))
+			tips.position = Vector2(cv.global_position.x + CardView.SIZE.x * 1.12 + 8, 440)
+			if tips.position.x > 1280 - 250:
+				tips.position.x = cv.global_position.x - 250
+	elif hovered_card == cv:
+		hovered_card = null
+		_clear_tips()
+
+func _cell_tips(p: Vector2i) -> void:
+	var b := flow.battle
+	var kw: Dictionary = catalog.keywords.get("keywords", {})
+	var cellmap: Dictionary = catalog.keywords.get("cell", {})
+	var stmap: Dictionary = catalog.keywords.get("status", {})
+	var u = b.grid.unit_at(p)
+	if u != null:
+		var parts := []
+		for s in u.statuses.keys():
+			if stmap.has(s):
+				parts.append("[%s]" % stmap[s])
+		_tip(u.name, "체력 %d / %d" % [u.hp, u.max_hp] + ("\n" + " ".join(parts) if not parts.is_empty() else ""),
+			Color("#7ee08a") if u.controller == "human" else Color("#ff8a7a"))
+		for s in u.statuses.keys():
+			if stmap.has(s) and kw.has(stmap[s]):
+				_tip(stmap[s], kw[stmap[s]], Color("#ffcf6a"))
+	var m := b.grid.get_material(p)
+	if cellmap.has(m) and kw.has(cellmap[m]):
+		_tip(cellmap[m], kw[cellmap[m]], Color("#9cc8f0"))
+	var ts := float(b.grid.get_var(p, "time_scale"))
+	if ts > 1.05:
+		_tip("가속", kw.get("가속", ""), Color("#9cc8f0"))
+	elif ts <= 0.01:
+		_tip("멈춘 시간", kw.get("멈춘 시간", ""), Color("#9cc8f0"))
+	elif ts < 0.95 and m != "swamp":
+		_tip("느림", kw.get("느림", ""), Color("#9cc8f0"))
+	if tips.get_child_count() > 0:
+		var mp := get_viewport().get_mouse_position()
+		tips.position = mp + Vector2(18, 10)
+		if tips.position.x > 1280 - 250:
+			tips.position.x = mp.x - 250
+		if tips.position.y > 520:
+			tips.position.y = 520
+
+# ---- overlays -----------------------------------------------------------------------------------
+
+func _veil() -> void:
+	var v := ColorRect.new()
+	v.color = Color(0.02, 0.02, 0.04, 0.72)
+	v.set_anchors_preset(Control.PRESET_FULL_RECT)
+	v.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(v)
+
+func _title(t: String, y: float) -> void:
 	var l := Label.new()
 	l.text = t
-	l.add_theme_font_size_override("font_size", 26)
+	l.add_theme_font_size_override("font_size", 30)
+	l.add_theme_color_override("font_outline_color", Art.INK)
+	l.add_theme_constant_override("outline_size", 8)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.position = Vector2(0, y)
+	l.size = Vector2(1280, 40)
 	overlay.add_child(l)
+
+func _reward_overlay() -> void:
+	_veil()
+	_title("승리", 200)
+	for i in flow.rewards.size():
+		var cv := CardView.new()
+		cv.setup(flow.rewards[i], catalog, font)
+		cv.position = Vector2(640 - 1.5 * 180 + i * 180 + 24, 290)
+		cv.scale = Vector2(1.15, 1.15)
+		var idx := i
+		cv.picked.connect(func(_c): _pick_reward(idx))
+		cv.hovered.connect(func(c, on):
+			_clear_tips()
+			if on:
+				_keyword_tips(c.def().get("desc", ""))
+				tips.position = Vector2(c.position.x + 160, 300))
+		overlay.add_child(cv)
+
+func _end_overlay() -> void:
+	_veil()
+	_title("쓰러졌다" if flow.phase == "game_over" else "3연전 돌파", 300)
+	var again := Button.new()
+	again.text = "새 판"
+	again.position = Vector2(590, 380)
+	again.size = Vector2(100, 40)
+	again.pressed.connect(func():
+		seed_value += 1
+		_new_run())
+	overlay.add_child(again)
 
 func _pick_reward(i: int) -> void:
 	flow.choose_reward(i)
 	shown_frame = flow.battle.frames.size() - 1
-	shown_log = 0
-	log_label.clear()
 	selected = -1
+	board.reset_tracking()
 	_refresh()
 
-func _select(i: int) -> void:
-	selected = -1 if selected == i else i
-	ability_mode = false
-	_refresh()
+# ---- input --------------------------------------------------------------------------------------
 
-func _update_info() -> void:
+func _on_card_picked(cv: CardView) -> void:
+	if flow.phase != "battle" or _replaying():
+		return
+	var i: int = cv.get_meta("slot")
 	var b := flow.battle
-	var p := board.hover
-	var lines := []
-	if selected >= 0 and b.belt.slots[selected] != null:
-		var c := Effects.card_def(b.belt.slots[selected]["card_id"], catalog)
-		lines.append("선택: %s (사거리 %d)" % [c.get("name", ""), int(c.get("target", {}).get("range", 0))])
-	if p.x >= 0:
-		var g := b.grid
-		lines.append("칸 %s  물질 %s" % [str(p), catalog.materials[g.get_material(p)].get("name", g.get_material(p))])
-		var vs := []
-		for id in catalog.variables:
-			var v = g.get_var(p, id)
-			var d = g.default_of(id)
-			if (v is Vector2 and v.length() > 0.05) or (not (v is Vector2) and absf(float(v) - float(d)) > 0.05):
-				vs.append("%s %s" % [catalog.variables[id].get("name", id), ("(%.1f,%.1f)" % [v.x, v.y]) if v is Vector2 else ("%.1f" % v)])
-		lines.append(", ".join(vs) if not vs.is_empty() else "기본 상태")
-		var u = g.unit_at(p)
-		if u:
-			lines.append("%s 체력 %d/%d 질량 %.0f 상태 %s 덱 %d장" % [u.name, u.hp, u.max_hp, u.mass, str(u.statuses.keys()), u.deck.size()])
-	info.text = "\n".join(lines)
+	if selected == i:
+		# a selected card that needs no aim plays when clicked again
+		var shape: String = cv.def().get("target", {}).get("shape", "cell")
+		if shape in ["self", "all", "around"] and b.cmd_play(i, b.human().pos):
+			selected = -1
+			_after()
+			return
+		selected = -1
+	else:
+		selected = i
+	_clear_tips()
+	_refresh()
 
 func _on_board_input(ev: InputEvent) -> void:
 	if flow.phase != "battle" or _replaying():
@@ -299,35 +442,37 @@ func _on_board_input(ev: InputEvent) -> void:
 		var c := board.cell_at(ev.position)
 		if c != board.hover:
 			board.hover = c
+			cell_hover_t = 0.0
+			_clear_tips()
 			board.preview = b.preview(selected, c) if selected >= 0 and c.x >= 0 else {}
-			board.queue_redraw()
-			_update_info()
 	elif ev is InputEventMouseButton and ev.pressed:
 		var cell := board.cell_at(ev.position)
 		if ev.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
 			return
 		if ev.button_index == MOUSE_BUTTON_RIGHT:
 			selected = -1
-			ability_mode = false
 			_refresh()
-		elif ev.button_index == MOUSE_BUTTON_LEFT and cell.x >= 0:
-			if ability_mode:
-				b.cmd_ability(cell)
-				ability_mode = false
-				_after()
-			elif selected >= 0 and b.cmd_play(selected, cell):
+		elif ev.button_index == MOUSE_BUTTON_LEFT and cell.x >= 0 and selected >= 0:
+			if b.cmd_play(selected, cell):
 				selected = -1
 				_after()
+			else:
+				board.out_of_range_click(cell)
+				wiggle_until = real + 0.3
 
 func _input(ev: InputEvent) -> void:
-	# the wheel rolls the hand wherever the mouse is
+	# the wheel turns the ring wherever the mouse is
 	if flow == null or flow.phase != "battle" or not (ev is InputEventMouseButton) or not ev.pressed or _replaying():
 		return
 	if ev.button_index == MOUSE_BUTTON_WHEEL_UP or ev.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-		selected = -1
-		flow.battle.cmd_wheel(-1 if ev.button_index == MOUSE_BUTTON_WHEEL_UP else 1)
+		_roll(-1 if ev.button_index == MOUSE_BUTTON_WHEEL_UP else 1)
 		get_viewport().set_input_as_handled()
-		_after()
+
+func _roll(dir: int) -> void:
+	selected = -1
+	if flow.battle.cmd_wheel(dir):
+		spin = -RING_STEP * dir
+	_after()
 
 func _unhandled_input(ev: InputEvent) -> void:
 	if flow == null or flow.phase != "battle" or not (ev is InputEventKey) or not ev.pressed or ev.echo or _replaying():
@@ -342,26 +487,17 @@ func _unhandled_input(ev: InputEvent) -> void:
 			selected = -1
 			b.cmd_wait(1)
 		KEY_Q:
-			selected = -1
-			b.cmd_wheel(-1)
+			_roll(-1)
+			return
 		KEY_E:
+			_roll(1)
+			return
+		KEY_ESCAPE:
 			selected = -1
-			b.cmd_wheel(1)
-		KEY_A:
-			if b.human() and b.human().base_ability == "step1":
-				return
-			if b.human() and b.human().base_ability in ["heat_self", "belt1"]:
-				b.cmd_ability(b.human().pos)
-			else:
-				ability_mode = true
-				selected = -1
-				_refresh()
-				return
 		_: return
 	_after()
 
 func _after() -> void:
-	ability_mode = false
 	if not _replaying():
 		flow.update()
 	_refresh()

@@ -9,6 +9,7 @@ var cards: Dictionary = {}
 var actors: Dictionary = {}
 var power: Dictionary = {}
 var config: Dictionary = {}   # data/battle.json: clock and board tunables
+var keywords: Dictionary = {}   # data/keywords.json: hover explanations for [keyword]s, cell/status -> keyword
 
 static func load_dir(path: String) -> Catalog:
 	var c := Catalog.new()
@@ -17,6 +18,7 @@ static func load_dir(path: String) -> Catalog:
 	c.reactions = _read(path + "/reactions.json", [])
 	c.power = _read(path + "/power_scores.json", {})
 	c.config = _read(path + "/battle.json", {})
+	c.keywords = _read(path + "/keywords.json", {})
 	for sub in ["cards", "actors"]:
 		var target: Dictionary = c.cards if sub == "cards" else c.actors
 		var d := DirAccess.open(path + "/" + sub)

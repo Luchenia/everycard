@@ -1,9 +1,1 @@
-{
-  "round_time": 10,
-  "grid_w": 13,
-  "grid_h": 9,
-  "env_every": 2,
-  "move_time": 1,
-  "wheel_time": 1,
-  "draws_per_round": 2
-}
+{"round_time": 10, "grid_w": 15, "grid_h": 9, "env_every": 2, "move_time": 1, "wheel_time": 1, "draws_per_round": 2}
