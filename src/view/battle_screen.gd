@@ -86,7 +86,7 @@ func _fmt(e: Dictionary) -> String:
 
 func _card_text(id: String) -> String:
 	var c := Effects.card_def(id, catalog)
-	return "%s\n⏱%d %s\n%s" % [c.get("name", id), int(c.get("time", 0)), "●●" if int(c.get("weight", 1)) > 1 else "●", c.get("desc", "")]
+	return "%s\n시간 %d %s\n%s" % [c.get("name", id), int(c.get("time", 0)), "●●" if int(c.get("weight", 1)) > 1 else "●", c.get("desc", "")]
 
 func _refresh() -> void:
 	for ch in overlay.get_children():
