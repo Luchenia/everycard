@@ -66,12 +66,16 @@ func _random_layout(n_enemies: int) -> Dictionary:
 		reserved.append(Vector2i(e[0], e[1]))
 	var mats := []
 	var pool := ["water", "water", "oil", "wall", "crystal", "ice"]
+	var vars := []
 	for k in 7:
 		var p := Vector2i(2 + rng.next_int(5), rng.next_int(Grid.H))
 		if reserved.has(p):
 			continue
-		mats.append([p.x, p.y, pool[rng.next_int(pool.size())]])
-	return {"player_pos": player, "enemy_pos": enemies, "materials": mats}
+		var m: String = pool[rng.next_int(pool.size())]
+		mats.append([p.x, p.y, m])
+		if m == "ice":
+			vars.append([p.x, p.y, "temperature", -40])
+	return {"player_pos": player, "enemy_pos": enemies, "materials": mats, "vars": vars}
 
 func human() -> Actor:
 	for a in actors:

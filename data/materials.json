@@ -1,14 +1,99 @@
 [
-  {"id": "none", "passable": true, "conductivity": 0.1, "flammable": false},
-  {"id": "water", "passable": true, "conductivity": 1.0, "flammable": false, "status_on_enter": "wet"},
-  {"id": "ice", "passable": true, "conductivity": 0.2, "flammable": false, "friction_override": 0.1, "reflective": true},
-  {"id": "steam", "passable": true, "conductivity": 0.4, "flammable": false, "blocks_sight": true},
-  {"id": "oil", "passable": true, "conductivity": 0.0, "flammable": true, "friction_override": 0.2},
-  {"id": "fire", "passable": true, "conductivity": 0.3, "flammable": false, "status_on_enter": "burning"},
-  {"id": "gas_flammable", "passable": true, "conductivity": 0.1, "flammable": true},
-  {"id": "smoke", "passable": true, "conductivity": 0.1, "flammable": false, "blocks_sight": true},
-  {"id": "wall", "passable": false, "conductivity": 0.1, "flammable": false, "hardness": 9},
-  {"id": "metal", "passable": false, "conductivity": 1.0, "flammable": false, "reflective": true, "hardness": 12},
-  {"id": "crystal", "passable": false, "conductivity": 0.0, "flammable": false, "reflective": true, "hardness": 5},
-  {"id": "void", "passable": true, "conductivity": 0.0, "flammable": false, "lethal": true}
+ {
+  "id": "none",
+  "passable": true,
+  "conductivity": 0.1,
+  "flammable": false,
+  "name": "없음"
+ },
+ {
+  "id": "water",
+  "passable": true,
+  "conductivity": 1.0,
+  "flammable": false,
+  "status_on_enter": "wet",
+  "name": "물"
+ },
+ {
+  "id": "ice",
+  "passable": true,
+  "conductivity": 0.2,
+  "flammable": false,
+  "friction_override": 0.1,
+  "reflective": true,
+  "name": "얼음"
+ },
+ {
+  "id": "steam",
+  "passable": true,
+  "conductivity": 0.4,
+  "flammable": false,
+  "blocks_sight": true,
+  "name": "증기"
+ },
+ {
+  "id": "oil",
+  "passable": true,
+  "conductivity": 0.0,
+  "flammable": true,
+  "friction_override": 0.2,
+  "name": "기름"
+ },
+ {
+  "id": "fire",
+  "passable": true,
+  "conductivity": 0.3,
+  "flammable": false,
+  "status_on_enter": "burning",
+  "name": "불"
+ },
+ {
+  "id": "gas_flammable",
+  "passable": true,
+  "conductivity": 0.1,
+  "flammable": true,
+  "name": "가연성 가스"
+ },
+ {
+  "id": "smoke",
+  "passable": true,
+  "conductivity": 0.1,
+  "flammable": false,
+  "blocks_sight": true,
+  "name": "연기"
+ },
+ {
+  "id": "wall",
+  "passable": false,
+  "conductivity": 0.1,
+  "flammable": false,
+  "hardness": 9,
+  "name": "벽"
+ },
+ {
+  "id": "metal",
+  "passable": false,
+  "conductivity": 1.0,
+  "flammable": false,
+  "reflective": true,
+  "hardness": 12,
+  "name": "금속"
+ },
+ {
+  "id": "crystal",
+  "passable": false,
+  "conductivity": 0.0,
+  "flammable": false,
+  "reflective": true,
+  "hardness": 5,
+  "name": "결정"
+ },
+ {
+  "id": "void",
+  "passable": true,
+  "conductivity": 0.0,
+  "flammable": false,
+  "lethal": true,
+  "name": "공허"
+ }
 ]

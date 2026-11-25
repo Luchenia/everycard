@@ -6,7 +6,8 @@
   "max": 300,
   "default": 20,
   "spread": 0.25,
-  "recover": 0.1
+  "recover": 0.1,
+  "name": "온도"
  },
  {
   "id": "pressure",
@@ -15,7 +16,8 @@
   "max": 10,
   "default": 1,
   "spread": 0.5,
-  "recover": 0.2
+  "recover": 0.2,
+  "name": "압력"
  },
  {
   "id": "gravity",
@@ -27,7 +29,8 @@
    0
   ],
   "spread": 0,
-  "recover": 0.3
+  "recover": 0.3,
+  "name": "중력"
  },
  {
   "id": "wind",
@@ -39,7 +42,8 @@
    0
   ],
   "spread": 0.2,
-  "recover": 0.3
+  "recover": 0.3,
+  "name": "바람"
  },
  {
   "id": "humidity",
@@ -48,7 +52,8 @@
   "max": 1,
   "default": 0.3,
   "spread": 0.2,
-  "recover": 0.1
+  "recover": 0.1,
+  "name": "습도"
  },
  {
   "id": "oxygen",
@@ -57,7 +62,8 @@
   "max": 2,
   "default": 1,
   "spread": 0.4,
-  "recover": 0.2
+  "recover": 0.2,
+  "name": "산소"
  },
  {
   "id": "friction",
@@ -66,7 +72,8 @@
   "max": 2,
   "default": 1,
   "spread": 0,
-  "recover": 0.2
+  "recover": 0.2,
+  "name": "마찰"
  },
  {
   "id": "charge",
@@ -76,7 +83,8 @@
   "default": 0,
   "spread": 0.6,
   "recover": 0.3,
-  "spread_by_conductivity": true
+  "spread_by_conductivity": true,
+  "name": "전하"
  },
  {
   "id": "radiation",
@@ -85,7 +93,8 @@
   "max": 10,
   "default": 0,
   "spread": 0.1,
-  "recover": 0.05
+  "recover": 0.05,
+  "name": "방사능"
  },
  {
   "id": "magnetism",
@@ -97,7 +106,8 @@
    0
   ],
   "spread": 0,
-  "recover": 0.3
+  "recover": 0.3,
+  "name": "자기장"
  },
  {
   "id": "light",
@@ -106,7 +116,8 @@
   "max": 5,
   "default": 2,
   "spread": 0.3,
-  "recover": 0.2
+  "recover": 0.2,
+  "name": "밝기"
  },
  {
   "id": "noise",
@@ -115,7 +126,8 @@
   "max": 10,
   "default": 0,
   "spread": 0.5,
-  "recover": 0.5
+  "recover": 0.5,
+  "name": "소음"
  },
  {
   "id": "toxicity",
@@ -124,7 +136,8 @@
   "max": 10,
   "default": 0,
   "spread": 0.3,
-  "recover": 0.1
+  "recover": 0.1,
+  "name": "독성"
  },
  {
   "id": "time_scale",
@@ -133,7 +146,8 @@
   "max": 3,
   "default": 1,
   "spread": 0,
-  "recover": 0.25
+  "recover": 0.25,
+  "name": "시간 속도"
  },
  {
   "id": "mana_density",
@@ -142,6 +156,7 @@
   "max": 3,
   "default": 1,
   "spread": 0.1,
-  "recover": 0.1
+  "recover": 0.1,
+  "name": "마력 밀도"
  }
 ]
