@@ -1,0 +1,19 @@
+[
+  {"id": "water_freezes", "when": [{"material": "water"}, {"var": "temperature", "op": "<", "value": 0}], "then": [{"set_material": "ice"}]},
+  {"id": "water_boils", "when": [{"material": "water"}, {"var": "temperature", "op": ">=", "value": 100}], "then": [{"set_material": "steam"}, {"add_var": "pressure", "value": 2}, {"add_var": "humidity", "value": 0.3}]},
+  {"id": "steam_condenses", "when": [{"material": "steam"}, {"var": "temperature", "op": "<", "value": 100}], "then": [{"set_material": "water"}]},
+  {"id": "ice_melts", "when": [{"material": "ice"}, {"var": "temperature", "op": ">=", "value": 0}], "then": [{"set_material": "water"}]},
+  {"id": "oil_ignites_heat", "when": [{"material": "oil"}, {"var": "temperature", "op": ">=", "value": 250}], "then": [{"set_material": "fire"}]},
+  {"id": "oil_explodes_near_fire", "when": [{"material": "oil"}, {"neighbor_material": "fire"}, {"var": "oxygen", "op": ">=", "value": 1.5}], "then": [{"set_material": "fire"}, {"add_var": "pressure", "value": 5}, {"add_var": "temperature", "value": 150}, {"damage_units": 8, "kind": "fire"}]},
+  {"id": "oil_catches_fire", "when": [{"material": "oil"}, {"neighbor_material": "fire"}], "then": [{"set_material": "fire"}, {"add_var": "temperature", "value": 80}]},
+  {"id": "gas_explodes", "when": [{"material": "gas_flammable"}, {"neighbor_material": "fire"}], "then": [{"set_material": "fire"}, {"add_var": "pressure", "value": 6}, {"damage_units": 10, "kind": "fire"}]},
+  {"id": "fire_heats", "when": [{"material": "fire"}], "then": [{"add_var": "temperature", "value": 40}, {"add_var": "oxygen", "value": -0.2}, {"status_to_units": "burning", "turns": 2}]},
+  {"id": "fire_suffocates", "when": [{"material": "fire"}, {"var": "oxygen", "op": "<", "value": 0.2}], "then": [{"set_material": "smoke"}]},
+  {"id": "fire_doused", "when": [{"material": "fire"}, {"var": "humidity", "op": ">=", "value": 0.9}], "then": [{"set_material": "steam"}]},
+  {"id": "smoke_clears", "when": [{"material": "smoke"}, {"var": "pressure", "op": "<", "value": 2}], "then": [{"set_material": "none"}]},
+  {"id": "crystal_shatters", "when": [{"material": "crystal"}, {"var": "noise", "op": ">=", "value": 7}], "then": [{"set_material": "none"}, {"damage_units": 4, "kind": "physical"}]},
+  {"id": "wall_bursts", "when": [{"material": "wall"}, {"var": "pressure", "op": ">=", "value": 9}], "then": [{"set_material": "none"}, {"add_var": "noise", "value": 5}]},
+  {"id": "water_shocks", "when": [{"material": "water"}, {"var": "charge", "op": ">=", "value": 3}], "then": [{"status_to_units": "shocked", "turns": 1}, {"damage_units": 5, "kind": "electric"}, {"add_var": "charge", "value": -2}]},
+  {"id": "radiation_hurts", "when": [{"var": "radiation", "op": ">=", "value": 3}], "then": [{"damage_units": 2, "kind": "radiation"}]},
+  {"id": "toxic_poisons", "when": [{"var": "toxicity", "op": ">=", "value": 3}], "then": [{"status_to_units": "poisoned", "turns": 2}]}
+]
