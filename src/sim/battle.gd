@@ -235,7 +235,9 @@ func cmd_play(slot: int, aim: Vector2i) -> bool:
 	var secs := action_secs(int(card.get("time", 0)), h)
 	_log("play", "%s: %s (%d초)" % [h.name, card.get("name", id), secs], {"card": id, "aim": aim})
 	_spend(secs, func():
-		_log("land", "%s 발동" % card.get("name", id), {"card": id})
+		var tg: Dictionary = card.get("target", {})
+		_log("land", "%s 발동" % card.get("name", id), {"card": id, "user": h.uid,
+			"cells": Targeting.cells(tg.get("shape", "cell"), h.pos, aim, int(tg.get("size", 0)))})
 		Effects.apply(card, h, aim, ctx)
 		_after_action())
 	var ex := int(card.get("exhaust", 0))
@@ -511,7 +513,7 @@ func _check_end() -> bool:
 	return false
 
 func _log(t: String, msg: String, data: Dictionary) -> void:
-	log.append({"t": t, "msg": msg, "data": data})
+	log.append({"t": t, "msg": msg, "data": data, "at": now})
 
 ## Simulates playing a card without changing anything (the card's effect only, as if it landed
 ## now; the world seconds of its wind-up are not simulated).

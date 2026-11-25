@@ -27,6 +27,7 @@ var spin := 0.0                # ring turn animation (radians, eases to 0)
 var wiggle_until := 0.0
 var real := 0.0
 var cell_hover_t := 0.0
+var log_i := 0           # battle log entries already shown as flashes
 
 func _ready() -> void:
 	font = load("res://assets/fonts/Galmuri11.ttf")
@@ -77,6 +78,7 @@ func _ready() -> void:
 func _new_run() -> void:
 	flow = RunFlow.new(catalog, seed_value)
 	shown_frame = flow.battle.frames.size() - 1
+	log_i = flow.battle.log.size()
 	board.reset_tracking()
 	_refresh()
 
@@ -114,11 +116,44 @@ func _step_replay(delta: float) -> void:
 	board.shown_hp = a["hp"] if k < 0.5 else b["hp"]
 	board.shown_now = int(a["t"])
 
+const FLASH := {"fire": Color("#ff8a3a"), "ice": Color("#bfe8ff"), "water": Color("#5aa8ff"), "electric": Color("#ffe14a")}
+
+## Shows log events (cards landing, enemy blows) as flashes when the replay reaches their second.
+func _flashes() -> void:
+	var b := flow.battle
+	if log_i > b.log.size():
+		log_i = b.log.size()
+	var t_now: int = board.shown_now if board.replaying else b.now
+	while log_i < b.log.size():
+		var e: Dictionary = b.log[log_i]
+		if int(e.get("at", 0)) > t_now:
+			break
+		log_i += 1
+		match e["t"]:
+			"land":
+				var c := Effects.card_def(e["data"].get("card", ""), catalog)
+				var col := Color("#fff4c8")
+				for part in c.get("parts", []):
+					if part.get("op", "") == "material" and FLASH.has(part.get("id", "")):
+						col = FLASH[part["id"]]
+					if part.get("kind", "") == "electric":
+						col = FLASH["electric"]
+				var from := Vector2i(-1, -1)
+				if c.get("target", {}).get("shape", "") == "line":
+					var u := b._actor(int(e["data"].get("user", -1)))
+					if u:
+						from = u.pos
+				board.burst(e["data"].get("cells", []), col, from)
+			"telegraph_hit":
+				board.burst(e["data"].get("cells", []), Art.DANGER)
+				board.shake(0.18)
+
 func _process(delta: float) -> void:
 	real += delta
 	if flow == null or flow.battle == null:
 		return
 	_step_replay(delta)
+	_flashes()
 	spin = move_toward(spin, 0.0, delta * 1.6)
 	_layout_hand()
 	if board.hover.x >= 0 and selected < 0 and hovered_card == null:
@@ -410,6 +445,7 @@ func _end_overlay() -> void:
 func _pick_reward(i: int) -> void:
 	flow.choose_reward(i)
 	shown_frame = flow.battle.frames.size() - 1
+	log_i = flow.battle.log.size()
 	selected = -1
 	board.reset_tracking()
 	_refresh()

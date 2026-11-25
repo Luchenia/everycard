@@ -37,6 +37,7 @@ var flashes: Dictionary = {}     # uid -> real time of last hit
 var _last_hp: Dictionary = {}
 var shake_until := 0.0
 var fizzle: Dictionary = {}      # {cell, t0}: an out-of-range click
+var bursts: Array = []           # {cells, col, t0, beam_from}: a card or a blow landing
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_PASS
@@ -87,6 +88,9 @@ func feet(cp: Vector2) -> Vector2:
 
 func shake(secs := 0.25) -> void:
 	shake_until = real + secs
+
+func burst(cells: Array, col: Color, beam_from := Vector2i(-1, -1)) -> void:
+	bursts.append({"cells": cells, "col": col, "t0": real, "from": beam_from})
 
 func out_of_range_click(p: Vector2i) -> void:
 	fizzle = {"cell": p, "t0": real}
@@ -257,6 +261,9 @@ func _draw_top() -> void:
 			continue
 		items.append({"y": _pos_of(u).y + 0.95, "unit": u})
 	items.sort_custom(func(a, b): return a["y"] < b["y"])
+	# afterimages of attackers sit under everything standing, so they never hide a unit
+	for t in battle.telegraphs:
+		_ghost(tl, t, off)
 	for it in items:
 		if it.has("fx"):
 			_fx(tl, it["fx"], it["p"], off)
@@ -264,6 +271,22 @@ func _draw_top() -> void:
 			_block(tl, it["block"], it["p"], off)
 		else:
 			_unit(tl, it["unit"], off)
+	# cards and blows landing: a bright flash on the struck cells
+	bursts = bursts.filter(func(q): return real - q["t0"] < 0.45)
+	for q in bursts:
+		var k: float = (real - float(q["t0"])) / 0.45
+		var col: Color = q["col"]
+		var cl: Array = q["cells"]
+		if q["from"].x >= 0 and not cl.is_empty():
+			var a0 := cell_rect(q["from"]).get_center() + off
+			var a1 := cell_rect(cl[cl.size() - 1]).get_center() + off
+			tl.draw_line(a0, a1, Color(col, 0.5 * (1.0 - k)), (6 - 4 * k) * S)
+			tl.draw_line(a0, a1, Color(1, 1, 1, 1.0 - k), 2 * S)
+		for p in cl:
+			var r := cell_rect(p, (1.0 - k) * 6 * S)
+			r.position += off
+			tl.draw_rect(r, Color(col, 0.55 * (1.0 - k)))
+			tl.draw_rect(cell_rect(p, S).grow(k * 2 * S), Color(1, 1, 1, 0.7 * (1.0 - k)), false, S)
 	# enemy warnings: always above effects and units
 	for t in battle.telegraphs:
 		_telegraph(tl, t, off)
@@ -483,12 +506,6 @@ func _telegraph(tl: Control, t: Dictionary, off: Vector2) -> void:
 	if a == null or not battle.grid.units.has(a):
 		return
 	var from := feet(_pos_of(a)) + off - Vector2(0, 8 * S)
-	# afterimage of the attacker where the blow will land
-	if cells.size() <= 4:
-		var tex := Art.unit_tex(a.def_id)
-		var sz := Vector2(tex.get_width(), tex.get_height()) * S
-		var ghost_at := centre + Vector2(0, C * 0.5 - 3 * S)
-		tl.draw_texture_rect(tex, Rect2(ghost_at - Vector2(sz.x / 2, sz.y), sz), false, Color(1, 0.3, 0.25, 0.22 + 0.15 * pulse))
 	# chevrons running from the attacker to the area
 	var d := centre - from
 	var L := d.length()
@@ -512,6 +529,21 @@ func _telegraph(tl: Control, t: Dictionary, off: Vector2) -> void:
 	tl.draw_circle(bp, 8 * S * 0.7, col)
 	var txt := "%d" % maxi(left, 0)
 	tl.draw_string(font, bp + Vector2(-5 if txt.length() == 1 else -9, 7), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Art.INK)
+
+func _ghost(tl: Control, t: Dictionary, off: Vector2) -> void:
+	var cells: Array = t["cells"]
+	var a: Actor = battle._actor(t["actor_uid"])
+	if cells.is_empty() or cells.size() > 4 or a == null or not battle.grid.units.has(a):
+		return
+	var centre := Vector2.ZERO
+	for p in cells:
+		centre += cell_rect(p).get_center()
+	centre = centre / cells.size() + off
+	var pulse := 0.5 + 0.5 * sin(real * 4.0)
+	var tex := Art.unit_tex(a.def_id)
+	var sz := Vector2(tex.get_width(), tex.get_height()) * S
+	var ghost_at := centre + Vector2(0, C * 0.5 - 3 * S)
+	tl.draw_texture_rect(tex, Rect2(ghost_at - Vector2(sz.x / 2, sz.y), sz), false, Color(1, 0.3, 0.25, 0.18 + 0.12 * pulse))
 
 ## Aiming: the hovered cell, and when it is out of reach a line that falls short and fizzles.
 func _aim(tl: Control, off: Vector2) -> void:
