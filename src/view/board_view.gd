@@ -12,6 +12,7 @@ const MAT_COLORS := {
 var battle: Battle
 var hover := Vector2i(-1, -1)
 var preview: Dictionary = {}
+var range_cells: Array = []    # cells the selected card can reach
 var shown_pos: Dictionary = {}   # uid -> Vector2 (cell coords, fractional while replaying)
 var shown_hp: Dictionary = {}    # uid -> hp at the replayed second
 var shown_now := -1              # replayed second
@@ -102,6 +103,9 @@ func _draw() -> void:
 		for s in u.statuses:
 			draw_string(font, origin + Vector2(CELL - 12 - sx, 14), s.substr(0, 1).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.YELLOW)
 			sx += 10
+	for p in range_cells:
+		draw_rect(_rect(p, 2), Color(1, 1, 0.8, 0.10))
+		draw_rect(_rect(p, 2), Color(1, 1, 0.8, 0.35), false, 1)
 	if not preview.is_empty():
 		for p in preview.get("cells", []):
 			draw_rect(_rect(p, 1), Color(1, 1, 1, 0.9), false, 2)

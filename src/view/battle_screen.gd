@@ -230,7 +230,17 @@ func _roll_cost(dir: int) -> String:
 	var w := maxi(1, int(Effects.card_def(id, catalog).get("weight", 1))) if id != "" else 1
 	return "%d초" % (w * int(b.cfg["wheel_time"]))
 
+func _update_range() -> void:
+	var b := flow.battle
+	board.range_cells = []
+	if selected < 0 or b.belt == null or selected >= b.belt.slots.size() or b.belt.slots[selected] == null or b.human() == null:
+		return
+	for p in b.grid.all_cells():
+		if b.can_play(selected, p):
+			board.range_cells.append(p)
+
 func _update_span() -> void:
+	_update_range()
 	var b := flow.battle
 	timeline.span_secs = 0
 	timeline.span_exhaust = 0
