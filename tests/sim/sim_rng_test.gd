@@ -14,3 +14,8 @@ func run() -> void:
 	assert_eq(x, y, "shuffle reproducible")
 	var f: float = SimRng.new(1).next_float()
 	assert_true(f >= 0.0 and f < 1.0, "float in range")
+	var r := SimRng.new(5)
+	var st = r.get_state()
+	var first := r.next_int(1000)
+	r.set_state(st)
+	assert_eq(r.next_int(1000), first, "state restore replays")

@@ -24,3 +24,9 @@ func shuffle(arr: Array) -> void:
 		var tmp = arr[i]
 		arr[i] = arr[j]
 		arr[j] = tmp
+
+func get_state() -> int:
+	return _rng.state
+
+func set_state(s: int) -> void:
+	_rng.state = s
