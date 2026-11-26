@@ -62,7 +62,11 @@ func _process(_d: float) -> bool:
 				step = 5; t0 = frame
 		5:
 			if frame - t0 == 5:
-				_shot("12_hand_flip"); step = 6
+				_shot("12_hand_flip")
+			if frame - t0 == 40:
+				screen.hand_cursor.pick(screen.cards[2])
+			if frame - t0 == 52:
+				_shot("15_hand_pick"); step = 6
 		6:
 			if not screen._replaying() and frame - t0 > 40:
 				var h = b.human()

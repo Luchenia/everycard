@@ -1,8 +1,9 @@
 extends Control
 ## Battle screen: clock track on top, the dungeon room filling the middle, the hand as a ring of
 ## cards at the bottom. Almost no text: hovering a card or a cell explains its [keywords].
-## Keys: 1-5 pick a card, left click a cell to walk there, right click for full details (or to cancel
-## a picked card), arrows move (1 s), mouse wheel or Q/E flip through the hand, Space wait 1 s.
+## Keys: left click a cell to walk there, right click for full details (or to cancel
+## a picked card), Q W E R T pick a card, 1-5 game speed, arrows move (1 s), mouse wheel or A/D flip
+## through the hand, Space wait 1 s.
 
 const SEC_REAL := 0.5    # real seconds one game second takes when replayed
 const HUB := Vector2(640, 800)   # hand wheel hub on screen
@@ -32,7 +33,10 @@ var drag_manual := false  # started on the hero: the path follows the mouse cell
 var drag_from := Vector2i(-1, -1)
 var drag_px := Vector2.ZERO   # where the button went down: dragging right of it confirms, left cancels
 const DRAG_GO := 24.0
-var focus_at := -9.0     # when the window got focus: the click that focuses it never walks
+var focus_at := -9.0
+var speed := 1.0             # playback speed of passing seconds (1-5 keys)
+var speed_shown_at := -9.0
+var hand_cursor: HandCursor     # when the window got focus: the click that focuses it never walks
 var log_i := 0           # battle log entries already shown as flashes
 
 func _ready() -> void:
@@ -72,6 +76,7 @@ func _ready() -> void:
 	hand_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hand_layer.draw.connect(_draw_wheel)
 	add_child(hand_layer)
+	hand_cursor = HandCursor.new()
 	tips = VBoxContainer.new()
 	tips.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tips.add_theme_constant_override("separation", 4)
@@ -81,6 +86,7 @@ func _ready() -> void:
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(overlay)
+	add_child(hand_cursor)
 	_new_run()
 
 func _new_run() -> void:
@@ -102,7 +108,7 @@ func _step_replay(delta: float) -> void:
 			_refresh()
 		return
 	board.replaying = true
-	replay_t += delta / SEC_REAL
+	replay_t += delta * speed / SEC_REAL
 	while replay_t >= 1.0 and shown_frame < fr.size() - 1:
 		replay_t -= 1.0
 		shown_frame += 1
@@ -189,6 +195,7 @@ func _process(delta: float) -> void:
 	real += delta
 	if flow == null or flow.battle == null:
 		return
+	board.play_speed = speed
 	_step_replay(delta)
 	_flashes()
 	spin = move_toward(spin, 0.0, delta * 1.6)
@@ -213,6 +220,8 @@ func _refresh() -> void:
 	board.preview = {}
 	board.aiming = selected >= 0
 	timeline.battle = b
+	if b.human() != null:
+		hand_cursor.set_actor(b.human().def_id)
 	_update_span()
 	_build_hand()
 	hand_layer.visible = flow.phase == "battle"
@@ -257,8 +266,45 @@ func _fan_pos(f: float) -> Vector2:
 	var d := f - 2.0
 	return Vector2(640 + d * FAN_GAP, FAN_Y + d * d * 7.0)
 
+## Behind the hand: the whole deck as a ring of card backs seen in 3D. The five cards in front
+## are the ring's window; a flip turns the ring by one card. Roughly how many are left shows by how
+## full the ring is, no number.
 func _draw_wheel() -> void:
-	pass
+	if flow == null or flow.phase != "battle" or flow.battle.belt == null:
+		return
+	var ring: Array = flow.battle.belt.ring()
+	var n := ring.size()
+	if n == 0:
+		return
+	var c := Vector2(640, 742)
+	var rad := Vector2(440, 40)
+	var step := TAU / maxf(float(n), 5.0)
+	var slide := spin / WHEEL_STEP
+	var backs := []
+	for i in n:
+		# card 0..4 sit at the front (the hand); the rest run round the back
+		var ang := PI / 2 + (float(i) - 2.0 + slide) * step
+		var depth := sin(ang)   # 1 = front, -1 = far back
+		if depth > 0.35:
+			continue   # those are the cards in hand, drawn as real cards
+		backs.append([depth, ang])
+	backs.sort_custom(func(a, b): return a[0] < b[0])
+	var dim := 0.45 if selected >= 0 else 1.0
+	for e in backs:
+		var depth: float = e[0]
+		var ang: float = e[1]
+		var k := 0.55 + 0.25 * (depth + 1.0) / 1.35
+		var p := c + Vector2(cos(ang) * rad.x, -absf(sin(ang)) * rad.y - 50)
+		var sz := Vector2(44, 66) * k
+		var shade := (0.45 + 0.4 * (depth + 1.0) / 1.35) * dim
+		hand_layer.draw_set_transform(p, cos(ang) * -0.25, Vector2.ONE)
+		var rr := Rect2(-sz / 2, sz)
+		hand_layer.draw_rect(rr.grow(2), Color(Art.INK, shade))
+		hand_layer.draw_rect(rr, Color(Color("#5a3a2a").darkened(0.2), shade))
+		hand_layer.draw_rect(rr.grow(-3), Color(Color("#2a2733"), shade), false, 2)
+		var dm := PackedVector2Array([Vector2(0, -sz.y * 0.22), Vector2(sz.x * 0.2, 0), Vector2(0, sz.y * 0.22), Vector2(-sz.x * 0.2, 0)])
+		hand_layer.draw_colored_polygon(dm, Color(Art.GOLD, 0.55 * shade))
+		hand_layer.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _layout_hand() -> void:
 	hand_layer.queue_redraw()
@@ -347,6 +393,15 @@ func _draw_hud() -> void:
 	var dk := Vector2(1214, 20)
 	if dr >= 1:
 		hud.draw_arc(dk, 17, -PI / 2, -PI / 2 + TAU * (1.0 - float(dr) / maxf(1.0, float(b.round_time()))), 24, Color("#9cc8f0"), 2)
+	# game speed (1-5 keys): shown while it is not normal, and big for a moment after a change
+	if speed != 1.0 or real - speed_shown_at < 1.2:
+		var big := real - speed_shown_at < 1.2
+		var st := "×%s" % (str(int(speed)) if speed == floor(speed) else str(speed))
+		var sp := Vector2(1150, 26) if not big else Vector2(600, 90)
+		var fs := 16 if not big else 34
+		var a := 1.0 if not big else clampf(1.2 - (real - speed_shown_at), 0.0, 1.0)
+		hud.draw_string_outline(font, sp, st, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 6, Color(Art.INK, a))
+		hud.draw_string(font, sp, st, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(Art.GOLD, a))
 	# small icons (top-right): help and deck size
 	var hc := Vector2(1252, 20)
 	hud.draw_circle(hc, 12, Art.INK)
@@ -781,14 +836,36 @@ func _roll(dir: int) -> void:
 	var leaving: CardView = cards[out_slot] if out_slot >= 0 and out_slot < cards.size() else null
 	if flow.battle.cmd_wheel(dir):
 		spin = -WHEEL_STEP * dir
+		hand_cursor.sweep(dir)
 		if leaving != null:
 			_drop_out(out_slot, dir)
 	_after()
 
+const SPEEDS := [1.0, 1.5, 2.0, 3.0, 4.0]
+const CARD_KEYS := [KEY_Q, KEY_W, KEY_E, KEY_R, KEY_T]
+
 func _unhandled_input(ev: InputEvent) -> void:
-	if flow == null or flow.phase != "battle" or not (ev is InputEventKey) or not ev.pressed or ev.echo or _replaying():
+	if flow == null or flow.phase != "battle" or not (ev is InputEventKey) or not ev.pressed or ev.echo:
+		return
+	# physical keys, so a Korean input mode (ㅂㅈㄷㄱㅅ) still works
+	var pk: int = ev.physical_keycode
+	if pk >= KEY_1 and pk <= KEY_5:
+		# game speed: only how fast passing seconds play back, never the rules
+		speed = SPEEDS[pk - KEY_1]
+		speed_shown_at = real
+		return
+	if _replaying():
 		return
 	var b := flow.battle
+	if pk in CARD_KEYS:
+		var i: int = CARD_KEYS.find(pk)
+		if i < cards.size() and cards[i] != null:
+			hand_cursor.pick(cards[i])
+			_on_card_picked(cards[i])
+		return
+	if pk == KEY_A or pk == KEY_D:
+		_roll(-1 if pk == KEY_A else 1)
+		return
 	match ev.keycode:
 		KEY_UP: b.cmd_move(Vector2i.UP)
 		KEY_DOWN: b.cmd_move(Vector2i.DOWN)
@@ -797,17 +874,6 @@ func _unhandled_input(ev: InputEvent) -> void:
 		KEY_SPACE:
 			selected = -1
 			b.cmd_wait(1)
-		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5:
-			var i: int = ev.keycode - KEY_1
-			if i < cards.size() and cards[i] != null:
-				_on_card_picked(cards[i])
-			return
-		KEY_Q:
-			_roll(-1)
-			return
-		KEY_E:
-			_roll(1)
-			return
 		KEY_ESCAPE:
 			selected = -1
 		_: return

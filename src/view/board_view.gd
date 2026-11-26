@@ -25,6 +25,7 @@ var replay_k := 0.0              # 0..1 inside the replayed second
 var moving: Dictionary = {}      # uid -> Vector2i: where a gliding unit is heading
 var casts: Array = []            # {uid, cells, t0, t1}: the player's card being performed
 var _speed := 0.14
+var play_speed := 1.0            # game speed (1-5 keys): effects run faster with the replay
 var self_aim := false            # a picked card with no target (방어 ...): the hero lights up instead of an arc
 var forecast := 0                # seconds the picked action will take: warnings landing in them stand out
 var walk_path: Array = []        # cells of the walk being dragged
@@ -80,7 +81,7 @@ func fit() -> void:
 func _process(delta: float) -> void:
 	real += delta
 	# effects crawl while the player thinks (bullet time) and ramp back up when time flows
-	var target := 1.0 if replaying else (0.0 if battle != null and battle.borrowing() else 0.14)
+	var target := play_speed if replaying else (0.0 if battle != null and battle.borrowing() else 0.14)
 	_speed = move_toward(_speed, target, delta * 4.0)
 	clock += delta * _speed
 	if battle != null:
@@ -472,7 +473,7 @@ func _draw_top() -> void:
 		tl.draw_string_outline(font, pp - Vector2(10, 0), q["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 6, Color(0, 0, 0, col.a))
 		tl.draw_string(font, pp - Vector2(10, 0), q["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 	# bullet time: a cool veil and slowly drifting motes while the player decides
-	var calm := 1.0 - clampf((_speed - 0.14) / 0.86, 0.0, 1.0)
+	var calm := 1.0 - clampf((_speed - 0.14) / maxf(0.01, play_speed - 0.14), 0.0, 1.0)
 	if calm > 0.01:
 		# a slow breathing vignette closes in while time is held
 		var breath := 0.5 + 0.5 * sin(real * 1.4)
