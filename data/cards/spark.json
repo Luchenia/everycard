@@ -15,10 +15,8 @@
    "id": "fire"
   },
   {
-   "op": "var",
-   "id": "temperature",
-   "mode": "add",
-   "value": 60
+   "op": "state",
+   "id": "heat"
   }
  ],
  "desc": "1×1 칸을 [화염] 상태로 만듭니다.",

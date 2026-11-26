@@ -11,13 +11,9 @@
  },
  "parts": [
   {
-   "op": "var",
-   "id": "gravity",
-   "mode": "set",
-   "value": {
-    "dir": "toward_aim",
-    "strength": 3
-   }
+   "op": "state",
+   "id": "pull",
+   "dir": "toward_aim"
   }
  ],
  "desc": "3×3 범위의 상대를 중앙으로 끌어당깁니다.",

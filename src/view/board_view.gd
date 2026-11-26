@@ -230,15 +230,21 @@ func _draw() -> void:
 			draw_rect(Rect2(at, Vector2(C, 4 * S)), Color("#1b1824"))
 			continue
 		_tile(stone, _floor[p.y * W + p.x], at)
-		var temp := float(g.get_var(p, "temperature"))
 		if m == "fire":
 			var fl := 0.5 + 0.5 * sin(clock * 6.0 + p.x * 2.1 + p.y)
 			draw_rect(Rect2(at, Vector2(C, C)), Color(0.47, 0.12, 0.04, 0.3 + 0.1 * fl))
 			draw_rect(Rect2(at + Vector2(1, 1), Vector2(C - 2, C - 2)), Color(1.0, 0.47, 0.16, 0.45 + 0.15 * fl), false, S)
-		elif temp > 70.0:
-			draw_rect(Rect2(at, Vector2(C, C)), Color(1, 0.35, 0.1, clampf((temp - 70.0) / 400.0, 0.0, 0.3)))
-		elif temp < -5.0 and m != "ice":
-			draw_rect(Rect2(at, Vector2(C, C)), Color(0.6, 0.85, 1.0, clampf((-5.0 - temp) / 150.0, 0.0, 0.35)))
+		elif g.has_state(p, "blaze"):
+			var fb := 0.5 + 0.5 * sin(clock * 5.0 + p.x * 1.7 + p.y)
+			draw_rect(Rect2(at, Vector2(C, C)), Color(1, 0.25, 0.05, 0.32 + 0.08 * fb))
+		elif g.has_state(p, "heat"):
+			draw_rect(Rect2(at, Vector2(C, C)), Color(1, 0.4, 0.12, 0.22))
+		elif g.has_state(p, "cold") and m != "ice":
+			draw_rect(Rect2(at, Vector2(C, C)), Color(0.6, 0.85, 1.0, 0.24))
+		if g.has_state(p, "damp") and m != "water":
+			draw_rect(Rect2(at, Vector2(C, C)), Color(0.35, 0.6, 1.0, 0.12))
+		if g.has_state(p, "slick") and m != "oil" and m != "ice":
+			draw_rect(Rect2(at + Vector2(2, 2) * S, Vector2(C - 4 * S, C - 4 * S)), Color(0.85, 0.95, 0.75, 0.14))
 	# shadow cast by the back wall
 	draw_rect(Rect2(origin + off, Vector2(W * C, 6 * S)), Color(0, 0, 0, 0.27))
 	draw_rect(Rect2(origin + off, Vector2(3 * S, H * C)), Color(0, 0, 0, 0.18))
@@ -512,7 +518,7 @@ func _aura(tl: Control, p: Vector2i, off: Vector2) -> void:
 	var r := cell_rect(p)
 	r.position += off
 	var c := r.get_center()
-	var ts := float(g.get_var(p, "time_scale"))
+	var ts := g.time_scale(p)
 	if ts <= 0.01:
 		tl.draw_rect(r.grow(-S), Color(0.75, 0.75, 0.85, 0.28))
 		_hand(tl, c, 0.0, Color(0.9, 0.9, 1.0, 0.7))
@@ -548,8 +554,29 @@ func _aura(tl: Control, p: Vector2i, off: Vector2) -> void:
 		var fl := 0.8 + 0.2 * sin(real * 7.0 + p.x)
 		for k3 in 3:
 			tl.draw_circle(c, (10 + k3 * 5) * S, Color(1.0, 0.55, 0.15, 0.035 * fl))
-	var ch := float(g.get_var(p, "charge"))
-	if ch > 0.5:
+	if g.has_state(p, "heat") or g.has_state(p, "blaze"):
+		# heat shimmer rising off the floor
+		for k7 in 2:
+			var hk := fmod(real * 0.7 + k7 * 0.5 + p.x * 0.31, 1.0)
+			var hx := c.x + (k7 * 8 - 4) * S + sin(hk * 9.0) * S
+			tl.draw_line(Vector2(hx, r.end.y - 4 * S - hk * 14 * S), Vector2(hx + S, r.end.y - 8 * S - hk * 14 * S), Color(1.0, 0.7, 0.35, 0.5 * sin(hk * PI)), S)
+	if g.has_state(p, "cold"):
+		for k8 in 3:
+			var fk := fmod(real * 0.25 + k8 / 3.0 + p.y * 0.2, 1.0)
+			tl.draw_rect(Rect2(r.position + Vector2((k8 * 9 + p.x * 5) % 20 + 4, fk * 20 + 2) * S, Vector2(S, S)), Color(0.9, 0.97, 1.0, 0.8 * sin(fk * PI)))
+	if g.has_state(p, "miasma") or g.has_state(p, "curse"):
+		var mc := Color(0.45, 0.85, 0.3, 0.16) if g.has_state(p, "miasma") else Color(0.6, 0.3, 0.8, 0.18)
+		for k9 in 3:
+			var ph2 := real * 0.5 + k9 * 2.1 + p.x * 1.1 + p.y * 0.7
+			tl.draw_circle(c + Vector2(sin(ph2) * 6, cos(ph2 * 0.7) * 3 + 3) * S, (5 + 1.5 * sin(ph2 * 1.4)) * S, mc)
+	if g.has_state(p, "echo"):
+		var ek := fmod(real * 1.2, 1.0)
+		tl.draw_arc(c, (3 + ek * 10) * S, 0, TAU, 20, Color(1, 1, 1, 0.5 * (1.0 - ek)), S)
+	if g.has_state(p, "mana"):
+		for k10 in 3:
+			var mk := fmod(real * 0.5 + k10 / 3.0 + p.x * 0.17, 1.0)
+			tl.draw_rect(Rect2(c + Vector2((k10 - 1) * 7, 8 - mk * 18) * S, Vector2(S, S)), Color(0.55, 0.75, 1.0, 0.9 * sin(mk * PI)))
+	if g.has_state(p, "charged"):
 		var seed := int(real * 10.0) + p.x * 7 + p.y * 13
 		if seed % 3 != 0:
 			var a := r.position + Vector2((seed * 37) % 10 + 3, (seed * 11) % 6 + 2) * S
@@ -580,8 +607,7 @@ func _aura(tl: Control, p: Vector2i, off: Vector2) -> void:
 			for k4 in 2:
 				_sprite(tl, gs, Vector2.ZERO, Art.frame_at(gs, real, k4 * 11 + p.x), Color(1, 1, 1, 0.75 - k4 * 0.35))
 			tl.draw_set_transform(Vector2.ZERO, 0.0)
-	var pr := float(g.get_var(p, "pressure"))
-	if pr > 2.0:
+	if g.has_state(p, "crush") or g.has_state(p, "collapse"):
 		var k2 := fmod(real * 0.8, 1.0)
 		tl.draw_rect(r.grow(-S - k2 * 6 * S), Color(0.8, 0.7, 1.0, 0.5 * (1.0 - k2)), false, S)
 

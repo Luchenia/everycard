@@ -577,20 +577,12 @@ func _cell_tips(p: Vector2i, full := false) -> void:
 	var m := b.grid.get_material(p)
 	if cellmap.has(m) and kw.has(cellmap[m]):
 		_tip(cellmap[m], kw[cellmap[m]], Color("#9cc8f0"))
-	var ts := float(b.grid.get_var(p, "time_scale"))
-	if ts > 1.05:
-		_tip("가속", kw.get("가속", ""), Color("#9cc8f0"))
-	elif ts <= 0.01:
-		_tip("멈춘 시간", kw.get("멈춘 시간", ""), Color("#9cc8f0"))
-	elif ts < 0.95 and m != "swamp":
-		_tip("느림", kw.get("느림", ""), Color("#9cc8f0"))
-	# what the floor marks are: sparks, wind streaks, crushing rings
-	if float(b.grid.get_var(p, "charge")) > 0.5:
-		_tip("전기", kw.get("전기", ""), Color("#ffe14a"))
-	if EnvironmentStep.force_at(b.grid, p).length() > 0.4:
-		_tip("돌풍", kw.get("돌풍", ""), Color("#9cc8f0"))
-	if float(b.grid.get_var(p, "pressure")) > 2.0:
-		_tip("짓누름", kw.get("짓누름", ""), Color("#9cc8f0"))
+	# the cell's states: [열기], [돌풍], [멈춘 시간]...
+	var smap: Dictionary = b.catalog.keywords.get("state", {})
+	for sid in b.grid.states_at(p):
+		var nm: String = smap.get(sid, "")
+		if nm != "" and kw.has(nm):
+			_tip(nm, kw[nm], Color("#ffe14a") if sid == "charged" else Color("#9cc8f0"))
 	if full:
 		# keywords named inside those explanations too, one level deep
 		var titles := []

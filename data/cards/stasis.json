@@ -11,12 +11,10 @@
  },
  "parts": [
   {
-   "op": "var",
-   "id": "time_scale",
-   "mode": "set",
-   "value": 0,
-   "turns": 2
+   "op": "state",
+   "id": "stopped",
+   "secs": 4
   }
  ],
- "desc": "칸 하나의 시간을 4초 동안 멈춤 (그 칸의 적은 행동 불가)"
+ "desc": "1×1 칸을 4초 동안 [멈춘 시간] 상태로 만듭니다."
 }

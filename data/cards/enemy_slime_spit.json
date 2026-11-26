@@ -16,11 +16,9 @@
    "kind": "physical"
   },
   {
-   "op": "var",
-   "id": "friction",
-   "mode": "add",
-   "value": -0.6
+   "op": "state",
+   "id": "slick"
   }
  ],
- "desc": "피해 4, 마찰 감소"
+ "desc": "4의 피해를 입히고 그 칸을 [미끄러움] 상태로 만듭니다."
 }

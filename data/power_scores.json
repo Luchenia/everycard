@@ -94,23 +94,6 @@
       "flat": 0
     }
   },
-  "var_weights": {
-    "temperature": 0.05,
-    "pressure": 1.0,
-    "gravity": 1.5,
-    "wind": 1.0,
-    "humidity": 3.0,
-    "oxygen": 3.0,
-    "friction": 2.0,
-    "charge": 0.6,
-    "radiation": 1.0,
-    "magnetism": 1.0,
-    "light": 0.5,
-    "noise": 0.4,
-    "toxicity": 0.8,
-    "time_scale": 6.0,
-    "mana_density": 5.0
-  },
   "material_scores": {
     "none": 1.0,
     "water": 1.5,
@@ -141,5 +124,24 @@
     "frozen": 5.0,
     "shadowed": 3
   },
-  "status_turn_factor": 0.6
+  "status_turn_factor": 0.6,
+  "state_scores": {
+    "heat": 4,
+    "blaze": 8,
+    "cold": 4,
+    "damp": 2,
+    "charged": 5,
+    "slick": 3,
+    "crush": 5,
+    "collapse": 9,
+    "gust": 5,
+    "pull": 5,
+    "haste": 6,
+    "slow": 5,
+    "stopped": 9,
+    "miasma": 4,
+    "curse": 5,
+    "echo": 3,
+    "mana": 6
+  }
 }

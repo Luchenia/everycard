@@ -24,10 +24,11 @@ func run() -> void:
 	var me := mk("me", 1, 0); var foe := mk("foe", 2, 1)
 	var ctx := ctx_with([me, foe])
 	ctx.grid.place_unit(me, Vector2i(1, 3)); ctx.grid.place_unit(foe, Vector2i(5, 3))
-	# var add over circle
-	Effects.apply(card([{"op": "var", "id": "temperature", "mode": "add", "value": 50}], "circle", 1), me, Vector2i(4, 3), ctx)
-	assert_eq(ctx.grid.get_var(Vector2i(5, 4), "temperature"), 70.0, "circle heated")
-	assert_eq(ctx.grid.get_var(Vector2i(7, 3), "temperature"), 20.0, "outside untouched")
+	# state over circle
+	Effects.apply(card([{"op": "state", "id": "heat"}], "circle", 1), me, Vector2i(4, 3), ctx)
+	assert_true(ctx.grid.has_state(Vector2i(5, 4), "heat"), "circle heated")
+	assert_true(not ctx.grid.has_state(Vector2i(7, 3), "heat"), "outside untouched")
+	ctx.grid.cell_states.map(func(st): st.clear())
 	# damage respects resistance
 	foe.resist = {"fire": 0.5}
 	Effects.apply(card([{"op": "damage", "amount": 10, "kind": "fire"}]), me, Vector2i(5, 3), ctx)
@@ -70,11 +71,15 @@ func run() -> void:
 	Effects.tick_pending(c3)
 	assert_eq(c3.grid.get_material(Vector2i(4, 4)), "fire", "delayed fire placed")
 	assert_eq(c3.pending.size(), 0, "pending cleared")
-	# sustained var (turns) reapplies each tick
-	Effects.apply(card([{"op": "var", "id": "noise", "mode": "add", "value": 2, "turns": 2}]), u3, Vector2i(6, 6), c3)
-	assert_eq(c3.grid.get_var(Vector2i(6, 6), "noise"), 2.0, "applied now")
-	Effects.tick_pending(c3); Effects.tick_pending(c3); Effects.tick_pending(c3)
-	assert_eq(c3.grid.get_var(Vector2i(6, 6), "noise"), 6.0, "reapplied for 2 ticks only")
+	# a state with its own seconds
+	Effects.apply(card([{"op": "state", "id": "echo", "secs": 6}]), u3, Vector2i(6, 6), c3)
+	assert_eq(float(c3.grid.cell_states[c3.grid.idx(Vector2i(6, 6))]["echo"]["left"]), 6.0, "lasts the seconds the card says")
+	# lightning on a puddle runs through the whole puddle at once
+	for x in range(0, 4):
+		c3.grid.set_material(Vector2i(x, 6), "water")
+	Effects.apply(card([{"op": "state", "id": "charged"}]), u3, Vector2i(0, 6), c3)
+	assert_true(c3.grid.has_state(Vector2i(3, 6), "charged"), "charge flows through water")
+	assert_true(not c3.grid.has_state(Vector2i(4, 5), "charged"), "dry floor does not carry it")
 	# swap with boss refused
 	var boss := Actor.from_def({"id": "boss", "hp": 100, "is_boss": true, "deck": ["y"]}, 7)
 	c3.actors.append(boss); c3.grid.place_unit(boss, Vector2i(5, 5))
@@ -124,8 +129,9 @@ func run() -> void:
 	assert_eq(seen, ["belt", "time_budget"], "meta forwarded")
 	test_cardify_state()
 	# gravity toward aim
-	Effects.apply(card([{"op": "var", "id": "gravity", "mode": "set", "value": {"dir": "toward_aim", "strength": 3}}], "circle", 1), a5, Vector2i(4, 3), c5)
-	assert_eq(c5.grid.get_var(Vector2i(3, 3), "gravity"), Vector2(3, 0), "pulls toward aim")
+	Effects.apply(card([{"op": "state", "id": "pull", "dir": "toward_aim"}], "circle", 1), a5, Vector2i(4, 3), c5)
+	assert_eq(c5.grid.state_dir(Vector2i(3, 3), "pull"), Vector2i.RIGHT, "pulls toward aim")
+	assert_eq(c5.grid.state_dir(Vector2i(4, 3), "pull"), Vector2i.ZERO, "centre has no pull")
 
 func test_cardify_state() -> void:
 	var cx := ctx_with([])

@@ -22,10 +22,8 @@
  "signature": "enemy_ember",
  "trait": [
   {
-   "op": "var",
-   "id": "temperature",
-   "mode": "add",
-   "value": 60
+   "op": "state",
+   "id": "heat"
   }
  ]
 }

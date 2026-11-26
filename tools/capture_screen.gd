@@ -47,8 +47,14 @@ func _process(_d: float) -> bool:
 			_put(b, 8, 5, "crystal")
 			_put(b, 11, 4, "metal")
 			_put(b, 5, 3, "wall")
-			b.grid.set_var(Vector2i(9, 6), "time_scale", 1.5)
-			b.grid.set_var(Vector2i(10, 6), "time_scale", 0.4)
+			b.grid.add_state(Vector2i(9, 6), "haste")
+			b.grid.add_state(Vector2i(10, 6), "slow")
+			# one cell of each kind of state, so the shot shows how they read
+			var demo := [["heat", 3, 6], ["cold", 4, 6], ["damp", 5, 6], ["charged", 6, 6], ["miasma", 7, 6], ["curse", 3, 7], ["mana", 4, 7], ["echo", 5, 7], ["slick", 6, 7]]
+			for d in demo:
+				b.grid.add_state(Vector2i(d[1], d[2]), d[0], 30.0)
+			b.grid.add_state(Vector2i(7, 7), "heat", 30.0)
+			b.grid.add_state(Vector2i(7, 7), "heat", 30.0, Vector2i.ZERO, true)
 			for k in 8:
 				if not b.telegraphs.is_empty():
 					break

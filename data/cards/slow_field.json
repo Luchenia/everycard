@@ -13,12 +13,6 @@
   {
    "op": "material",
    "id": "swamp"
-  },
-  {
-   "op": "var",
-   "id": "time_scale",
-   "mode": "set",
-   "value": 0.5
   }
  ],
  "desc": "2×2 범위를 [늪] 상태로 만듭니다.",

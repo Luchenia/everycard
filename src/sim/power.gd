@@ -16,7 +16,7 @@ static func area_cells(shape: String, size: int) -> int:
 		"all": return Grid.W * Grid.H
 	return 1
 
-const AREA_OPS := ["var", "material", "damage", "status", "push", "heal"]
+const AREA_OPS := ["state", "material", "damage", "status", "push", "heal"]
 
 static func part_score(part: Dictionary, catalog: Catalog) -> float:
 	var pw: Dictionary = catalog.power
@@ -37,22 +37,11 @@ static func part_score(part: Dictionary, catalog: Catalog) -> float:
 		"material": return float(pw.get("material_scores", {}).get(part.get("id", ""), 2))
 		"status":
 			return float(pw.get("status_scores", {}).get(part.get("id", ""), 3)) * maxf(1.0, float(part.get("turns", 1))) * float(pw.get("status_turn_factor", 0.6))
-		"var":
-			var w := float(pw.get("var_weights", {}).get(part.get("id", ""), 1))
-			var v = part.get("value", 0)
-			var mag := 0.0
-			if v is Dictionary:
-				mag = float(v.get("strength", 1))
-			elif v is Array:
-				mag = Vector2(v[0], v[1]).length()
-			else:
-				mag = absf(float(v))
-				var dflt = catalog.variables.get(part.get("id", ""), {}).get("default", 0)
-				if part.get("mode", "add") == "set" and not (dflt is Array):
-					mag = absf(float(v) - float(dflt))
-				elif part.get("mode", "add") == "mul":
-					mag = absf(float(v) - 1.0) * 10.0
-			return w * mag
+		"state":
+			# a state held longer than its usual seconds scores more
+			var base_secs := float(catalog.states.get(part.get("id", ""), {}).get("secs", 4))
+			var held := maxf(1.0, float(part.get("secs", base_secs)) / maxf(1.0, base_secs))
+			return float(pw.get("state_scores", {}).get(part.get("id", ""), 3)) * held
 	return float(o.get("flat", 0))
 
 static func score(card: Dictionary, catalog: Catalog) -> float:

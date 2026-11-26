@@ -11,10 +11,9 @@
  },
  "parts": [
   {
-   "op": "var",
-   "id": "pressure",
-   "mode": "add",
-   "value": 5
+   "op": "state",
+   "id": "crush",
+   "dir": "away_aim"
   }
  ],
  "desc": "3×3 범위를 [짓누름] 상태로 만듭니다.",

@@ -15,10 +15,8 @@
    "id": "water"
   },
   {
-   "op": "var",
-   "id": "humidity",
-   "mode": "add",
-   "value": 0.5
+   "op": "state",
+   "id": "damp"
   }
  ],
  "desc": "3×3 범위를 [젖음] 상태로 만듭니다.",

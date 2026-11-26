@@ -13,10 +13,8 @@
  },
  "parts": [
   {
-   "op": "var",
-   "id": "time_scale",
-   "mode": "set",
-   "value": 1.5
+   "op": "state",
+   "id": "haste"
   }
  ],
  "pool": "common"

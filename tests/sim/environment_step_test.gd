@@ -11,26 +11,41 @@ func unit(mass := 1.0, hp := 30) -> Actor:
 func run() -> void:
 	c = Catalog.load_dir("res://data")
 	var rng := SimRng.new(1)
-	# (a) heat spreads
+	# (a) states wear off after their seconds and do not spread
 	var g := fresh(); var log := []
 	var mid := Vector2i(4, 3)
-	g.set_var(mid, "temperature", 200)
+	g.add_state(mid, "echo")   # 2 seconds
+	g.add_state(Vector2i(0, 0), "curse")
 	EnvironmentStep.run(g, c, rng, log)
-	assert_true(g.get_var(Vector2i(5, 3), "temperature") > 20.0, "neighbor warmed")
-	assert_true(g.get_var(mid, "temperature") < 200.0, "center cooled")
-	assert_eq(g.get_var(Vector2i(0, 0), "temperature"), 20.0, "far cell unchanged")
-	# (b) water boils into steam and raises pressure
+	assert_true(not g.has_state(mid, "echo"), "echo gone after 2s")
+	assert_true(not g.has_state(Vector2i(5, 3), "echo"), "states do not spread")
+	assert_true(g.has_state(Vector2i(0, 0), "curse"), "curse still there")
+	# (b) heat boils water into steam, which leaves damp air
 	g = fresh(); log = []
-	g.set_material(mid, "water"); g.set_var(mid, "temperature", 150)
+	g.set_material(mid, "water"); g.add_state(mid, "heat")
 	EnvironmentStep.run(g, c, rng, log)
 	assert_eq(g.get_material(mid), "steam", "water -> steam")
-	assert_true(g.get_var(mid, "pressure") > 1.5, "pressure rose")
-	# oil next to fire with oxygen high explodes
+	assert_true(g.has_state(mid, "damp"), "steam leaves damp")
+	# cold freezes water; heat on oil lights it; damp puts fire out
 	g = fresh(); log = []
-	g.set_material(Vector2i(3, 3), "fire"); g.set_material(mid, "oil"); g.set_var(mid, "oxygen", 2)
+	g.set_material(mid, "water"); g.add_state(mid, "cold")
+	g.set_material(Vector2i(1, 1), "oil"); g.add_state(Vector2i(1, 1), "heat")
+	g.set_material(Vector2i(7, 5), "fire"); g.add_state(Vector2i(7, 5), "damp")
 	EnvironmentStep.run(g, c, rng, log)
-	assert_eq(g.get_material(mid), "fire", "oil -> fire")
-	assert_true(log.any(func(e): return e["t"] == "reaction" and e["data"]["id"] == "oil_explodes_near_fire"), "explosion logged")
+	assert_eq(g.get_material(mid), "ice", "water + cold -> ice")
+	assert_eq(g.get_material(Vector2i(1, 1)), "fire", "oil + heat -> fire")
+	assert_eq(g.get_material(Vector2i(7, 5)), "steam", "fire + damp -> steam")
+	# a wet unit in cold air freezes
+	g = fresh(); log = []
+	var fz := unit()
+	g.place_unit(fz, mid); fz.add_status("wet", 3); g.add_state(mid, "cold")
+	EnvironmentStep.run(g, c, rng, log, false)
+	assert_true(fz.has_status("frozen"), "wet + cold -> frozen")
+	# collapse breaks walls
+	g = fresh(); log = []
+	g.set_material(mid, "wall"); g.add_state(mid, "crush"); g.add_state(mid, "crush", -1.0, Vector2i.ZERO, true)
+	EnvironmentStep.run(g, c, rng, log)
+	assert_eq(g.get_material(mid), "none", "collapse breaks the wall")
 	# (c) cyclic reactions stop at cap
 	var cyc := Catalog.load_dir("res://data")
 	cyc.reactions = [
@@ -51,9 +66,9 @@ func run() -> void:
 	var u := unit()
 	g.place_unit(u, Vector2i(2, 3))
 	g.set_material(Vector2i(5, 3), "wall")
-	g.set_var(Vector2i(2, 3), "gravity", Vector2(3, 0))
+	g.add_state(Vector2i(2, 3), "pull", -1.0, Vector2i.RIGHT)
 	for x in range(2, 5):
-		g.set_var(Vector2i(x, 3), "friction", 0)
+		g.add_state(Vector2i(x, 3), "slick")
 	EnvironmentStep.run(g, c, rng, log)
 	assert_eq(u.pos, Vector2i(4, 3), "stopped before wall")
 	assert_true(u.hp < 30, "collision damage")
@@ -61,7 +76,7 @@ func run() -> void:
 	g = fresh(); log = []
 	var heavy := unit(5.0)
 	g.place_unit(heavy, Vector2i(2, 3))
-	g.set_var(Vector2i(2, 3), "gravity", Vector2(3, 0))
+	g.add_state(Vector2i(2, 3), "pull", -1.0, Vector2i.RIGHT)
 	EnvironmentStep.run(g, c, rng, log)
 	assert_eq(heavy.pos, Vector2i(2, 3), "heavy unit stays")
 	# (e) pushed into void dies
@@ -69,7 +84,7 @@ func run() -> void:
 	var v := unit()
 	g.place_unit(v, Vector2i(2, 3))
 	g.set_material(Vector2i(3, 3), "void")
-	g.set_var(Vector2i(2, 3), "gravity", Vector2(2, 0))
+	g.add_state(Vector2i(2, 3), "pull", -1.0, Vector2i.RIGHT)
 	EnvironmentStep.run(g, c, rng, log)
 	assert_eq(v.hp, 0, "fell into void")
 	# boss into void: 30% damage, stays at previous cell
@@ -77,20 +92,21 @@ func run() -> void:
 	var b := Actor.from_def({"id": "b", "hp": 100, "mass": 1, "is_boss": true, "deck": []}, 2)
 	g.place_unit(b, Vector2i(2, 3))
 	g.set_material(Vector2i(3, 3), "void")
-	g.set_var(Vector2i(2, 3), "gravity", Vector2(2, 0))
+	g.add_state(Vector2i(2, 3), "pull", -1.0, Vector2i.RIGHT)
 	EnvironmentStep.run(g, c, rng, log)
 	assert_eq(b.hp, 70, "boss loses 30%")
 	assert_eq(b.pos, Vector2i(2, 3), "boss stays on edge")
-	# (f) time_scale 0 freezes the cell
+	# (f) stopped time holds other states in the cell, but itself runs out
 	g = fresh(); log = []
-	g.set_var(mid, "temperature", 200); g.set_var(mid, "time_scale", 0)
+	g.add_state(mid, "echo"); g.add_state(mid, "stopped")
 	EnvironmentStep.run(g, c, rng, log)
-	assert_eq(g.get_var(mid, "temperature"), 200.0, "frozen cell keeps temperature")
-	assert_true(g.get_var(mid, "time_scale") > 0.0, "time_scale itself recovers")
+	assert_true(g.has_state(mid, "echo"), "stopped cell keeps its echo")
+	EnvironmentStep.run(g, c, rng, log)
+	assert_true(not g.has_state(mid, "stopped"), "stopped time ends after 4s")
 	# water + charge shocks unit standing there; statuses tick
 	g = fresh(); log = []
 	var w := unit()
-	g.place_unit(w, mid); g.set_material(mid, "water"); g.set_var(mid, "charge", 6)
+	g.place_unit(w, mid); g.set_material(mid, "water"); g.add_state(mid, "charged")
 	EnvironmentStep.run(g, c, rng, log)
 	assert_true(w.hp < 30, "shocked in water")
 	assert_true(w.has_status("wet"), "wet from water")

@@ -28,10 +28,8 @@
  "signature": "enemy_tide",
  "trait": [
   {
-   "op": "var",
-   "id": "humidity",
-   "mode": "add",
-   "value": 0.5
+   "op": "state",
+   "id": "damp"
   }
  ]
 }

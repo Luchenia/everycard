@@ -11,10 +11,8 @@
  },
  "parts": [
   {
-   "op": "var",
-   "id": "charge",
-   "mode": "add",
-   "value": 8
+   "op": "state",
+   "id": "charged"
   },
   {
    "op": "damage",
@@ -22,7 +20,7 @@
    "kind": "electric"
   }
  ],
- "desc": "1×1 칸에 번개를 떨어뜨려 5의 피해를 입힙니다. [감전]",
+ "desc": "1×1 칸에 번개를 떨어뜨려 5의 피해를 입히고 [전기] 상태로 만듭니다.",
  "family": "magic",
  "pool": "mage"
 }

@@ -11,13 +11,9 @@
  },
  "parts": [
   {
-   "op": "var",
-   "id": "wind",
-   "mode": "set",
-   "value": {
-    "dir": "along",
-    "strength": 4
-   }
+   "op": "state",
+   "id": "gust",
+   "dir": "along"
   }
  ],
  "desc": "앞쪽 4칸을 [돌풍] 상태로 만듭니다.",

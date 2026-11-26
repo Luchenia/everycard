@@ -1,6 +1,7 @@
 class_name EnvironmentStep
 extends RefCounted
-## One world update: statuses tick, reactions (capped) on the state cards just made, forces move units, then spread/recover.
+## One world update: statuses tick, reactions (capped) where states and materials meet, forces move
+## units, then cell states run down their seconds.
 
 const CHAIN_CAP := 8
 const MAX_SLIDE := 9
@@ -8,19 +9,20 @@ const STATUS_DOT := {"burning": [3, "fire"], "poisoned": [2, "toxic"]}
 
 ## tick_statuses: statuses (and their damage over time) advance once per round, so Battle passes
 ## false for the step between the player's and the enemy's turn.
-static func run(grid: Grid, catalog: Catalog, rng: SimRng, log: Array, tick_statuses := true) -> void:
+static func run(grid: Grid, catalog: Catalog, rng: SimRng, log: Array, tick_statuses := true, secs := 2.0) -> void:
 	if tick_statuses:
 		_tick_statuses(grid, log)
+	flow_charge(grid)
 	var mat_before: Array = grid.material.duplicate()
 	for p in grid.all_cells():
 		if _ts(grid, p) > 0.0:
 			_react_cell(grid, catalog, p, log, mat_before)
 	_enter_effects(grid, log)
 	_forces(grid, log)
-	_spread_and_recover(grid, catalog)
+	_run_down(grid, catalog, secs)
 
 static func _ts(grid: Grid, p: Vector2i) -> float:
-	return float(grid.get_var(p, "time_scale")) if grid.values.has("time_scale") else 1.0
+	return grid.time_scale(p)
 
 static func _tick_statuses(grid: Grid, log: Array) -> void:
 	for u in grid.units:
@@ -35,36 +37,37 @@ static func _tick_statuses(grid: Grid, log: Array) -> void:
 			if u.statuses[s] <= 0:
 				u.statuses.erase(s)
 
-static func _spread_and_recover(grid: Grid, catalog: Catalog) -> void:
-	var before := {}
-	for id in grid.values:
-		before[id] = grid.values[id].duplicate()
-	for id in grid.values:
-		var def: Dictionary = catalog.variables[id]
-		var spread := float(def.get("spread", 0))
-		var recover := float(def.get("recover", 0))
-		var dflt = grid.default_of(id)
-		for p in grid.all_cells():
-			var i := grid.idx(p)
-			var ts := float(before["time_scale"][i]) if before.has("time_scale") else 1.0
-			if id == "time_scale":
-				# time itself always drifts back toward normal, even when frozen
-				grid.set_var(p, id, before[id][i] + (dflt - before[id][i]) * recover)
+## States wear off after their seconds. Time states always run down (stopped time ends);
+## anything else in a cell runs at that cell's time speed, so it lingers in stopped time.
+static func _run_down(grid: Grid, catalog: Catalog, secs: float) -> void:
+	for p in grid.all_cells():
+		var st: Dictionary = grid.cell_states[grid.idx(p)]
+		if st.is_empty():
+			continue
+		var ts := grid.time_scale(p)
+		for id in st.keys():
+			var timeish: bool = catalog.states.get(id, {}).has("time")
+			st[id]["left"] = float(st[id]["left"]) - secs * (1.0 if timeish else ts)
+			if float(st[id]["left"]) <= 0.0:
+				st.erase(id)
+
+## [전기] runs at once through every touching cell of water, swamp, metal or [습기].
+static func flow_charge(grid: Grid) -> void:
+	var todo: Array = []
+	for p in grid.all_cells():
+		if grid.has_state(p, "charged"):
+			todo.append(p)
+	while not todo.is_empty():
+		var p: Vector2i = todo.pop_back()
+		var left := float(grid.cell_states[grid.idx(p)]["charged"]["left"])
+		for n in grid.neighbors4(p):
+			if grid.has_state(n, "charged") or not conducts(grid, n):
 				continue
-			if ts <= 0.0:
-				continue
-			var v = before[id][i]
-			if spread > 0.0:
-				var nbs := grid.neighbors4(p)
-				var acc = v * 0
-				for n in nbs:
-					var k := spread
-					if def.get("spread_by_conductivity", false):
-						k *= minf(float(grid.catalog.materials[grid.material[i]]["conductivity"]), float(grid.catalog.materials[grid.material[grid.idx(n)]]["conductivity"]))
-					acc += (before[id][grid.idx(n)] - v) * k / 4.0
-				v += acc * minf(ts, 2.0)
-			v += (dflt - v) * minf(recover * ts, 1.0)
-			grid.set_var(p, id, v)
+			grid.add_state(n, "charged", left)
+			todo.append(n)
+
+static func conducts(grid: Grid, p: Vector2i) -> bool:
+	return grid.get_material(p) in ["water", "swamp", "metal"] or grid.has_state(p, "damp")
 
 static func _cond_ok(grid: Grid, p: Vector2i, cond: Dictionary, mat_snapshot: Array = []) -> bool:
 	if cond.has("material"):
@@ -76,16 +79,10 @@ static func _cond_ok(grid: Grid, p: Vector2i, cond: Dictionary, mat_snapshot: Ar
 			if m == cond["neighbor_material"]:
 				return true
 		return false
-	if cond.has("var"):
-		var v = grid.get_var(p, cond["var"])
-		if v is Vector2:
-			v = v.length()
-		var x := float(cond.get("value", 0))
-		match cond.get("op", ">="):
-			"<": return v < x
-			">=": return v >= x
-			"==": return is_equal_approx(v, x)
-			"!=": return not is_equal_approx(v, x)
+	if cond.has("state"):
+		return grid.has_state(p, cond["state"])
+	if cond.has("no_state"):
+		return not grid.has_state(p, cond["no_state"])
 	if cond.has("status"):
 		var u = grid.unit_at(p)
 		return u != null and u.has_status(cond["status"])
@@ -128,8 +125,10 @@ static func _apply_actions(grid: Grid, p: Vector2i, r: Dictionary, log: Array) -
 	for act in r.get("then", []):
 		if act.has("set_material"):
 			grid.set_material(p, act["set_material"])
-		elif act.has("add_var"):
-			grid.add_var(p, act["add_var"], act["value"])
+		elif act.has("add_state"):
+			grid.add_state(p, act["add_state"])
+		elif act.has("clear_state"):
+			grid.clear_state(p, act["clear_state"])
 		elif act.has("status_to_units"):
 			var u = grid.unit_at(p)
 			if u != null:
@@ -150,15 +149,18 @@ static func friction_at(grid: Grid, p: Vector2i) -> float:
 	var md := grid.mat_def(p)
 	if md.has("friction_override"):
 		return float(md["friction_override"])
-	return float(grid.get_var(p, "friction"))
+	return 0.2 if grid.has_state(p, "slick") else 1.0
 
+## The push on a unit in this cell: [돌풍], [중력] and [짓누름] each shove along their direction.
 static func force_at(grid: Grid, p: Vector2i) -> Vector2:
-	var f: Vector2 = grid.get_var(p, "gravity") + grid.get_var(p, "wind")
-	var here := float(grid.get_var(p, "pressure"))
-	for n in grid.neighbors4(p):
-		var diff := here - float(grid.get_var(n, "pressure"))
-		if diff > 0:
-			f += Vector2(n - p) * diff * 0.5
+	var f := Vector2.ZERO
+	if not grid.in_bounds(p):
+		return f
+	var st: Dictionary = grid.cell_states[grid.idx(p)]
+	for id in st:
+		var push := float(grid.catalog.states.get(id, {}).get("push", 0))
+		if push > 0.0:
+			f += Vector2(st[id]["dir"]) * push
 	return f
 
 static func _forces(grid: Grid, log: Array) -> void:

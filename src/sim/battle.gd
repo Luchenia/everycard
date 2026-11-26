@@ -44,8 +44,8 @@ func _init(cat: Catalog, seed_value: int, player_def: String, enemy_defs: Array,
 	var lay := layout if not layout.is_empty() else _random_layout(enemy_defs.size())
 	for m in lay.get("materials", []):
 		grid.set_material(Vector2i(m[0], m[1]), m[2])
-	for v in lay.get("vars", []):
-		grid.set_var(Vector2i(v[0], v[1]), v[2], v[3])
+	for v in lay.get("states", []):
+		grid.add_state(Vector2i(v[0], v[1]), v[2], float(v[3]) if v.size() > 3 else -1.0)
 	var pl := Actor.from_def(catalog.actors[player_def], 1)
 	pl.team = 0
 	pl.controller = "human"
@@ -79,16 +79,13 @@ func _random_layout(n_enemies: int) -> Dictionary:
 		reserved.append(Vector2i(e[0], e[1]))
 	var mats := []
 	var pool := ["water", "water", "oil", "wall", "crystal", "ice"]
-	var vars := []
 	for k in int(Grid.W * Grid.H / 9):
 		var p := Vector2i(2 + rng.next_int(maxi(1, Grid.W - 4)), rng.next_int(Grid.H))
 		if reserved.has(p):
 			continue
 		var m: String = pool[rng.next_int(pool.size())]
 		mats.append([p.x, p.y, m])
-		if m == "ice":
-			vars.append([p.x, p.y, "temperature", -40])
-	return {"player_pos": player, "enemy_pos": enemies, "materials": mats, "vars": vars}
+	return {"player_pos": player, "enemy_pos": enemies, "materials": mats}
 
 func human() -> Actor:
 	for a in actors:
@@ -183,7 +180,7 @@ static func dist(a: Vector2i, b: Vector2i) -> int:
 	return absi(a.x - b.x) + absi(a.y - b.y)
 
 func _ts(p: Vector2i) -> float:
-	return float(grid.get_var(p, "time_scale"))
+	return grid.time_scale(p)
 
 ## Real seconds an action of `base` seconds takes for this actor (slow cells stretch it, fast
 ## cells shrink it). -1 when the actor stands in stopped time and cannot act.
@@ -246,9 +243,9 @@ func cmd_ability(aim: Vector2i) -> bool:
 	_spend(secs, func():
 		match h.base_ability:
 			"heat_self":
-				grid.add_var(h.pos, "temperature", 60)
+				grid.add_state(h.pos, "heat")
 				for n in grid.neighbors4(h.pos):
-					grid.add_var(n, "temperature", 30)
+					grid.add_state(n, "heat")
 			"pull1":
 				var u = grid.unit_at(aim)
 				if u != null and dist(u.pos, h.pos) > 1:
@@ -449,7 +446,7 @@ func _world_second() -> void:
 			Effects.apply_part(t["part"], t["user"], t["aim"], t["cells"], ctx)
 		_after_action()
 	if now % int(cfg["env_every"]) == 0:
-		EnvironmentStep.run(grid, catalog, rng, log, true)
+		EnvironmentStep.run(grid, catalog, rng, log, true, float(cfg["env_every"]))
 		Effects.tick_pending(ctx, true)
 		_after_action()
 	if phase != "player":

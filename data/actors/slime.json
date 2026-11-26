@@ -23,10 +23,8 @@
  "signature": "enemy_slime_spit",
  "trait": [
   {
-   "op": "var",
-   "id": "humidity",
-   "mode": "add",
-   "value": 0.4
+   "op": "state",
+   "id": "damp"
   }
  ],
  "leap": true

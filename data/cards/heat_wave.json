@@ -11,11 +11,9 @@
  },
  "parts": [
   {
-   "op": "var",
-   "id": "temperature",
-   "mode": "add",
-   "value": 100
+   "op": "state",
+   "id": "heat"
   }
  ],
- "desc": "3×3 온도 +100"
+ "desc": "3×3 범위를 [열기] 상태로 만듭니다."
 }

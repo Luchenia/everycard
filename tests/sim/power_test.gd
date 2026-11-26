@@ -15,6 +15,6 @@ func run() -> void:
 	var swap := {"id": "s", "time": 6, "weight": 2, "rarity": "epic", "target": {"shape": "cell", "range": 3}, "parts": [{"op": "swap_bodies"}]}
 	assert_true(Power.check(swap, c)["ok"], "body swap fits epic")
 	assert_true(not Power.check(swap.merged({"rarity": "basic"}, true), c)["ok"], "body swap too strong for basic")
-	var sustained := {"id": "z", "time": 3, "rarity": "common", "target": {"shape": "cell"}, "parts": [{"op": "var", "id": "time_scale", "mode": "set", "value": 0.3}]}
-	var longer := sustained.duplicate(true); longer["parts"][0]["turns"] = 3
-	assert_true(Power.score(longer, c) > Power.score(sustained, c), "turns raise score")
+	var sustained := {"id": "z", "time": 3, "rarity": "common", "target": {"shape": "cell"}, "parts": [{"op": "state", "id": "slow"}]}
+	var longer := sustained.duplicate(true); longer["parts"][0]["secs"] = 24
+	assert_true(Power.score(longer, c) > Power.score(sustained, c), "longer state raises score")

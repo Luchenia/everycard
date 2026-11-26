@@ -70,14 +70,14 @@ func test_card_time_advances_clock() -> void:
 
 func test_slow_cell_doubles_duration() -> void:
 	var b := Battle.new(c, 1, "hero", ["idle"], LAYOUT)
-	b.grid.set_var(b.human().pos, "time_scale", 0.5)
+	b.grid.add_state(b.human().pos, "slow")
 	assert_eq(b.action_secs(1, b.human()), 2, "half speed: 1s action takes 2s")
 	b.cmd_move(Vector2i.UP)
 	assert_eq(b.now, 2, "slow move took 2 seconds")
 
 func test_frozen_player_can_wait() -> void:
 	var b := Battle.new(c, 1, "hero", ["idle"], LAYOUT)
-	b.grid.set_var(b.human().pos, "time_scale", 0.0)
+	b.grid.add_state(b.human().pos, "stopped")
 	assert_true(not b.cmd_move(Vector2i.UP), "frozen player cannot move")
 	assert_true(not b.cmd_play(0, b.actors[1].pos), "frozen player cannot play")
 	assert_true(b.cmd_wait(), "but can wait")
@@ -198,7 +198,7 @@ func _scripted(seed_value: int) -> Array:
 	b.cmd_wheel(1)
 	b.cmd_play(1, b.actors[1].pos)
 	b.cmd_wait(5)
-	return [b.now, b.grid.duplicate_state()["values"], b.grid.material, b.actors.map(func(a): return [a.hp, a.pos])]
+	return [b.now, b.grid.duplicate_state()["states"], b.grid.material, b.actors.map(func(a): return [a.hp, a.pos])]
 
 func test_determinism() -> void:
 	assert_eq(_scripted(7), _scripted(7), "same seed + same commands -> same result")

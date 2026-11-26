@@ -1,8 +1,8 @@
 class_name Catalog
 extends RefCounted
-## All game data loaded from res://data. Variables/materials/cards/actors keyed by id.
+## All game data loaded from res://data. States/materials/cards/actors keyed by id.
 
-var variables: Dictionary = {}
+var states: Dictionary = {}     # data/states.json: on/off cell states ([열기], [돌풍]...)
 var materials: Dictionary = {}
 var reactions: Array = []
 var cards: Dictionary = {}
@@ -14,7 +14,7 @@ var keywords: Dictionary = {}   # data/keywords.json: hover explanations for [ke
 
 static func load_dir(path: String) -> Catalog:
 	var c := Catalog.new()
-	c.variables = _index(_read(path + "/variables.json", []))
+	c.states = _index(_read(path + "/states.json", []))
 	c.materials = _index(_read(path + "/materials.json", []))
 	c.reactions = _read(path + "/reactions.json", [])
 	c.power = _read(path + "/power_scores.json", {})
@@ -53,14 +53,15 @@ func validate() -> Array[String]:
 	var errs: Array[String] = []
 	for r in reactions:
 		for cond in r.get("when", []):
-			if cond.has("var") and not variables.has(cond["var"]):
-				errs.append("reaction %s: unknown var %s" % [r["id"], cond["var"]])
+			if cond.has("state") and not states.has(cond["state"]):
+				errs.append("reaction %s: unknown state %s" % [r["id"], cond["state"]])
 			for key in ["material", "neighbor_material"]:
 				if cond.has(key) and not materials.has(cond[key]):
 					errs.append("reaction %s: unknown material %s" % [r["id"], cond[key]])
 		for act in r.get("then", []):
-			if act.has("add_var") and not variables.has(act["add_var"]):
-				errs.append("reaction %s: unknown var %s" % [r["id"], act["add_var"]])
+			for key in ["add_state", "clear_state"]:
+				if act.has(key) and not states.has(act[key]):
+					errs.append("reaction %s: unknown state %s" % [r["id"], act[key]])
 			if act.has("set_material") and not materials.has(act["set_material"]):
 				errs.append("reaction %s: unknown material %s" % [r["id"], act["set_material"]])
 	return errs

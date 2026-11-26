@@ -5,9 +5,9 @@ extends RefCounted
 ## Parts a cardified enemy's state adds to its card ("foe:<actor>|<tag>,<tag>").
 const STATE_TAG_PARTS := {
 	"burning": [{"op": "material", "id": "fire"}],
-	"wet": [{"op": "var", "id": "humidity", "mode": "add", "value": 0.5}],
-	"shocked": [{"op": "var", "id": "charge", "mode": "add", "value": 5}],
-	"poisoned": [{"op": "var", "id": "toxicity", "mode": "add", "value": 4}],
+	"wet": [{"op": "state", "id": "damp"}],
+	"shocked": [{"op": "state", "id": "charged"}],
+	"poisoned": [{"op": "state", "id": "miasma"}],
 	"guard": [{"op": "status", "id": "guard", "turns": 3, "shape": "self"}],
 }
 
@@ -125,41 +125,34 @@ static func _units_in(ctx: BattleContext, cells: Array) -> Array:
 			out.append(u)
 	return out
 
-static func _vec_value(v, cell: Vector2i, user, aim: Vector2i) -> Vector2:
-	if v is Array:
-		return Vector2(v[0], v[1])
-	if v is Dictionary:
-		var s := float(v.get("strength", 1))
-		match v.get("dir", "along"):
-			"toward_aim":
-				var d := Vector2(aim - cell)
-				if d == Vector2.ZERO:
-					return Vector2.ZERO
-				return Vector2(Targeting.dir_to(cell, aim)) * s
-			"away_aim":
-				if cell == aim:
-					return Vector2.ZERO
-				return Vector2(Targeting.dir_to(aim, cell)) * s
-			_:
-				return Vector2(Targeting.dir_to(user.pos, aim)) * s
-	return Vector2.ZERO
+## Direction of a directional state in one cell: "along" the user's facing, "toward_aim" (pulled
+## in to the centre) or "away_aim" (pushed out from it). The centre itself gets none.
+static func state_dir(how: String, cell: Vector2i, user, aim: Vector2i) -> Vector2i:
+	match how:
+		"toward_aim":
+			return Vector2i.ZERO if cell == aim else Targeting.dir_to(cell, aim)
+		"away_aim":
+			return Vector2i.ZERO if cell == aim else Targeting.dir_to(aim, cell)
+		_:
+			return Targeting.dir_to(user.pos, aim)
 
 static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx: BattleContext) -> void:
 	var g := ctx.grid
 	match part.get("op", ""):
-		"var":
+		"state":
+			# cell states are on or off; laying one on itself makes its stronger form ([열기] -> [업화])
 			var id: String = part["id"]
-			var vector: bool = ctx.catalog.variables.get(id, {}).get("kind", "") == "vector"
+			var sdef: Dictionary = ctx.catalog.states.get(id, {})
 			for p in cells:
-				var val = _vec_value(part["value"], p, user, aim) if vector else float(part["value"])
-				match part.get("mode", "add"):
-					"add": g.add_var(p, id, val)
-					"set": g.set_var(p, id, val)
-					"mul": g.set_var(p, id, g.get_var(p, id) * (val if not vector else 1.0))
-			if int(part.get("turns", 0)) > 0:
-				var again := part.duplicate()
-				again.erase("turns")
-				ctx.pending.append({"mode": "sustain", "ticks": int(part["turns"]), "part": again, "user": user, "aim": aim, "cells": cells.duplicate()})
+				var d := Vector2i.ZERO
+				if sdef.get("dir", false):
+					d = state_dir(part.get("dir", "along"), p, user, aim)
+				if part.get("clear", false):
+					g.clear_state(p, id)
+				else:
+					g.add_state(p, id, float(part.get("secs", -1)), d, true)
+			if id == "charged":
+				EnvironmentStep.flow_charge(g)
 		"material":
 			for p in cells:
 				var md: Dictionary = ctx.catalog.materials.get(part["id"], {})
@@ -186,7 +179,7 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 			if hit.is_empty():
 				_log(ctx, "no_target", "대상 없음")
 			for u in hit:
-				var amt := int(round(float(part["amount"]) * float(g.get_var(u.pos, "mana_density"))))
+				var amt := int(round(float(part["amount"]) * (1.5 if g.has_state(u.pos, "mana") else 1.0)))
 				for k in maxi(1, int(part.get("hits", 1))):
 					if u.alive():
 						hit(ctx, user, u, amt, part.get("kind", "physical"))
@@ -440,10 +433,11 @@ static func _beam(part: Dictionary, user, aim: Vector2i, ctx: BattleContext, dir
 	var path: Array = []
 	for i in length:
 		var nxt := p + d
-		var grav: Vector2 = g.get_var(p, "gravity") if g.in_bounds(p) else Vector2.ZERO
+		# [중력] bends light sideways toward its pull
+		var grav := Vector2(g.state_dir(p, "pull"))
 		var perp := Vector2(d.y, d.x)
 		var bend := grav.dot(perp)
-		if absf(bend) >= 1.0:
+		if absf(bend) >= 0.5:
 			var shifted := nxt + Vector2i(perp) * signi(int(round(bend)))
 			if g.in_bounds(shifted):
 				nxt = shifted
@@ -470,7 +464,7 @@ static func _beam(part: Dictionary, user, aim: Vector2i, ctx: BattleContext, dir
 				reflected = true
 				continue
 			break
-		if float(g.get_var(nxt, "time_scale")) <= 0.0:
+		if g.time_scale(nxt) <= 0.0:
 			_log(ctx, "beam_frozen", "광선이 멈춘 시간에 갇힘", {"cell": nxt})
 			ctx.pending.append({"mode": "delay", "ticks": 1, "part": {"op": "damage", "amount": part["damage"], "kind": part.get("kind", "energy")}, "user": user, "aim": nxt, "cells": [nxt]})
 			break
