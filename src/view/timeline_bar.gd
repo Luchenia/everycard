@@ -62,7 +62,7 @@ func _draw() -> void:
 			continue
 		var d: int = a.next_at - battle.now
 		if d >= 1 and d <= SECS:
-			_face(a, Vector2(x0 + d * w, y - 14), 0.45)
+			_face(a, Vector2(x0 + d * w, y - 9), 0.45)
 	# enemy blows
 	for t in battle.telegraphs:
 		var d2: int = int(t["fire_at"]) - battle.now
@@ -77,13 +77,13 @@ func _draw() -> void:
 		draw_colored_polygon(PackedVector2Array([Vector2(xt, y - 7), Vector2(xt + 6, y), Vector2(xt, y + 7), Vector2(xt - 6, y)]), Color(col, 0.7 + 0.3 * pulse))
 		var a2: Actor = battle._actor(t["actor_uid"])
 		if a2:
-			_face(a2, Vector2(xt, y - 14), 1.0)
+			_face(a2, Vector2(xt, y - 11), 1.0)
 
 func _face(a: Actor, at: Vector2, alpha: float) -> void:
 	var st := Art.unit(Art.unit_id(a))
 	if st.is_empty():
 		return
 	var src := Art.frame_src(st, 0)
-	var k := minf(1.0, 20.0 / src.size.y)
+	var k := minf(1.0, 14.0 / src.size.y)   # stays inside the bar: the bar sits at the top of the window
 	var sz := src.size * k
 	draw_texture_rect_region(st["tex"], Rect2(at - Vector2(sz.x / 2, sz.y), sz), src, Color(1, 1, 1, alpha))
