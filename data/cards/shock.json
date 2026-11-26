@@ -23,5 +23,6 @@
   }
  ],
  "desc": "1×1 칸에 번개를 떨어뜨려 5의 피해를 입힙니다. [감전]",
- "family": "magic"
+ "family": "magic",
+ "pool": "mage"
 }

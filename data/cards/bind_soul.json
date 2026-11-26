@@ -15,5 +15,6 @@
   }
  ],
  "desc": "약해진 적을 카드로 [봉인]합니다.",
- "family": "magic"
+ "family": "magic",
+ "pool": "mage"
 }

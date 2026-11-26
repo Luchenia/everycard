@@ -16,5 +16,6 @@
   }
  ],
  "desc": "다음 시간 비용이 2만큼 감소합니다.",
- "family": "magic"
+ "family": "neutral",
+ "pool": "common"
 }

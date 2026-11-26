@@ -100,8 +100,8 @@ func shatter(p: Vector2i) -> void:
 	oneshots.append({"fx": "crystal_shatter", "ground": cell_rect(p).get_center(), "t0": real, "flip": false, "life": life})
 
 ## A beam's real path (bounces off mirrors, turns at crystal gems): glow plus core, fading out.
-func beam(from: Vector2i, path: Array, bends: Array) -> void:
-	beams.append({"from": from, "path": path, "bends": bends, "t0": real})
+func beam(from: Vector2i, path: Array, bends: Array, kind := "energy") -> void:
+	beams.append({"from": from, "path": path, "bends": bends, "t0": real, "kind": kind})
 
 func shake(secs := 0.25) -> void:
 	shake_until = real + secs
@@ -360,7 +360,23 @@ func _draw_top() -> void:
 			if c3 in q["bends"]:
 				pt.y -= 7 * S
 			pts.append(pt)
-		if pts.size() >= 2:
+		if pts.size() >= 2 and q.get("kind", "energy") == "physical":
+			# a thrown blade: a short steel streak running along the path
+			var total := 0.0
+			for i3 in pts.size() - 1:
+				total += pts[i3].distance_to(pts[i3 + 1])
+			var head := minf(1.0, k3 * 2.2) * total
+			var run := 0.0
+			for i3 in pts.size() - 1:
+				var seg := pts[i3].distance_to(pts[i3 + 1])
+				if run + seg >= head:
+					var hp3 := pts[i3].lerp(pts[i3 + 1], (head - run) / maxf(seg, 0.01))
+					var dir3 := (pts[i3 + 1] - pts[i3]).normalized()
+					tl.draw_line(hp3 - dir3 * 14 * S, hp3, Color(0.8, 0.85, 0.95, 0.35 * (1.0 - k3)), 2 * S)
+					tl.draw_line(hp3 - dir3 * 4 * S, hp3, Color(0.95, 0.97, 1.0, 1.0 - k3 * 0.5), S)
+					break
+				run += seg
+		elif pts.size() >= 2:
 			tl.draw_polyline(pts, Color(1.0, 0.95, 0.7, 0.45 * (1.0 - k3)), 3 * S)
 			tl.draw_polyline(pts, Color(1, 1, 1, 1.0 - k3), S)
 		for b3 in q["bends"]:

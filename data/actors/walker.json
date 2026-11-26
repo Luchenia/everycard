@@ -9,21 +9,15 @@
   "strike",
   "strike",
   "strike",
+  "strike",
+  "guard",
   "guard",
   "guard",
   "step",
   "step",
-  "spark",
-  "frost",
   "oil_spill",
-  "shock",
-  "gust",
-  "crystallize",
-  "haste_field",
-  "bullet_time",
-  "mirror",
-  "laser",
-  "rain"
+  "throw_dagger",
+  "flint"
  ],
  "signature": "strike",
  "trait": [
@@ -32,5 +26,9 @@
    "dist": 1,
    "dir": "away"
   }
+ ],
+ "pools": [
+  "wanderer",
+  "common"
  ]
 }

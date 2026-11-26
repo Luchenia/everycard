@@ -17,5 +17,6 @@
   }
  ],
  "desc": "붙어 있는 적에게 6의 피해를 입힙니다.",
- "family": "sword"
+ "family": "sword",
+ "pool": "wanderer"
 }

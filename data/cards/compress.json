@@ -18,5 +18,6 @@
   }
  ],
  "desc": "3×3 범위를 [짓누름] 상태로 만듭니다.",
- "family": "magic"
+ "family": "magic",
+ "pool": "mage"
 }

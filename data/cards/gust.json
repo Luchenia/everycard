@@ -21,5 +21,6 @@
   }
  ],
  "desc": "앞쪽 4칸을 [돌풍] 상태로 만듭니다.",
- "family": "magic"
+ "family": "magic",
+ "pool": "mage"
 }

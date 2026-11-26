@@ -21,5 +21,6 @@
   }
  ],
  "desc": "3×3 범위의 상대를 중앙으로 끌어당깁니다.",
- "family": "magic"
+ "family": "magic",
+ "pool": "mage"
 }

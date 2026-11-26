@@ -1,7 +1,7 @@
 extends TestCase
 
 const BASIC := ["strike", "guard", "step", "frost", "oil_spill", "spark", "rain", "shock", "gravity_well", "hurry", "bullet_time", "crystallize",
-	"gust", "compress", "laser", "mirror", "slow_field", "haste_field", "body_swap", "pickpocket", "bind_soul"]
+	"gust", "compress", "laser", "mirror", "slow_field", "haste_field", "body_swap", "pickpocket", "bind_soul", "throw_dagger", "flint", "sweep"]
 
 func run() -> void:
 	var c := Catalog.load_dir("res://data")

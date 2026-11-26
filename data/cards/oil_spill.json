@@ -16,5 +16,6 @@
   }
  ],
  "desc": "3×3 범위를 [기름] 상태로 만듭니다.",
- "family": "neutral"
+ "family": "neutral",
+ "pool": "wanderer"
 }

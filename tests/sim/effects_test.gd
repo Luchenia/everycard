@@ -42,15 +42,16 @@ func run() -> void:
 	Effects.apply(card([{"op": "push", "dist": 3, "dir": "away"}]), me, Vector2i(5, 3), ctx)
 	assert_eq(foe.pos, Vector2i(6, 3), "stopped at wall")
 	assert_true(foe.hp < hp0, "collision damage on push")
-	# beam reflects off ice and hits unit behind the user
+	# beam reflects off a mirror straight back along its path
 	var c2 := ctx_with([])
 	var shooter := mk("s", 3, 0); var behind := mk("b", 4, 1)
 	c2.actors = [shooter, behind]
 	c2.grid.place_unit(shooter, Vector2i(3, 1)); c2.grid.place_unit(behind, Vector2i(1, 1))
 	c2.grid.set_material(Vector2i(5, 1), "metal")
 	Effects.apply(card([{"op": "beam", "damage": 8, "kind": "energy", "length": 8}]), shooter, Vector2i(6, 1), c2)
-	assert_eq(behind.hp, 22, "reflected beam hits unit behind")
-	assert_eq(shooter.hp, 30, "beam passes through its shooter")
+	# a mirror sends it straight back: the shooter is the first thing in its way
+	assert_eq(shooter.hp, 22, "reflected beam comes back to its shooter")
+	assert_eq(behind.hp, 30, "and stops there")
 	# if: condition false -> nothing
 	var c3 := ctx_with([])
 	var u3 := mk("u", 5, 0); var f3 := mk("f", 6, 1)

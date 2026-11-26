@@ -15,5 +15,6 @@
   }
  ],
  "desc": "적의 카드 한 장을 훔칩니다.",
- "family": "neutral"
+ "family": "neutral",
+ "pool": "wanderer"
 }

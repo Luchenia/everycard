@@ -33,10 +33,15 @@ func _start_battle() -> void:
 	battle._rebuild_belt()
 	phase = "battle"
 
+## Reward cards: the player-card list, limited to the pools of the body being played
+## (방랑자: wanderer + common; 점화, 서릿발 ... are kept for a mage-type character).
 func _reward_pool() -> Array:
+	var allowed: Array = catalog.actors.get(body_def, {}).get("pools", [])
 	var pool := []
-	for id in catalog.cards:
-		if not String(id).begins_with("enemy_"):
+	for id in catalog.player_cards:
+		if not catalog.cards.has(id):
+			continue
+		if allowed.is_empty() or catalog.cards[id].get("pool", "common") in allowed:
 			pool.append(id)
 	pool.sort()
 	return pool

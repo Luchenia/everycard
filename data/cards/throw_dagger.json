@@ -1,0 +1,23 @@
+{
+ "id": "throw_dagger",
+ "name": "투척 단검",
+ "time": 2,
+ "weight": 1,
+ "rarity": "basic",
+ "target": {
+  "shape": "line",
+  "range": 4,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "beam",
+   "damage": 4,
+   "kind": "physical",
+   "length": 4
+  }
+ ],
+ "desc": "일직선으로 단검을 던져 처음 맞는 적에게 4의 피해를 입힙니다.",
+ "family": "sword",
+ "pool": "wanderer"
+}

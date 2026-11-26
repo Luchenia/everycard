@@ -14,7 +14,7 @@ const NAME_PLATE := Rect2(12, 67, 67, 8)
 const TEXT_BOX := Rect2(8, 79, 71, 49)
 const MAX_LINES := 6
 const BADGE := Vector2(77, 11)   # top-right
-const FXMAP := {"strike": "slash", "spark": "fire", "crystallize": "crystal", "rain": "water_splash", "mirror": "mirror",
+const FXMAP := {"sweep": "slash", "flint": "fire", "strike": "slash", "spark": "fire", "crystallize": "crystal", "rain": "water_splash", "mirror": "mirror",
 	"frost": "ice_glint", "slow_field": "swamp_bubbles", "gust": "gust_right", "shock": "shock", "hurry": "haste", "haste_field": "haste"}
 
 var card_id := ""
@@ -198,7 +198,8 @@ func _picture(aw: Rect2) -> void:
 			var ofs := Vector2(0, 0)
 			if card_id == "strike":
 				ofs = Vector2(sz.x * 0.15, 0)
-			var fi := Art.frame_at(st, real if st["loop"] else fmod(real, st["n"] / st["fps"] + 0.6))
+			# one-shot sheets (slash) hold a readable frame instead of playing out to an empty tail
+			var fi: int = Art.frame_at(st, real) if st["loop"] else int(st["n"] * 0.35)
 			draw_texture_rect_region(st["tex"], Rect2(aw.get_center() - sz / 2 + ofs, sz), Art.frame_src(st, fi))
 			return
 	var zz := zoom / 2.0
@@ -281,6 +282,14 @@ func _art(a: Rect2) -> void:
 			draw_arc(c, 20, PI * 1.1, PI * 1.9, 12, Color("#ff8a6a"), 3)
 			draw_circle(c + Vector2(-20, 0), 6, w)
 			draw_circle(c + Vector2(20, 0), 6, Color("#ff8a6a"))
+		"throw_dagger":
+			var tip := c + Vector2(26, -10)
+			var dd := Vector2(1, -0.4).normalized()
+			for i in 3:
+				draw_line(c + Vector2(-44 + i * 10, 8 - i * 4), c + Vector2(-30 + i * 10, 2 - i * 4), Color(w, 0.25 + i * 0.15), 2)
+			draw_colored_polygon(PackedVector2Array([tip, tip - dd * 26 + Vector2(-dd.y, dd.x) * 5, tip - dd * 26 - Vector2(-dd.y, dd.x) * 5]), Color("#d8dde6"))
+			draw_line(tip - dd * 26 + Vector2(-dd.y, dd.x) * 9, tip - dd * 26 - Vector2(-dd.y, dd.x) * 9, Color("#b08840"), 4)
+			draw_line(tip - dd * 26, tip - dd * 40, Color("#6a4a2a"), 5)
 		"pickpocket":
 			draw_rect(Rect2(c - Vector2(10, 18), Vector2(22, 30)), Art.PAPER)
 			draw_rect(Rect2(c - Vector2(10, 18), Vector2(22, 30)), Art.INK, false, 2)

@@ -19,5 +19,6 @@
  ],
  "desc": "일직선으로 빛을 쏘아 10의 피해를 입힙니다. [반사] [탈진]",
  "exhaust": 2,
- "family": "magic"
+ "family": "magic",
+ "pool": "mage"
 }

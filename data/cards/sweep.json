@@ -1,0 +1,22 @@
+{
+ "id": "sweep",
+ "name": "휘두르기",
+ "time": 3,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "cone",
+  "range": 1,
+  "size": 2
+ },
+ "parts": [
+  {
+   "op": "damage",
+   "amount": 5,
+   "kind": "physical"
+  }
+ ],
+ "desc": "앞쪽 부채꼴 범위에 5의 피해를 입힙니다.",
+ "family": "sword",
+ "pool": "wanderer"
+}

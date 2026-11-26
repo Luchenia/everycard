@@ -22,5 +22,6 @@
   }
  ],
  "desc": "1×1 칸을 [화염] 상태로 만듭니다.",
- "family": "magic"
+ "family": "magic",
+ "pool": "mage"
 }

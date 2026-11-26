@@ -151,7 +151,7 @@ func _flashes() -> void:
 				board.shatter(e["data"]["cell"])
 				board.shake(0.12)
 			"beam":
-				board.beam(e["data"].get("from", Vector2i(-1, -1)), e["data"].get("path", []), e["data"].get("bends", []))
+				board.beam(e["data"].get("from", Vector2i(-1, -1)), e["data"].get("path", []), e["data"].get("bends", []), e["data"].get("kind", "energy"))
 			"telegraph_hit":
 				board.burst(e["data"].get("cells", []), Art.DANGER)
 				board.attack(int(e["data"].get("user", -1)), e["data"].get("cells", []))

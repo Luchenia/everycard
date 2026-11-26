@@ -323,7 +323,14 @@ static func _beam(part: Dictionary, user, aim: Vector2i, ctx: BattleContext) -> 
 				nxt = shifted
 		if not g.in_bounds(nxt):
 			break
-		if _crystal_at(g, nxt) and deflects < 3:
+		var solid: bool = part.get("kind", "energy") in ["physical", "true"]
+		if solid and g.get_material(nxt) == "crystal":
+			# thrown weapons and arrows break a crystal and stop there
+			g.set_material(nxt, "none")
+			path.append(nxt)
+			shatter(ctx, nxt, null)
+			break
+		if not solid and _crystal_at(g, nxt) and deflects < 3:
 			d = _deflect(ctx, d)
 			deflects += 1
 			path.append(nxt)
@@ -344,14 +351,17 @@ static func _beam(part: Dictionary, user, aim: Vector2i, ctx: BattleContext) -> 
 		p = nxt
 		path.append(p)
 		var u = g.unit_at(p)
-		if u != null and u != user and u.alive():
+		if u != null and (u != user or reflected or deflects > 0) and u.alive():
 			var dealt: int = u.take_damage(int(part["damage"]), part.get("kind", "energy"))
 			_log(ctx, "damage", "%s 광선 %d" % [u.name, dealt], {"uid": u.uid, "amount": dealt})
+			if u.shattered:
+				u.shattered = false
+				shatter(ctx, u.pos, u)
 			break
 		if g.mat_def(p).get("reflective", false):
 			d = -d
 			reflected = true
-	_log(ctx, "beam", "광선", {"path": path, "from": user.pos, "bends": bends})
+	_log(ctx, "beam", "광선", {"path": path, "from": user.pos, "bends": bends, "kind": part.get("kind", "energy")})
 
 ## Call after every environment step. Sustained effects re-apply each call; their remaining
 ## turns (and delays) only count down when count_down is true (once per round in Battle).

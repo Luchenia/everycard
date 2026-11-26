@@ -21,5 +21,6 @@
   }
  ],
  "desc": "자신 주위의 3×3 범위를 [빙결] 상태로 만듭니다.",
- "family": "magic"
+ "family": "magic",
+ "pool": "mage"
 }

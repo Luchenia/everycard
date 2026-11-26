@@ -22,5 +22,6 @@
   }
  ],
  "desc": "2×2 범위를 [늪] 상태로 만듭니다.",
- "family": "magic"
+ "family": "magic",
+ "pool": "mage"
 }

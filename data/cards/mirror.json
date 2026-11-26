@@ -16,5 +16,6 @@
   }
  ],
  "desc": "1×1 크기의 [거울]을 설치합니다.",
- "family": "magic"
+ "family": "magic",
+ "pool": "mage"
 }

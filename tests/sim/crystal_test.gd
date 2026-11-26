@@ -18,6 +18,7 @@ func run() -> void:
 	test_blow_breaks_crystal_and_shards_hit_neighbours()
 	test_light_glances_off_crystal()
 	test_crystallized_unit_counts_as_crystal()
+	test_thrown_dagger_breaks_crystal_and_returns_from_mirror()
 
 func test_crystal_is_a_wall() -> void:
 	var b := _battle("strike", {"player_pos": [1, 3], "enemy_pos": [[7, 1], [7, 5]], "materials": []})
@@ -69,3 +70,14 @@ func test_crystallized_unit_counts_as_crystal() -> void:
 	assert_eq(foe.hp, hp0 - 3 - Actor.CRYSTAL_BONUS, "a blow breaks it for extra damage")
 	assert_true(not foe.has_status("crystal"), "crystal gone")
 	assert_eq(other.hp, o0 - Actor.SHARD_DAMAGE, "shards hit the neighbour")
+
+func test_thrown_dagger_breaks_crystal_and_returns_from_mirror() -> void:
+	var b := _battle("throw_dagger", {"player_pos": [1, 3], "enemy_pos": [[7, 1], [7, 5]], "materials": []})
+	b.grid.set_material(Vector2i(3, 3), "crystal")
+	assert_true(b.cmd_play(0, Vector2i(5, 3)), "throw")
+	assert_eq(b.grid.get_material(Vector2i(3, 3)), "none", "the blade breaks the crystal")
+	var b2 := _battle("throw_dagger", {"player_pos": [1, 3], "enemy_pos": [[7, 1], [7, 5]], "materials": []})
+	b2.grid.set_material(Vector2i(3, 3), "metal")
+	var me0 := b2.human().hp
+	assert_true(b2.cmd_play(0, Vector2i(3, 3)), "throw at the mirror")
+	assert_true(b2.human().hp < me0, "the mirror sends it straight back")
