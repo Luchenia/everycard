@@ -90,7 +90,7 @@ static func hit(ctx: BattleContext, user, u, amount: int, kind: String, label :=
 	var d: int = u.take_damage(amt, kind)
 	_log(ctx, "damage", "%s %s %d" % [u.name, label, d], {"uid": u.uid, "amount": d, "back": back})
 	if back:
-		_log(ctx, "backstab", "뒤치기", {"uid": u.uid, "cells": [u.pos]})
+		_log(ctx, "backstab", "급소 찌르기", {"uid": u.uid, "cells": [u.pos]})
 	if not ctx.coat.is_empty() and d > 0 and u.alive():
 		u.add_status(ctx.coat.get("status", "poisoned"), int(ctx.coat.get("turns", 3)))
 		_log(ctx, "status", "%s %s" % [u.name, ctx.coat.get("status", "poisoned")], {"uid": u.uid, "status": ctx.coat.get("status", "poisoned")})

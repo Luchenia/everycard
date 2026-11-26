@@ -219,6 +219,50 @@ func cmd_move(dir: Vector2i) -> bool:
 			_log("move", "%s 이동" % h.name, {"to": to}))
 	return true
 
+## 받아치기 (parry): one second braced. A blow at me landing in exactly that second is stopped,
+## the attacker is stunned and takes damage back. Common to every character.
+func cmd_parry() -> bool:
+	var h := human()
+	if not _can_act() or h == null:
+		return false
+	var secs := action_secs(1, h)
+	if secs < 0:
+		return false
+	h.guard_kind = "parry"
+	h.guard_at = now + secs
+	h.guard_from = h.pos
+	_log("brace", "%s 받아치기 자세" % h.name, {"uid": h.uid})
+	_spend(secs, func(): pass, false)
+	h.guard_kind = ""
+	return true
+
+## 구르기 (timed dodge): one cell in one second, untouchable by blows landing in that second.
+## A dodge that avoids nothing leaves you winded (1 s 탈진); a real one makes the next action 1 s faster.
+func cmd_roll(dir: Vector2i) -> bool:
+	var h := human()
+	if not _can_act() or h == null or absi(dir.x) + absi(dir.y) != 1 or h.rooted():
+		return false
+	var to: Vector2i = h.pos + dir
+	if not grid.passable(to) or grid.unit_at(to) != null:
+		return false
+	var secs := action_secs(int(cfg["move_time"]), h)
+	if secs < 0:
+		return false
+	h.guard_kind = "roll"
+	h.guard_at = now + secs
+	h.guard_from = h.pos
+	_spend(secs, func():
+		if grid.passable(to) and grid.unit_at(to) == null:
+			grid.move_unit(h, to)
+			h.facing = dir
+			_log("move", "%s 구르기" % h.name, {"to": to}), false)
+	if h.guard_kind == "roll" and phase == "player":
+		# nothing came: winded
+		h.guard_kind = ""
+		_log("exhaust", "%s 헛구르기 1초" % h.name, {"secs": 1})
+		_spend(1, Callable(), false)
+	return true
+
 ## Non-move base abilities (other characters, swapped bodies): one second each.
 func cmd_ability(aim: Vector2i) -> bool:
 	var h := human()
@@ -486,8 +530,25 @@ func _resolve_telegraphs() -> void:
 			t["fire_at"] = now + 1
 			keep.append(t)
 			continue
-		_log("telegraph_hit", "%s: %s" % [a.name, Effects.card_def(t["card_id"], catalog).get("name", "")], {"cells": t["cells"], "user": a.uid})
-		Effects.apply(Effects.card_def(t["card_id"], catalog), a, t["aim"], ctx, t["cells"])
+		var cells: Array = t["cells"]
+		var h := human()
+		if h != null and h.guard_at == now and h.guard_kind != "" and (cells.has(h.pos) or cells.has(h.guard_from)):
+			cells = cells.filter(func(p): return p != h.pos)
+			if h.guard_kind == "parry":
+				_log("parry", "받아치기!", {"uid": h.uid, "cells": [h.pos, a.pos]})
+				ctx.now = now
+				Effects.hit(ctx, h, a, Actor.PARRY_DAMAGE, "physical", "받아치기")
+				a.add_status("stunned", 1)
+				a.next_at = maxi(a.next_at, now + 2)
+			else:
+				_log("dodge", "회피!", {"uid": h.uid, "cells": [h.pos]})
+				h.discount += 1
+			h.guard_kind = ""
+		_log("telegraph_hit", "%s: %s" % [a.name, Effects.card_def(t["card_id"], catalog).get("name", "")], {"cells": cells, "user": a.uid})
+		if cells.is_empty():
+			a.next_at = maxi(a.next_at, now + 1)
+			continue
+		Effects.apply(Effects.card_def(t["card_id"], catalog), a, t["aim"], ctx, cells)
 		a.next_at = maxi(a.next_at, now + 1)
 		_after_action()
 		if phase != "player":

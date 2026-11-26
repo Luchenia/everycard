@@ -149,6 +149,11 @@ func _flashes() -> void:
 					board.attack(int(e["data"].get("user", -1)), e["data"].get("cells", []))
 			"trap", "interrupt", "delay_actor", "clone", "vanish":
 				board.burst(e["data"].get("cells", []), Color("#c0a0ff") if e["t"] in ["clone", "vanish", "delay_actor"] else Color("#ffcf6a"))
+			"parry":
+				board.burst(e["data"].get("cells", []), Color("#ffe27a"))
+				board.shake(0.3)
+			"dodge":
+				board.burst(e["data"].get("cells", []), Color("#9fe8ff"))
 			"backstab":
 				board.burst(e["data"].get("cells", []), Color("#ff5a7a"))
 			"timer_fire":
@@ -561,7 +566,15 @@ func _unhandled_input(ev: InputEvent) -> void:
 	if flow == null or flow.phase != "battle" or not (ev is InputEventKey) or not ev.pressed or ev.echo or _replaying():
 		return
 	var b := flow.battle
+	var dirs := {KEY_UP: Vector2i.UP, KEY_DOWN: Vector2i.DOWN, KEY_LEFT: Vector2i.LEFT, KEY_RIGHT: Vector2i.RIGHT}
+	if ev.shift_pressed and dirs.has(ev.keycode):
+		b.cmd_roll(dirs[ev.keycode])
+		_after()
+		return
 	match ev.keycode:
+		KEY_F:
+			selected = -1
+			b.cmd_parry()
 		KEY_UP: b.cmd_move(Vector2i.UP)
 		KEY_DOWN: b.cmd_move(Vector2i.DOWN)
 		KEY_LEFT: b.cmd_move(Vector2i.LEFT)

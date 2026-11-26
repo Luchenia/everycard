@@ -6,7 +6,7 @@ const REFILL_DECK := ["strike", "guard", "step"]
 const CRYSTAL_BONUS := 5
 const SHARD_DAMAGE := 4
 const SHADOW_BONUS := 3   # [그림자]: extra damage on the next hit taken
-const BACKSTAB_BONUS := 4 # 도적 passive: a blow from behind   # a crystal breaking hurts everything around it
+const BACKSTAB_BONUS := 4 # 도적 passive 급소 찌르기: a blow from behind   # a crystal breaking hurts everything around it
 
 var uid := 0
 var def_id := ""
@@ -35,7 +35,11 @@ var facing := Vector2i.LEFT   # which way the body looks; a blow from the other 
 var passives: Array = []      # e.g. "backstab" (도적: back attacks deal extra damage)
 var next_bonus := 0           # 빈틈 노리기: extra damage on the next attack card
 var coat: Dictionary = {}     # 독 바르기: {status, turns, charges}
-var expires_at := -1          # summoned shadows vanish at this second
+var expires_at := -1
+var guard_at := -1            # second covered by 받아치기 / 구르기
+var guard_kind := ""
+var guard_from := Vector2i(-99, -99)
+const PARRY_DAMAGE := 4          # summoned shadows vanish at this second
 
 static func from_def(def: Dictionary, new_uid: int) -> Actor:
 	var a := Actor.new()
