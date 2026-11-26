@@ -10,10 +10,10 @@ signal hovered(card_view, on)
 
 const SIZE := Vector2(88, 136)      # art px
 const ART_WIN := Rect2(12, 12, 64, 51)
-const NAME_PLATE := Rect2(10, 66, 69, 10)
+const NAME_PLATE := Rect2(12, 67, 67, 8)
 const TEXT_BOX := Rect2(8, 79, 71, 49)
 const MAX_LINES := 6
-const BADGE := Vector2(11, 11)
+const BADGE := Vector2(77, 11)   # top-right
 const FXMAP := {"strike": "slash", "spark": "fire", "crystallize": "crystal", "rain": "water_splash", "mirror": "mirror",
 	"frost": "ice_glint", "slow_field": "swamp_bubbles", "gust": "gust_right", "shock": "shock", "hurry": "haste", "haste_field": "haste"}
 
@@ -158,10 +158,12 @@ func _draw() -> void:
 		draw_string(cf, cr.position + Vector2(2 * z, 8 * z), chips[k], HORIZONTAL_ALIGNMENT_LEFT, -1, int(8 * z), Color("#9a3d12"))
 		cx = cr.position.x - 2 * z
 	# name
-	var nf := Art.font("Galmuri9")
+	var nf := Art.font("Galmuri7")
 	var nm: String = c.get("name", card_id)
 	var np := NAME_PLATE.position * z
-	draw_string(nf, Vector2(np.x, np.y - z + nf.get_ascent(int(10 * z))), nm, HORIZONTAL_ALIGNMENT_CENTER, NAME_PLATE.size.x * z, int(10 * z), Color("#F0ECE0"))
+	var nfs := int(8 * z)
+	var base := np.y + (NAME_PLATE.size.y * z + nf.get_ascent(nfs) - nf.get_descent(nfs)) / 2.0
+	draw_string(nf, Vector2(np.x, round(base)), nm, HORIZONTAL_ALIGNMENT_CENTER, NAME_PLATE.size.x * z, nfs, Color("#F0ECE0"))
 	# seconds
 	var bf := Art.font("Galmuri11-Bold")
 	var st := "%d" % int(c.get("time", 0))

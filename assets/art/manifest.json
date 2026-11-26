@@ -384,10 +384,10 @@
      51
     ],
     "name_plate": [
-     10,
-     66,
-     69,
-     10
+     12,
+     67,
+     67,
+     8
     ],
     "text_box": [
      8,
@@ -396,17 +396,18 @@
      49
     ],
     "time_badge_centre": [
-     11,
+     77,
      11
     ],
-    "time_badge_radius": 9
+    "time_badge_radius": 9,
+    "rarity_gem": "baked into frame at left end of name plate"
    },
    "text": {
-    "name": "fonts/Galmuri9.ttf size 10, #F0ECE0, centred; draw at y=65 (glyphs fill rows 66-74)",
+    "name": "fonts/Galmuri7.ttf size 8, #F0ECE0, centred horizontally and vertically in name_plate (reference/cardtext6.py)",
     "description": "fonts/Galmuri7.ttf size 8, line height 8, up to 6 lines, ink #34281E, [keywords] drawn without brackets in #964614, block centred vertically (reference/cardtext5.py)",
-    "time": "fonts/Galmuri11-Bold.ttf size 12, #FFF0C8 with 1px dark outline, centred on badge"
+    "time": "fonts/Galmuri11-Bold.ttf size 12, centred on time_badge_centre (top-right now)"
    },
-   "check": "2026-11-26 v5 (Luchenia): no stone gaps between art, name and text so it reads as one card; thinner name plate (10px). All 21 texts fit."
+   "check": "2026-11-26 v6 (Luchenia): cost badge moved to top-right, rarity gem moved to left end of name plate, plate gets a dark outline, name font down to Galmuri7."
   },
   "window_frame.png": {
    "what": "stone window frame, empty centre, 9-slice",
