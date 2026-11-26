@@ -374,7 +374,7 @@
    "what": "12 card frames. family: neutral (slate plate), sword (crimson plate), magic (violet plate). rarity: basic (plain stone), common (bronze), rare (silver + sapphire), legendary (gold + amber).",
    "size": [
     88,
-    137
+    136
    ],
    "boxes": {
     "art_window": [
@@ -385,15 +385,15 @@
     ],
     "name_plate": [
      10,
-     70,
+     66,
      69,
-     11
+     10
     ],
     "text_box": [
      8,
-     88,
+     79,
      71,
-     41
+     49
     ],
     "time_badge_centre": [
      11,
@@ -402,11 +402,11 @@
     "time_badge_radius": 9
    },
    "text": {
-    "name": "fonts/Galmuri9.ttf size 10, #F0ECE0, centred in name_plate",
-    "description": "fonts/Galmuri7.ttf size 8, line height 8, up to 5 lines, ink #34281E, [keywords] drawn without brackets in #964614, block centred vertically (reference/cardtext3.py)",
+    "name": "fonts/Galmuri9.ttf size 10, #F0ECE0, centred; draw at y=65 (glyphs fill rows 66-74)",
+    "description": "fonts/Galmuri7.ttf size 8, line height 8, up to 6 lines, ink #34281E, [keywords] drawn without brackets in #964614, block centred vertically (reference/cardtext5.py)",
     "time": "fonts/Galmuri11-Bold.ttf size 12, #FFF0C8 with 1px dark outline, centred on badge"
    },
-   "check": "2026-11-26 v4 (Luchenia): order stays art, name, description; the art window was shortened so the description box holds 5 lines. All 21 current texts fit (max 4 lines). Draw code: reference/cardtext4.py."
+   "check": "2026-11-26 v5 (Luchenia): no stone gaps between art, name and text so it reads as one card; thinner name plate (10px). All 21 texts fit."
   },
   "window_frame.png": {
    "what": "stone window frame, empty centre, 9-slice",
