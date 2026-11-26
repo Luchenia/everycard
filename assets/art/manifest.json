@@ -399,15 +399,14 @@
      77,
      11
     ],
-    "time_badge_radius": 9,
-    "rarity_gem": "baked into frame at left end of name plate"
+    "time_badge_radius": 9
    },
    "text": {
-    "name": "fonts/Galmuri7.ttf size 8, #F0ECE0, centred horizontally and vertically in name_plate (reference/cardtext6.py)",
-    "description": "fonts/Galmuri7.ttf size 8, line height 8, up to 6 lines, ink #34281E, [keywords] drawn without brackets in #964614, block centred vertically (reference/cardtext5.py)",
+    "name": "fonts/Galmuri7.ttf size 8, #F0ECE0, ink centred on x=44.5, vertically centred in name_plate",
+    "description": "fonts/Galmuri7.ttf size 8, line height 8, up to 6 lines, ink #34281E, [keywords] in #964614 without brackets. Centre the INK (textbbox, not advance width) on x=44.5, block centred on y=103.5 (reference/cardtext7.py)",
     "time": "fonts/Galmuri11-Bold.ttf size 12, centred on time_badge_centre (top-right now)"
    },
-   "check": "2026-11-26 v6 (Luchenia): cost badge moved to top-right, rarity gem moved to left end of name plate, plate gets a dark outline, name font down to Galmuri7."
+   "check": "2026-11-26 v7 (Luchenia): rarity gem removed (rarity shows only by frame metal colour); description and name ink centred on the parchment (was ~2px left)."
   },
   "window_frame.png": {
    "what": "stone window frame, empty centre, 9-slice",

@@ -55,7 +55,8 @@ func set_zoom(z: int) -> void:
 	size = SIZE * z
 	pivot_offset = Vector2(size.x / 2, size.y)
 	# the block is centred vertically in the text box (8 px per line)
-	desc.position = (TEXT_BOX.position + Vector2(0, 1 + (MAX_LINES - mini(lines, MAX_LINES)) * 4)) * z
+	# ink centred on x 44.5 and the block on y 103.5 (advance widths carry 1 px of trailing space)
+	desc.position = ((TEXT_BOX.position + Vector2(1.5, (MAX_LINES - mini(lines, MAX_LINES)) * 4)) * z).round()
 	desc.size = Vector2(TEXT_BOX.size.x, TEXT_BOX.size.y + 4) * z
 	desc.add_theme_font_size_override("normal_font_size", 8 * z)
 	desc.add_theme_constant_override("line_separation", -z)
@@ -160,7 +161,7 @@ func _draw() -> void:
 	# name
 	var nf := Art.font("Galmuri7")
 	var nm: String = c.get("name", card_id)
-	var np := NAME_PLATE.position * z
+	var np := ((NAME_PLATE.position + Vector2(-0.5, 0)) * z).round()
 	var nfs := int(8 * z)
 	var base := np.y + (NAME_PLATE.size.y * z + nf.get_ascent(nfs) - nf.get_descent(nfs)) / 2.0
 	draw_string(nf, Vector2(np.x, round(base)), nm, HORIZONTAL_ALIGNMENT_CENTER, NAME_PLATE.size.x * z, nfs, Color("#F0ECE0"))
