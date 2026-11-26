@@ -325,7 +325,7 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 				apply_part(part["part"], user, aim, cells, ctx)
 			else:
 				_log(ctx, "condition_false", "조건 불충족")
-		"belt", "time_budget", "borrow":
+		"belt", "time_budget", "borrow", "guard":
 			if ctx.on_meta.is_valid():
 				ctx.on_meta.call(part, user)
 		"swap_bodies":

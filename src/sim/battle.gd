@@ -111,6 +111,13 @@ func _on_meta(part: Dictionary, user) -> void:
 	if user != human():
 		return
 	match part["op"]:
+		"guard":
+			# 받아치기 / 구르기 cards: the second the card lands is the guarded second
+			user.guard_kind = part.get("kind", "parry")
+			user.guard_at = now
+			user.guard_from = user.pos
+			if user.guard_kind == "parry":
+				_log("brace", "%s 받아치기 자세" % user.name, {"uid": user.uid})
 		"interrupt":
 			var n0 := telegraphs.size()
 			telegraphs = telegraphs.filter(func(t): return int(t["actor_uid"]) != int(part["uid"]))
@@ -217,50 +224,6 @@ func cmd_move(dir: Vector2i) -> bool:
 			if grid.mat_def(to).get("lethal", false):
 				h.hp = 0
 			_log("move", "%s 이동" % h.name, {"to": to}))
-	return true
-
-## 받아치기 (parry): one second braced. A blow at me landing in exactly that second is stopped,
-## the attacker is stunned and takes damage back. Common to every character.
-func cmd_parry() -> bool:
-	var h := human()
-	if not _can_act() or h == null:
-		return false
-	var secs := action_secs(1, h)
-	if secs < 0:
-		return false
-	h.guard_kind = "parry"
-	h.guard_at = now + secs
-	h.guard_from = h.pos
-	_log("brace", "%s 받아치기 자세" % h.name, {"uid": h.uid})
-	_spend(secs, func(): pass, false)
-	h.guard_kind = ""
-	return true
-
-## 구르기 (timed dodge): one cell in one second, untouchable by blows landing in that second.
-## A dodge that avoids nothing leaves you winded (1 s 탈진); a real one makes the next action 1 s faster.
-func cmd_roll(dir: Vector2i) -> bool:
-	var h := human()
-	if not _can_act() or h == null or absi(dir.x) + absi(dir.y) != 1 or h.rooted():
-		return false
-	var to: Vector2i = h.pos + dir
-	if not grid.passable(to) or grid.unit_at(to) != null:
-		return false
-	var secs := action_secs(int(cfg["move_time"]), h)
-	if secs < 0:
-		return false
-	h.guard_kind = "roll"
-	h.guard_at = now + secs
-	h.guard_from = h.pos
-	_spend(secs, func():
-		if grid.passable(to) and grid.unit_at(to) == null:
-			grid.move_unit(h, to)
-			h.facing = dir
-			_log("move", "%s 구르기" % h.name, {"to": to}), false)
-	if h.guard_kind == "roll" and phase == "player":
-		# nothing came: winded
-		h.guard_kind = ""
-		_log("exhaust", "%s 헛구르기 1초" % h.name, {"secs": 1})
-		_spend(1, Callable(), false)
 	return true
 
 ## Non-move base abilities (other characters, swapped bodies): one second each.

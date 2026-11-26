@@ -3,9 +3,9 @@ extends TestCase
 
 var c: Catalog
 
-func _battle(lay: Dictionary) -> Battle:
-	c.actors["p_guard"] = {"id": "p_guard", "hp": 40, "mass": 2, "base_ability": "step1", "facing": [1, 0], "deck": ["step", "step", "step", "step", "step", "step"]}
-	return Battle.new(c, 1, "p_guard", ["hitter"], lay)
+func _battle(lay: Dictionary, card := "parry") -> Battle:
+	c.actors["p_" + card] = {"id": "p_" + card, "hp": 40, "mass": 2, "base_ability": "step1", "facing": [1, 0], "deck": [card, card, card, card, card, card]}
+	return Battle.new(c, 1, "p_" + card, ["hitter"], lay)
 
 func run() -> void:
 	c = Catalog.load_dir("res://data")
@@ -15,7 +15,6 @@ func run() -> void:
 	test_parry_on_time()
 	test_parry_too_early()
 	test_roll_on_time()
-	test_roll_into_nothing()
 
 func _fire_at(b: Battle) -> int:
 	for k in 5:
@@ -36,7 +35,7 @@ func test_parry_on_time() -> void:
 	_wait_until(b, at - 1)
 	var hp0 := b.human().hp
 	var fhp := foe.hp
-	assert_true(b.cmd_parry(), "parry")
+	assert_true(b.cmd_play(0, b.human().pos), "parry card")
 	assert_eq(b.human().hp, hp0, "blow stopped")
 	assert_eq(foe.hp, fhp - Actor.PARRY_DAMAGE, "damage returned")
 	assert_true(foe.next_at >= b.now + 1, "attacker staggered")
@@ -47,25 +46,16 @@ func test_parry_too_early() -> void:
 	var at := _fire_at(b)
 	_wait_until(b, at - 2)
 	var hp0 := b.human().hp
-	b.cmd_parry()
+	b.cmd_play(0, b.human().pos)
 	b.cmd_wait(1)
 	assert_eq(b.human().hp, hp0 - 7, "a second early is a miss")
 
 func test_roll_on_time() -> void:
-	var b := _battle({"player_pos": [2, 3], "enemy_pos": [[6, 3]], "materials": []})
+	var b := _battle({"player_pos": [2, 3], "enemy_pos": [[6, 3]], "materials": []}, "roll")
 	var at := _fire_at(b)
 	_wait_until(b, at - 1)
 	var hp0 := b.human().hp
-	assert_true(b.cmd_roll(Vector2i.UP), "roll")
+	assert_true(b.cmd_play(0, Vector2i(2, 2)), "roll card")
 	assert_eq(b.human().pos, Vector2i(2, 2), "rolled a cell")
 	assert_eq(b.human().hp, hp0, "dodged")
 	assert_eq(b.human().discount, 1, "next action a second faster")
-	assert_eq(b.now, at, "no winded second")
-
-func test_roll_into_nothing() -> void:
-	var b := _battle({"player_pos": [2, 3], "enemy_pos": [[6, 3]], "materials": []})
-	var at := _fire_at(b)
-	var t0 := b.now
-	assert_true(at - t0 >= 2, "blow still far off")
-	assert_true(b.cmd_roll(Vector2i.UP), "roll")
-	assert_eq(b.now, t0 + 2, "empty roll leaves you winded")

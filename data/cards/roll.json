@@ -1,0 +1,24 @@
+{
+ "id": "roll",
+ "name": "구르기",
+ "time": 1,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "cell",
+  "range": 1,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "guard",
+   "kind": "roll"
+  },
+  {
+   "op": "dash"
+  }
+ ],
+ "desc": "1칸 구릅니다. 그 1초에 떨어지는 공격을 피하면 다음 카드의 시간이 1초 줄어듭니다.",
+ "family": "neutral",
+ "pool": "common"
+}

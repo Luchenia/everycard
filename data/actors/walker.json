@@ -17,7 +17,9 @@
   "step",
   "oil_spill",
   "throw_dagger",
-  "flint"
+  "flint",
+  "parry",
+  "roll"
  ],
  "signature": "strike",
  "trait": [

@@ -1,0 +1,21 @@
+{
+ "id": "parry",
+ "name": "받아치기",
+ "time": 1,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "self",
+  "range": 0,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "guard",
+   "kind": "parry"
+  }
+ ],
+ "desc": "카드가 끝나는 그 1초에 나를 노린 공격을 막아 냅니다. 공격한 적은 [기절]하고 4의 피해를 받습니다.",
+ "family": "neutral",
+ "pool": "common"
+}
