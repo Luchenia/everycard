@@ -17,5 +17,6 @@
  "desc": "적과 [몸을 맞바꿉니다]. [탈진]",
  "exhaust": 3,
  "family": "neutral",
- "pool": "common"
+ "pool": "common",
+ "drop_weight": 0.15
 }

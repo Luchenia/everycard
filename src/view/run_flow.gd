@@ -46,6 +46,32 @@ func _reward_pool() -> Array:
 	pool.sort()
 	return pool
 
+const RARITY_WEIGHT := {"basic": 10.0, "common": 10.0, "rare": 4.0, "legendary": 1.0}
+
+## Draws n different cards, rarer ones less often; a card's own "drop_weight" scales it further
+## (판 뒤집기 is a legendary that should feel extremely rare).
+func _pick_rewards(pool: Array, n: int) -> Array:
+	var left := pool.duplicate()
+	var out := []
+	while out.size() < n and not left.is_empty():
+		var total := 0.0
+		for id in left:
+			total += _weight(id)
+		var r := rng.next_float() * total
+		var pick: String = left[left.size() - 1]
+		for id in left:
+			r -= _weight(id)
+			if r <= 0.0:
+				pick = id
+				break
+		out.append(pick)
+		left.erase(pick)
+	return out
+
+func _weight(id: String) -> float:
+	var c: Dictionary = catalog.cards.get(id, {})
+	return float(RARITY_WEIGHT.get(c.get("rarity", "common"), 10.0)) * float(c.get("drop_weight", 1.0))
+
 ## Call after every battle command; moves the run forward when a battle ends.
 func update() -> void:
 	if phase != "battle":
@@ -60,9 +86,7 @@ func update() -> void:
 		if index >= BATTLES.size() - 1:
 			phase = "victory"
 			return
-		var pool := _reward_pool()
-		rng.shuffle(pool)
-		rewards = pool.slice(0, 3)
+		rewards = _pick_rewards(_reward_pool(), 3)
 		phase = "reward"
 
 func choose_reward(i: int) -> void:
