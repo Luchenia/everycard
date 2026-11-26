@@ -69,13 +69,16 @@ func _process(_d: float) -> bool:
 				screen.dragging = true
 				screen.drag_from = h.pos
 				screen.drag_manual = false
-				screen._drag_to(h.pos + Vector2i(2, 2))
+				screen.drag_from = h.pos + Vector2i(2, 2)
+				screen.drag_px = Vector2(500, 400)
+				screen.board.walk_path = screen._path(h.pos, h.pos + Vector2i(2, 2))
+				screen.board.walk_mode = "hold"
 				step = 7; t0 = frame
 		7:
 			if frame - t0 == 5:
 				_shot("14_drag_path")
 				var h2 = b.human()
-				screen._end_drag(h2.pos + Vector2i(2, 2))
+				screen._end_drag(h2.pos + Vector2i(2, 2), Vector2(560, 400))
 				step = 8; t0 = frame
 		8:
 			if frame - t0 == 15:

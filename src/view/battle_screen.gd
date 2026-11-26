@@ -30,6 +30,8 @@ var cell_hover_t := 0.0
 var dragging := false     # left button held on the board with no card: drawing a walk
 var drag_manual := false  # started on the hero: the path follows the mouse cell by cell
 var drag_from := Vector2i(-1, -1)
+var drag_px := Vector2.ZERO   # where the button went down: dragging right of it confirms, left cancels
+const DRAG_GO := 24.0
 var focus_at := -9.0     # when the window got focus: the click that focuses it never walks
 var log_i := 0           # battle log entries already shown as flashes
 
@@ -638,11 +640,13 @@ func _on_board_input(ev: InputEvent) -> void:
 			cell_hover_t = 0.0
 			_clear_tips()
 			board.preview = b.preview(selected, c) if selected >= 0 and c.x >= 0 else {}
-			if dragging and c.x >= 0:
+			if dragging and drag_manual and c.x >= 0:
 				_drag_to(c)
-			board.walk_hint = _path(b.human().pos, c) if not dragging and selected < 0 and c.x >= 0 and b.human() != null and b.grid.unit_at(c) == null else []
+		if dragging and not drag_manual:
+			var dx: float = ev.position.x - drag_px.x
+			board.walk_mode = "go" if dx > DRAG_GO else ("cancel" if dx < -DRAG_GO else "hold")
 	elif ev is InputEventMouseButton and not ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT and dragging:
-		_end_drag(board.cell_at(ev.position))
+		_end_drag(board.cell_at(ev.position), ev.position)
 	elif ev is InputEventMouseButton and ev.pressed:
 		var cell := board.cell_at(ev.position)
 		if ev.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
@@ -664,8 +668,11 @@ func _on_board_input(ev: InputEvent) -> void:
 				return   # the click that only focuses the window
 			dragging = true
 			drag_from = cell
+			drag_px = ev.position
 			drag_manual = cell == b.human().pos
-			board.walk_path = []
+			# a ping: the pressed cell is the destination and stays put while the mouse moves
+			board.walk_path = [] if drag_manual else _path(b.human().pos, cell)
+			board.walk_mode = "go" if drag_manual else "hold"
 			_clear_tips()
 		elif ev.button_index == MOUSE_BUTTON_LEFT and cell.x >= 0 and selected >= 0:
 			var played := selected
@@ -685,39 +692,31 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_IN or what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
 		focus_at = real
 
-## Walking: hold the button and drag. From anywhere the shortest way to the cell under the mouse is
-## shown; starting on the hero, the path follows the mouse cell by cell. Releasing walks it; a plain
-## click only steps onto a neighbouring cell, so a slip never sends the hero across the room.
+## Walking, like a ping: press on the destination, drag right and release to go; drag left or
+## right-click to cancel. The destination is the cell first pressed. Pressing on the hero instead
+## draws the route by hand, cell by cell (it may cross itself). A plain click steps to a neighbour.
 func _drag_to(c: Vector2i) -> void:
 	var b := flow.battle
 	var h := b.human()
 	if h == null:
 		return
 	var path: Array = board.walk_path
-	if drag_manual:
-		var last: Vector2i = path.back() if not path.is_empty() else h.pos
-		if c == last:
-			return
-		var back := path.find(c)
-		if c == h.pos:
-			path = []
-		elif back >= 0:
-			path = path.slice(0, back + 1)
-		elif Battle.dist(c, last) == 1 and absi(c.x - last.x) + absi(c.y - last.y) == 1 and b.grid.passable(c) and b.grid.unit_at(c) == null:
-			path.append(c)
-		else:
-			var tail := _path(last, c)
-			if tail.is_empty():
-				return
-			for q in tail:
-				if q in path or q == h.pos:
-					return
-			path.append_array(tail)
+	var last: Vector2i = path.back() if not path.is_empty() else h.pos
+	if c == last:
+		return
+	var prev: Vector2i = path[path.size() - 2] if path.size() >= 2 else h.pos
+	if not path.is_empty() and c == prev:
+		path.pop_back()   # stepping back over the last cell rubs it out
+	elif absi(c.x - last.x) + absi(c.y - last.y) == 1 and b.grid.passable(c) and (b.grid.unit_at(c) == null or c == h.pos):
+		path.append(c)
 	else:
-		path = _path(h.pos, c)
+		var tail := _path(last, c)
+		if tail.is_empty():
+			return
+		path.append_array(tail)
 	board.walk_path = path
 
-func _end_drag(cell: Vector2i) -> void:
+func _end_drag(cell: Vector2i, at: Vector2) -> void:
 	dragging = false
 	var b := flow.battle
 	var h := b.human()
@@ -725,8 +724,13 @@ func _end_drag(cell: Vector2i) -> void:
 	board.walk_path = []
 	if h == null:
 		return
-	if path.is_empty() and cell == drag_from and cell.x >= 0 and absi(cell.x - h.pos.x) + absi(cell.y - h.pos.y) == 1:
-		path = [cell]   # a plain click next to the hero: one step
+	var dx := at.x - drag_px.x
+	if not drag_manual:
+		if dx < -DRAG_GO:
+			path = []   # dragged left: cancelled
+		elif dx <= DRAG_GO:
+			# no drag: only a step onto a neighbouring cell counts
+			path = [drag_from] if absi(drag_from.x - h.pos.x) + absi(drag_from.y - h.pos.y) == 1 else []
 	if path.is_empty():
 		_refresh()
 		return

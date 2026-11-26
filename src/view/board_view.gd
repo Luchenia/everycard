@@ -28,7 +28,7 @@ var _speed := 0.14
 var self_aim := false            # a picked card with no target (방어 ...): the hero lights up instead of an arc
 var forecast := 0                # seconds the picked action will take: warnings landing in them stand out
 var walk_path: Array = []        # cells of the walk being dragged
-var walk_hint: Array = []        # faint walk preview under the mouse
+var walk_mode := "go"            # "hold" until dragged right, "go" once confirmed, "cancel" when dragged left
 
 var origin := Vector2(C, C * 2)  # top-left of cell (0,0) inside this control
 var clock := 0.0                 # effect time: crawls while paused (bullet time), runs during replay
@@ -439,10 +439,13 @@ func _draw_top() -> void:
 				_move_arrow(tl, Vector2(a.pos), it["to"], off, false, int(it["at"]) - battle.now)
 	_casts(tl, off)
 	if not replaying:
-		if not walk_path.is_empty():
-			_walk(tl, walk_path, off, false)
-		elif not walk_hint.is_empty() and not aiming:
-			_walk(tl, walk_hint, off, true)
+		if not walk_path.is_empty() and walk_mode != "cancel":
+			_walk(tl, walk_path, off, walk_mode == "hold")
+			if walk_mode == "hold":
+				# a little arrow at the destination: drag this way to go
+				var dc := cell_rect(walk_path.back()).get_center() + off + Vector2(C * 0.55, 0)
+				var nud := fmod(real * 1.5, 1.0) * 3 * S
+				tl.draw_colored_polygon(PackedVector2Array([dc + Vector2(4 * S + nud, 0), dc + Vector2(nud - 2 * S, -4 * S), dc + Vector2(nud - 2 * S, 4 * S)]), Color("#9fe8b0"))
 	if self_aim and not replaying and battle.human() != null:
 		# no target to pick: the hero glows, click the card again to use it
 		var hc := cell_rect(battle.human().pos)
