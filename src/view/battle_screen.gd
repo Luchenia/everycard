@@ -27,6 +27,7 @@ var spin := 0.0                # ring turn animation (radians, eases to 0)
 var wiggle_until := 0.0
 var real := 0.0
 var cell_hover_t := 0.0
+var focus_at := -9.0     # when the window got focus: the click that focuses it never walks
 var log_i := 0           # battle log entries already shown as flashes
 
 func _ready() -> void:
@@ -630,7 +631,19 @@ func _on_board_input(ev: InputEvent) -> void:
 
 ## Click-to-move: walks there one cell (one second) at a time, and stops early when a new
 ## warning appears or the body is hit, so the player can rethink.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_IN or what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
+		focus_at = real
+
+func _foe_next_to(b: Battle, p: Vector2i) -> bool:
+	for a in b.actors:
+		if a.controller == "ai" and a.alive() and b.grid.units.has(a) and Battle.dist(a.pos, p) <= 1:
+			return true
+	return false
+
 func _walk_to(cell: Vector2i) -> void:
+	if real - focus_at < 0.4:
+		return
 	var b := flow.battle
 	var h := b.human()
 	if h == null or cell == h.pos:
@@ -647,6 +660,8 @@ func _walk_to(cell: Vector2i) -> void:
 			break
 		if b.telegraphs.size() > warn0 or (b.human() != null and b.human().hp < hp0):
 			break
+		if b.human() != null and _foe_next_to(b, b.human().pos):
+			break   # an enemy came close: hand control back
 	_after()
 
 func _path(from: Vector2i, to: Vector2i) -> Array:
