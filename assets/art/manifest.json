@@ -477,11 +477,12 @@
       ]
     },
     "card_back.png": {
-      "what": "neutral card back, same 88x136 size and metal border as the fronts; dark leather panel with stitched edge and a silver compass-star sigil (PixelLab Pro Flash panel inside the neutral_basic frame). Draw at 1x; for the deck pile stack 4-6 copies offset 1px right and 2px up each (see dungeon-floor/38_card_back.png).",
+      "what": "card back v2 (Luchenia: v1 looked grimy; clean, polished, Hearthstone-level finish without copying its design). Deep blue gradient panel, gold filigree border, large symmetric emblem: violet crystal in a gold four-ray ring. Same 88x136 size and metal border as the fronts. Reads down to ~40px wide in the 3D ring.",
       "size": [
         88,
         136
-      ]
+      ],
+      "alt": "card_back_red.png (crimson version)"
     },
     "hand_rogue.png": {
       "what": "rogue's own gloved hand as the card cursor (brown leather glove, navy sleeve cuff showing it belongs to the hero). Strip of 3 frames 24x28: 0 point, 1 press (1px down, fingertip squashed), 2 swipe (two faded ghosts to the left; flip horizontally for a rightward swipe).",
