@@ -287,7 +287,10 @@ func cmd_play(slot: int, aim: Vector2i) -> bool:
 		_log("once", "%s 사라짐" % card.get("name", id), {"card": id})
 	belt.refill_one()   # the used slot fills straight away
 	var secs := action_secs(int(card.get("time", 0)), h)
-	_log("play", "%s: %s (%d초)" % [h.name, card.get("name", id), secs], {"card": id, "aim": aim})
+	var tg0: Dictionary = card.get("target", {})
+	var shown_secs := maxi(0, secs - (mini(h.discount, secs) if secs > 0 else 0))
+	_log("play", "%s: %s (%d초)" % [h.name, card.get("name", id), secs], {"card": id, "aim": aim, "uid": h.uid,
+		"secs": 0 if borrow_left > 0 else shown_secs, "cells": Targeting.cells(tg0.get("shape", "cell"), h.pos, aim, int(tg0.get("size", 0)))})
 	_spend(secs, func():
 		var tg: Dictionary = card.get("target", {})
 		_log("land", "%s 발동" % card.get("name", id), {"card": id, "user": h.uid,
@@ -349,7 +352,6 @@ func _spend(secs: int, on_done: Callable = Callable(), discountable := true) -> 
 		borrow_left -= secs
 		borrow_used += secs
 		advance(0, on_done)
-		_frame()
 		if borrow_left == 0:
 			_repay()
 		return
@@ -376,6 +378,7 @@ func advance(secs: int, on_done: Callable = Callable()) -> void:
 		if on_done.is_valid():
 			on_done.call()
 			_after_action()
+		_frame()   # instant actions still get a frame, so the view glides instead of jumping
 		return
 	for i in secs:
 		if phase != "player":
@@ -588,17 +591,38 @@ func _ai_act(a: Actor) -> void:
 		a.next_at = now + secs
 
 func _ai_step_toward(a: Actor, target: Vector2i) -> void:
+	var best := ai_step_cell(a, target)
+	if best != a.pos:
+		a.facing = best - a.pos
+		grid.move_unit(a, best)
+
+## The cell an enemy steps to when its target is out of reach (its own cell if it cannot move).
+func ai_step_cell(a: Actor, target: Vector2i) -> Vector2i:
 	if a.rooted():
-		return
+		return a.pos
 	var best := a.pos
 	var best_d := dist(a.pos, target)
 	for n in grid.neighbors4(a.pos):
 		if grid.passable(n) and grid.unit_at(n) == null and not grid.mat_def(n).get("lethal", false) and dist(n, target) < best_d:
 			best = n
 			best_d = dist(n, target)
-	if best != a.pos:
-		a.facing = best - a.pos
-		grid.move_unit(a, best)
+	return best
+
+## What an idle enemy will do next, for the view: {kind: "move", to, at} or {kind: "attack", at}.
+func ai_intent(a: Actor) -> Dictionary:
+	if a.controller != "ai" or not a.alive() or not grid.units.has(a) or _busy(a):
+		return {}
+	var choice := EnemyAI.choose(a, self)
+	if choice.is_empty():
+		return {}
+	var card := Effects.card_def(choice["card_id"], catalog)
+	var tgt: Dictionary = card.get("target", {})
+	var shape: String = tgt.get("shape", "cell")
+	if shape != "self" and shape != "all" and shape != "around" and dist(a.pos, choice["aim"]) > int(tgt.get("range", 1)):
+		var to := ai_step_cell(a, choice["aim"])
+		if to != a.pos:
+			return {"kind": "move", "to": to, "at": maxi(a.next_at, now + 1)}
+	return {}
 
 func _actor(uid: int) -> Actor:
 	for a in actors:

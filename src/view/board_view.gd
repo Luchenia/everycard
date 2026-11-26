@@ -21,6 +21,10 @@ var shown_pos: Dictionary = {}   # uid -> Vector2 (cell coords, fractional while
 var shown_hp: Dictionary = {}    # uid -> hp at the replayed second
 var shown_now := -1
 var replaying := false
+var replay_k := 0.0              # 0..1 inside the replayed second
+var moving: Dictionary = {}      # uid -> Vector2i: where a gliding unit is heading
+var casts: Array = []            # {uid, cells, t0, t1}: the player's card being performed
+var _speed := 0.14
 
 var origin := Vector2(C, C * 2)  # top-left of cell (0,0) inside this control
 var clock := 0.0                 # effect time: crawls while paused (bullet time), runs during replay
@@ -71,8 +75,10 @@ func fit() -> void:
 
 func _process(delta: float) -> void:
 	real += delta
-	var speed := 1.0 if replaying else (0.0 if battle != null and battle.borrowing() else 0.14)
-	clock += delta * speed
+	# effects crawl while the player thinks (bullet time) and ramp back up when time flows
+	var target := 1.0 if replaying else (0.0 if battle != null and battle.borrowing() else 0.14)
+	_speed = move_toward(_speed, target, delta * 4.0)
+	clock += delta * _speed
 	if battle != null:
 		_update_liquids()
 		_track_hits()
@@ -305,6 +311,24 @@ func _draw_top() -> void:
 			r2.position += off
 			tl.draw_rect(r2, Color(Art.GOLD, 0.22))
 			tl.draw_rect(r2, Color(Art.GOLD, 0.9), false, S)
+	# where each body really stands: a floor mark in its team colour
+	for u in battle.actors:
+		if not g.units.has(u) and not (replaying and shown_pos.has(u.uid)):
+			continue
+		var cell: Vector2i = moving.get(u.uid, u.pos) if replaying else u.pos
+		var fr := cell_rect(cell, 2 * S)
+		fr.position += off
+		var fc := Color("#58c46a") if u.controller == "human" else (Color("#9a7ad8") if u.controller == "echo" else Color("#ff6a5a"))
+		tl.draw_rect(fr, Color(fc, 0.13))
+		_corners(tl, fr, Color(fc, 0.8), 3 * S)
+		# a ring on the floor around the feet
+		var fp := cell_rect(cell).get_center() + off + Vector2(0, C * 0.25)
+		var ring := PackedVector2Array()
+		for i in 25:
+			var an := TAU * i / 24.0
+			ring.append(fp + Vector2(cos(an) * C * 0.42, sin(an) * C * 0.17))
+		tl.draw_polyline(ring, Color(Art.INK, 0.6), 3 * S)
+		tl.draw_polyline(ring, Color(fc, 0.85), S)
 	# y-sorted effects and units
 	var items := []
 	for p in g.all_cells():
@@ -399,6 +423,18 @@ func _draw_top() -> void:
 			r.position += off
 			tl.draw_rect(r, Color(col, 0.55 * (1.0 - k)))
 			tl.draw_rect(cell_rect(p, S).grow(k * 2 * S), Color(1, 1, 1, 0.7 * (1.0 - k)), false, S)
+	# where bodies are heading: gliding now, or an enemy's next step
+	if replaying:
+		for uid in moving.keys():
+			var mu: Actor = battle._actor(uid)
+			if mu != null:
+				_move_arrow(tl, _pos_of(mu), moving[uid], off, mu.controller == "human", -1)
+	else:
+		for a in battle.actors:
+			var it := battle.ai_intent(a)
+			if it.get("kind", "") == "move":
+				_move_arrow(tl, Vector2(a.pos), it["to"], off, false, int(it["at"]) - battle.now)
+	_casts(tl, off)
 	# enemy warnings: always above effects and units
 	for t in battle.telegraphs:
 		_telegraph(tl, t, off)
@@ -418,6 +454,19 @@ func _draw_top() -> void:
 		tl.draw_string_outline(font, pp - Vector2(10, 0), q["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 6, Color(0, 0, 0, col.a))
 		tl.draw_string(font, pp - Vector2(10, 0), q["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 	# bullet time: a cool veil and slowly drifting motes while the player decides
+	var calm := 1.0 - clampf((_speed - 0.14) / 0.86, 0.0, 1.0)
+	if calm > 0.01:
+		# a slow breathing vignette closes in while time is held
+		var breath := 0.5 + 0.5 * sin(real * 1.4)
+		var room := Rect2(origin, Vector2(Grid.W, Grid.H) * C)
+		for i in 7:
+			var w := (7 - i) * 5 * S
+			var a := calm * (0.05 + 0.025 * breath) * (1.0 + i * 0.25)
+			var r := room.grow(-i * 5 * S)
+			tl.draw_rect(Rect2(r.position, Vector2(r.size.x, 5 * S)), Color(0.02, 0.03, 0.08, a))
+			tl.draw_rect(Rect2(Vector2(r.position.x, r.end.y - 5 * S), Vector2(r.size.x, 5 * S)), Color(0.02, 0.03, 0.08, a))
+			tl.draw_rect(Rect2(r.position + Vector2(0, 5 * S), Vector2(5 * S, r.size.y - 10 * S)), Color(0.02, 0.03, 0.08, a))
+			tl.draw_rect(Rect2(Vector2(r.end.x - 5 * S, r.position.y + 5 * S), Vector2(5 * S, r.size.y - 10 * S)), Color(0.02, 0.03, 0.08, a))
 	if not replaying:
 		var borrowing := battle.borrowing()
 		tl.draw_rect(Rect2(origin, Vector2(Grid.W, Grid.H) * C), Color(0.6, 0.3, 1.0, 0.13) if borrowing else Color(0.35, 0.55, 1.0, 0.06))
@@ -527,10 +576,13 @@ func _sprite(tl: Control, st: Dictionary, ground: Vector2, i: int, mod := Color.
 	var src := Art.frame_src(st, i)
 	var sz := src.size * S * sc
 	var at := ground - Vector2(st["ax"], st["ay"]) * S * sc
-	var dst := Rect2(at, sz)
 	if flip:
-		dst = Rect2(ground + Vector2(st["ax"] * S * sc, -st["ay"] * S * sc), Vector2(-sz.x, sz.y))
-	tl.draw_texture_rect_region(st["tex"], dst, src, mod)
+		# mirror around the anchor with a transform: a negative-size rect is not drawn mirrored in place
+		tl.draw_set_transform(ground, 0.0, Vector2(-1, 1))
+		tl.draw_texture_rect_region(st["tex"], Rect2(at - ground, sz), src, mod)
+		tl.draw_set_transform(Vector2.ZERO)
+		return
+	tl.draw_texture_rect_region(st["tex"], Rect2(at, sz), src, mod)
 
 func _fx(tl: Control, kind: String, p: Vector2i, off: Vector2) -> void:
 	var ground := feet(Vector2(p)) + off
@@ -653,7 +705,7 @@ func _faces_left(u: Actor) -> bool:
 func _hp_bar(tl: Control, u: Actor, off: Vector2) -> void:
 	var f := feet(_pos_of(u)) + off + Vector2(0, 3 * S)
 	var hp := _hp_of(u)
-	var w := 18 * S
+	var w := 14 * S   # narrower than a cell, so neighbours' bars never touch
 	var r := Rect2(f - Vector2(w / 2, 0), Vector2(w, 3 * S))
 	tl.draw_rect(r.grow(S), Art.INK)
 	tl.draw_rect(r, Color("#3a1418"))
@@ -713,29 +765,109 @@ func _telegraph(tl: Control, t: Dictionary, off: Vector2) -> void:
 	if a == null or not battle.grid.units.has(a):
 		return
 	var from := feet(_pos_of(a)) + off - Vector2(0, 8 * S)
-	# chevrons running from the attacker to the area
-	var d := centre - from
-	var L := d.length()
-	if L > C * 0.8:
-		var dir := d / L
-		var nrm := Vector2(-dir.y, dir.x)
-		var step := C * 0.55
-		var shift := fmod(real * (2.0 if hot else 1.0), 1.0) * step
-		var s := step * 0.6 + shift
-		while s < L - C * 0.35:
-			var pnt := from + dir * s
-			var k := s / L
-			var cc := Color(col, 0.35 + 0.6 * k)
-			var tip := pnt + dir * 3 * S
-			tl.draw_polyline(PackedVector2Array([pnt - dir * 2 * S + nrm * 3 * S, tip, pnt - dir * 2 * S - nrm * 3 * S]), Color(Art.INK, cc.a), 3 * S)
-			tl.draw_polyline(PackedVector2Array([pnt - dir * 2 * S + nrm * 3 * S, tip, pnt - dir * 2 * S - nrm * 3 * S]), cc, S)
-			s += step
-	# seconds left: a badge on the area's top-right corner, clear of the heads standing in it
-	var bp := Vector2(box.end.x, box.position.y) + off + Vector2(-2 * S, 2 * S)
-	tl.draw_circle(bp, 9 * S * (1.0 + (0.12 * pulse if hot else 0.0)) * 0.7, Art.INK)
-	tl.draw_circle(bp, 8 * S * 0.7, col)
+	var leap: bool = battle.catalog.actors.get(a.def_id, {}).get("leap", false)
 	var txt := "%d" % maxi(left, 0)
-	tl.draw_string(font, bp + Vector2(-5 if txt.length() == 1 else -9, 7), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Art.INK)
+	var d := centre - from
+	if d.length() < C * 0.5:
+		# a blow around itself: the number sits on the area's corner
+		var bp := Vector2(box.end.x, box.position.y) + off + Vector2(-2 * S, 2 * S)
+		_badge(tl, bp, txt, col, hot, pulse)
+		return
+	var start := from + d.normalized() * C * 0.3
+	var h := (d.length() * 0.35 + C * 0.45) if leap else 0.0
+	var label := _arrow(tl, start, centre, col, h, hot, pulse)
+	_badge(tl, label, txt, col, hot, pulse)
+
+func _badge(tl: Control, at: Vector2, txt: String, col: Color, hot: bool, pulse: float) -> void:
+	var r := 9 * S * 0.7 * (1.0 + (0.12 * pulse if hot else 0.0))
+	tl.draw_circle(at, r + S, Art.INK)
+	tl.draw_circle(at, r, col)
+	tl.draw_string(font, at + Vector2(-5 if txt.length() == 1 else -9, 7), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Art.INK)
+
+## Point on a straight or arched (leaping) path from a to b at k.
+func _arc_pt(a: Vector2, b: Vector2, h: float, k: float) -> Vector2:
+	return a.lerp(b, k) - Vector2(0, 4.0 * h * k * (1.0 - k))
+
+## An attack arrow: a straight shaft, or an arch for leaps, with a head at the target.
+## Returns where its number goes (beside the middle of the shaft).
+func _arrow(tl: Control, a: Vector2, b: Vector2, col: Color, h: float, hot: bool, pulse: float) -> Vector2:
+	var pts := PackedVector2Array()
+	var n := 18
+	for i in n + 1:
+		pts.append(_arc_pt(a, b, h, float(i) / n))
+	var end := pts[n - 1]
+	var tip := pts[n]
+	var dir := (tip - end).normalized()
+	var nrm := Vector2(-dir.y, dir.x)
+	var body := pts.slice(0, n)
+	body.append(tip - dir * 4 * S)
+	var a_col := Color(col, 0.75 + 0.25 * pulse) if hot else Color(col, 0.85)
+	tl.draw_polyline(body, Art.INK, 4 * S)
+	tl.draw_polyline(body, a_col, 2 * S)
+	var head := PackedVector2Array([tip + dir * S, tip - dir * 6 * S + nrm * 4 * S, tip - dir * 6 * S - nrm * 4 * S])
+	tl.draw_colored_polygon(PackedVector2Array([head[0] + dir * S, head[1] + (nrm - dir) * S, head[2] - (nrm + dir) * S]), Art.INK)
+	tl.draw_colored_polygon(head, a_col)
+	# a bright pip running along the shaft, faster when the blow is about to land
+	var run := fmod(real * (1.6 if hot else 0.8), 1.0)
+	tl.draw_circle(_arc_pt(a, b, h, run * 0.9), 1.5 * S, Color(1, 1, 1, 0.8))
+	var mid := _arc_pt(a, b, h, 0.5)
+	var side := (b - a).normalized()
+	var off_n := Vector2(-side.y, side.x)
+	if off_n.y > 0:
+		off_n = -off_n
+	return mid + off_n * 9 * S
+
+## Where a body is going: a dashed arrow and the landing cell. secs < 0 hides the count.
+func _move_arrow(tl: Control, from_c: Vector2, to: Vector2i, off: Vector2, mine: bool, secs: int) -> void:
+	var col := Color("#9fe8b0") if mine else Color("#e8e0d0")
+	var a := cell_rect(Vector2i(0, 0)).get_center() + from_c * C + off
+	var b := cell_rect(to).get_center() + off
+	if a.distance_to(b) < 2.0:
+		return
+	var dr := cell_rect(to, 3 * S)
+	dr.position += off
+	var dash := 3 * S
+	var per := dr.size.x
+	for i in int(per / (dash * 2)):
+		for e in [[dr.position + Vector2(i * dash * 2, 0), Vector2(1, 0)], [dr.position + Vector2(i * dash * 2, dr.size.y), Vector2(1, 0)],
+				[dr.position + Vector2(0, i * dash * 2), Vector2(0, 1)], [dr.position + Vector2(dr.size.x, i * dash * 2), Vector2(0, 1)]]:
+			tl.draw_line(e[0], e[0] + e[1] * dash, Color(col, 0.8), S)
+	var dir := (b - a).normalized()
+	var s0 := a + dir * C * 0.28
+	var s1 := b - dir * C * 0.22
+	tl.draw_line(s0, s1, Art.INK, 3 * S)
+	tl.draw_line(s0, s1, Color(col, 0.85), S)
+	var nrm := Vector2(-dir.y, dir.x)
+	tl.draw_colored_polygon(PackedVector2Array([s1 + dir * 3 * S, s1 - dir * 2 * S + nrm * 3 * S, s1 - dir * 2 * S - nrm * 3 * S]), Color(col, 0.9))
+	if secs >= 1:
+		var lp := (s0 + s1) / 2 + Vector2(0, -6 * S)
+		tl.draw_string_outline(font, lp - Vector2(4, -5), "%d" % secs, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, 5, Art.INK)
+		tl.draw_string(font, lp - Vector2(4, -5), "%d" % secs, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, col)
+
+## The player's card while it is being performed: its cells fill up and a ring over the head runs out.
+func _casts(tl: Control, off: Vector2) -> void:
+	if not replaying:
+		casts.clear()
+		return
+	var t := float(shown_now) + replay_k
+	for c in casts:
+		if t < float(c["t0"]) or t >= float(c["t1"]):
+			continue
+		var k := (t - float(c["t0"])) / maxf(1.0, float(c["t1"] - c["t0"]))
+		for p in c["cells"]:
+			var r := cell_rect(p, S)
+			r.position += off
+			tl.draw_rect(r, Color(Art.GOLD, 0.10 + 0.25 * k))
+			_corners(tl, r, Color(Art.GOLD, 0.9), (3 + 3 * k) * S)
+		var u: Actor = battle._actor(c["uid"])
+		if u == null:
+			continue
+		var ust := Art.unit(Art.unit_id(u))
+		var head := feet(_pos_of(u)) + off - Vector2(0, (float(ust.get("ay", 22)) + 9) * S)
+		tl.draw_circle(head, 6 * S, Color(Art.INK, 0.8))
+		tl.draw_arc(head, 5 * S, -PI / 2, -PI / 2 + TAU * k, 24, Art.GOLD, 2 * S)
+		var left := int(ceil(float(c["t1"]) - t))
+		tl.draw_string(font, head + Vector2(-4, 6), "%d" % left, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color.WHITE)
 
 func _ghost(tl: Control, t: Dictionary, off: Vector2) -> void:
 	var cells: Array = t["cells"]
@@ -767,41 +899,45 @@ func _aim(tl: Control, off: Vector2) -> void:
 	if not aiming:
 		_corners(tl, hr.grow(-S), Color(1, 1, 1, 0.55), 3 * S)
 		return
-	if hover in range_cells or range_cells.is_empty():
-		_corners(tl, hr.grow(-S), Color(Art.GOLD, 0.95), 4 * S)
-		return
-	# out of reach: the shot travels as far as it can, then droops and fizzles
 	var from := feet(_pos_of(h)) + off - Vector2(0, 8 * S)
 	var to := hr.get_center()
-	var last := from
-	var n := 24
+	var arch := from.distance_to(to) * 0.16
+	if hover in range_cells or range_cells.is_empty():
+		_corners(tl, hr.grow(-S), Color(Art.GOLD, 0.95), 4 * S)
+		if hover != h.pos:
+			_dotted_arc(tl, from, to, arch, 1.0, Color(Art.GOLD, 0.95))
+		return
+	# out of reach: the arc flies as far as the reach allows, then drops short of the cell
 	var reach_k := 0.0
-	for i in range(1, n + 1):
-		var k := float(i) / n
-		var q := from.lerp(to, k)
-		var cq := cell_at(q - off)
+	for i in range(1, 41):
+		var k := float(i) / 40.0
+		var cq := cell_at(from.lerp(to, k) - off)
 		if cq.x >= 0 and (cq in range_cells or cq == h.pos):
 			reach_k = k
-	last = from.lerp(to, reach_k)
-	var dash := 3 * S
-	var segs := int(from.distance_to(last) / (dash * 2))
-	for i in segs:
-		var a := from.lerp(last, float(i * 2) / maxi(1, segs * 2))
-		var b := from.lerp(last, float(i * 2 + 1) / maxi(1, segs * 2))
-		tl.draw_line(a, b, Art.INK, 3 * S)
-		tl.draw_line(a, b, Color(Art.GOLD, 0.95), 2 * S)
-	# the rest of the way: faint, sagging red dots that never arrive
-	var rest := to - last
-	for i in 6:
-		var k := float(i + 1) / 7.0
-		var q := last + rest * k * 0.55 + Vector2(0, k * k * 10 * S)
-		tl.draw_rect(Rect2(q.snapped(Vector2(S, S)), Vector2(2 * S, 2 * S)), Color(Art.DANGER, 0.75 * (1.0 - k)))
+	_dotted_arc(tl, from, to, arch, reach_k, Color(Art.GOLD, 0.95))
+	var last := _arc_pt(from, to, arch, reach_k)
+	var vel := (_arc_pt(from, to, arch, reach_k) - _arc_pt(from, to, arch, maxf(0.0, reach_k - 0.05))) / 0.05
+	var dropped := last
+	for i in 7:
+		var t := float(i + 1) / 7.0 * 0.35
+		var q := last + vel * t * 0.5 + Vector2(0, 260.0 * S * t * t)
+		dropped = q
+		tl.draw_rect(Rect2(q.snapped(Vector2(S, S)) - Vector2(S, S), Vector2(2 * S, 2 * S)), Color(Art.DANGER, 0.85 * (1.0 - float(i) / 8.0)))
 	var puff := fmod(real * 1.5, 1.0)
-	tl.draw_arc(last, (2 + puff * 5) * S, 0, TAU, 12, Color(Art.DANGER, 0.85 * (1.0 - puff)), 2 * S)
-	tl.draw_rect(hr.grow(-2 * S), Color(Art.DANGER, 0.08))
-	var droop := Rect2(hr.position + Vector2(0, 2 * S), hr.size).grow(-2 * S)
-	var dots := 10
-	for i in dots:
-		var k := float(i) / dots
-		tl.draw_rect(Rect2(droop.position + Vector2(droop.size.x * k, 0), Vector2(S * 2, S)), Color(Art.DANGER, 0.5))
-		tl.draw_rect(Rect2(droop.position + Vector2(droop.size.x * k, droop.size.y), Vector2(S * 2, S)), Color(Art.DANGER, 0.5))
+	tl.draw_arc(dropped, (2 + puff * 5) * S, 0, TAU, 12, Color(Art.DANGER, 0.85 * (1.0 - puff)), 2 * S)
+	# the cell itself: a red frame exactly on its edges
+	var cr := cell_rect(hover, S)
+	cr.position += off
+	tl.draw_rect(cr, Color(Art.DANGER, 0.10))
+	tl.draw_rect(cr, Color(Art.DANGER, 0.8), false, S)
+
+func _dotted_arc(tl: Control, a: Vector2, b: Vector2, h: float, upto: float, col: Color) -> void:
+	var n := int(a.distance_to(b) / (5 * S)) + 2
+	var run := fmod(real * 0.6, 1.0)
+	for i in n:
+		var k := (float(i) + run) / n
+		if k > upto:
+			break
+		var q := _arc_pt(a, b, h, k)
+		tl.draw_rect(Rect2(q.snapped(Vector2(S, S)) - Vector2(1.5 * S, 1.5 * S), Vector2(3 * S, 3 * S)), Art.INK)
+		tl.draw_rect(Rect2(q.snapped(Vector2(S, S)) - Vector2(S, S), Vector2(2 * S, 2 * S)), col)

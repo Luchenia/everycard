@@ -1,9 +1,10 @@
 extends Control
 ## Battle screen: clock track on top, the dungeon room filling the middle, the hand as a ring of
 ## cards at the bottom. Almost no text: hovering a card or a cell explains its [keywords].
-## Keys: arrows move (1 s), mouse wheel or Q/E turn the ring, Space wait 1 s, right click cancel.
+## Keys: 1-5 pick a card, left click a cell to walk there, right click for full details (or to cancel
+## a picked card), arrows move (1 s), mouse wheel or Q/E flip through the hand, Space wait 1 s.
 
-const SEC_REAL := 0.35   # real seconds one game second takes when replayed
+const SEC_REAL := 0.5    # real seconds one game second takes when replayed
 const HUB := Vector2(640, 800)   # hand wheel hub on screen
 const WHEEL_STEP := 0.62         # radians between two wheel slots
 
@@ -109,10 +110,14 @@ func _step_replay(delta: float) -> void:
 	var k := clampf(replay_t, 0.0, 1.0)
 	var e := k * k * (3.0 - 2.0 * k)
 	board.shown_pos = {}
+	board.moving = {}
+	board.replay_k = k
 	for uid in a["pos"]:
 		var p0 := Vector2(a["pos"][uid])
 		var p1 := Vector2(b["pos"].get(uid, a["pos"][uid]))
 		board.shown_pos[uid] = p0.lerp(p1, e)
+		if p1 != p0:
+			board.moving[uid] = Vector2i(p1)
 	board.shown_hp = a["hp"] if k < 0.5 else b["hp"]
 	board.shown_now = int(a["t"])
 
@@ -130,6 +135,10 @@ func _flashes() -> void:
 			break
 		log_i += 1
 		match e["t"]:
+			"play":
+				if int(e["data"].get("secs", 0)) >= 2:
+					board.casts.append({"uid": int(e["data"].get("uid", -1)), "cells": e["data"].get("cells", []),
+						"t0": int(e["at"]), "t1": int(e["at"]) + int(e["data"]["secs"])})
 			"land":
 				var c := Effects.card_def(e["data"].get("card", ""), catalog)
 				var col := Color("#fff4c8")
@@ -222,42 +231,38 @@ func _build_hand() -> void:
 		cv.set_meta("slot", i)
 		cv.picked.connect(_on_card_picked)
 		cv.hovered.connect(_on_card_hover)
+		cv.inspected.connect(func(c):
+			_clear_tips()
+			_keyword_tips(c.def().get("desc", ""), true)
+			tips.position = Vector2(clampf(c.global_position.x + c.size.x * c.scale.x + 12, 8, 1280 - 250), 300))
 		hand_layer.add_child(cv)
 		cards.append(cv)
 	_layout_hand()
 
-func _wheel_slots() -> Array:
-	var spec: Dictionary = Art.manifest().get("ui", {}).get("hand_wheel.png", {})
-	var hub: Array = spec.get("hub_centre", [160, 112])
-	var out := []
-	for q in spec.get("slot_centres", [[68, 83], [100, 43], [159, 27], [218, 43], [248, 83]]):
-		out.append(Vector2(q[0] - hub[0], q[1] - hub[1]) * Art.UI_S)
-	return out
+## The hand: five cards held in a fan at the bottom. Turning the wheel flips one card out at
+## one end and a new one in at the other; the rest slide over by one place.
+const FAN_GAP := 118.0
+const FAN_Y := 668.0
+
+func _fan_pos(f: float) -> Vector2:
+	var d := f - 2.0
+	return Vector2(640 + d * FAN_GAP, FAN_Y + d * d * 7.0)
 
 func _draw_wheel() -> void:
-	if flow == null or flow.phase != "battle":
-		return
-	var t := Art.tex("ui/hand_wheel.png")
-	if t == null:
-		return
-	var aim := 0.45 if selected >= 0 else 1.0
-	hand_layer.draw_set_transform(HUB, spin, Vector2(Art.UI_S, Art.UI_S))
-	hand_layer.draw_texture(t, Vector2(-160, -112), Color(1, 1, 1, aim))
-	hand_layer.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	pass
 
 func _layout_hand() -> void:
 	hand_layer.queue_redraw()
-	var n := cards.size()
 	var aiming := selected >= 0
-	var slots := _wheel_slots()
+	var slide := spin / WHEEL_STEP     # -1..1 while a roll animates, eases to 0
 	var wig := sin(real * 60.0) * 0.03 if real < wiggle_until else 0.0
 	for ch in hand_layer.get_children():
 		var cv := ch as CardView
 		if cv == null:
 			continue
 		var i: int = cv.get_meta("slot")
-		var si := i if n == slots.size() else int(round(float(i) * (slots.size() - 1) / maxf(1.0, n - 1)))
-		var anchor: Vector2 = HUB + Vector2(slots[si]).rotated(spin)
+		var f := float(i) + slide
+		var anchor := _fan_pos(f)
 		cv.lit = i == selected
 		var big := cv == hovered_card and not aiming
 		var z := 2 if big else 1
@@ -266,20 +271,44 @@ func _layout_hand() -> void:
 		var alpha := 1.0
 		if aiming:
 			alpha = 0.62 if cv.lit else 0.24
+		cv.pivot_offset = cv.size / 2
+		# the card coming in turns over like a card taken into the hand
+		var entering := (slide < 0.0 and i == 0) or (slide > 0.0 and i == cards.size() - 1)
+		var sx := 1.0 - absf(slide) if entering else 1.0
 		if big:
-			# enlarged and upright, standing on the wheel so the text can be read
 			var x := clampf(anchor.x - cv.size.x / 2, 8, 1280 - cv.size.x - 8)
 			cv.position = Vector2(x, 796 - cv.size.y - (14 if cv.lit else 0))
 			cv.rotation = wig if cv.lit else 0.0
+			cv.scale = Vector2.ONE
 		else:
 			cv.position = anchor - cv.size / 2
-			cv.rotation = ((anchor - HUB).angle() + PI / 2) * 0.3
+			cv.rotation = (f - 2.0) * 0.07
+			cv.scale = Vector2(maxf(0.02, sx), 1.0)
 			if cv.lit:
-				# the picked card stays small (the board must stay visible) but rises off the wheel
-				cv.position += (anchor - HUB).normalized() * 26
+				# the picked card stays small (the board must stay visible) but rises out of the hand
+				cv.position.y -= 34
 				cv.rotation = wig
 		cv.modulate = Color(1, 1, 1, alpha)
 		cv.z_index = 5 if (big or cv.lit) else 0
+
+## The card pushed out by a roll leaves past the end of the hand.
+func _drop_out(slot: int, dir: int) -> void:
+	var src: CardView = cards[slot] if slot >= 0 and slot < cards.size() else null
+	if src == null:
+		return
+	var cv := CardView.new()
+	cv.setup(src.card_id, catalog, font, src.zoom)
+	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cv.position = src.position
+	cv.rotation = src.rotation
+	cv.pivot_offset = cv.size / 2
+	add_child(cv)
+	var dest := _fan_pos(float(slot) + dir * 1.2) - cv.size / 2 + Vector2(0, 60)
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(cv, "position", dest, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(cv, "rotation", cv.rotation + dir * 0.3, 0.3)
+	tw.tween_property(cv, "modulate", Color(1, 1, 1, 0.0), 0.3)
+	tw.chain().tween_callback(cv.queue_free)
 
 # ---- hud ----------------------------------------------------------------------------------------
 
@@ -347,6 +376,8 @@ func _tip(title: String, text: String, accent: Color) -> void:
 	sb.content_margin_top = 6
 	sb.content_margin_bottom = 8
 	pc.add_theme_stylebox_override("panel", sb)
+	pc.set_meta("title", title)
+	pc.set_meta("raw", text)
 	pc.custom_minimum_size = Vector2(230, 0)
 	pc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var rt := RichTextLabel.new()
@@ -361,16 +392,18 @@ func _tip(title: String, text: String, accent: Color) -> void:
 	tips.add_child(pc)
 	tips.visible = true
 
-func _keyword_tips(text: String) -> void:
+func _keyword_tips(text: String, full := false) -> void:
 	var kw: Dictionary = catalog.keywords.get("keywords", {})
 	var seen := []
 	var queue := CardView.keywords_in(text)
-	while not queue.is_empty() and seen.size() < 5:
+	while not queue.is_empty() and (full or seen.size() < 5):
 		var k: String = queue.pop_front()
 		if k in seen or not kw.has(k):
 			continue
 		seen.append(k)
 		_tip(k, kw[k], Color("#ffcf6a"))
+		if full:
+			queue.append_array(CardView.keywords_in(kw[k]))
 
 func _on_card_hover(cv: CardView, on: bool) -> void:
 	if on:
@@ -378,7 +411,7 @@ func _on_card_hover(cv: CardView, on: bool) -> void:
 		_clear_tips()
 		if selected < 0:
 			_keyword_tips(cv.def().get("desc", ""))
-			var sl: Vector2 = HUB + Vector2(_wheel_slots()[mini(int(cv.get_meta("slot")), 4)])
+			var sl := _fan_pos(float(cv.get_meta("slot")))
 			tips.position = Vector2(sl.x + CardView.SIZE.x + 12, 420)
 			if tips.position.x > 1280 - 250:
 				tips.position.x = cv.global_position.x - 250
@@ -386,7 +419,7 @@ func _on_card_hover(cv: CardView, on: bool) -> void:
 		hovered_card = null
 		_clear_tips()
 
-func _cell_tips(p: Vector2i) -> void:
+func _cell_tips(p: Vector2i, full := false) -> void:
 	var b := flow.battle
 	var kw: Dictionary = catalog.keywords.get("keywords", {})
 	var cellmap: Dictionary = catalog.keywords.get("cell", {})
@@ -402,6 +435,8 @@ func _cell_tips(p: Vector2i) -> void:
 		for s in u.statuses.keys():
 			if stmap.has(s) and kw.has(stmap[s]):
 				_tip(stmap[s], kw[stmap[s]], Color("#ffcf6a"))
+		if full:
+			_unit_details(u)
 	var m := b.grid.get_material(p)
 	if cellmap.has(m) and kw.has(cellmap[m]):
 		_tip(cellmap[m], kw[cellmap[m]], Color("#9cc8f0"))
@@ -412,6 +447,18 @@ func _cell_tips(p: Vector2i) -> void:
 		_tip("멈춘 시간", kw.get("멈춘 시간", ""), Color("#9cc8f0"))
 	elif ts < 0.95 and m != "swamp":
 		_tip("느림", kw.get("느림", ""), Color("#9cc8f0"))
+	if full:
+		# keywords named inside those explanations too, one level deep
+		var titles := []
+		var raws := []
+		for ch in tips.get_children():
+			titles.append(ch.get_meta("title", ""))
+			raws.append(ch.get_meta("raw", ""))
+		for r in raws:
+			for k in CardView.keywords_in(r):
+				if not k in titles and kw.has(k):
+					titles.append(k)
+					_tip(k, kw[k], Color("#ffcf6a"))
 	if tips.get_child_count() > 0:
 		var mp := get_viewport().get_mouse_position()
 		tips.position = mp + Vector2(18, 10)
@@ -419,6 +466,32 @@ func _cell_tips(p: Vector2i) -> void:
 			tips.position.x = mp.x - 250
 		if tips.position.y > 520:
 			tips.position.y = 520
+
+## Right-click on a body: what it will do next and the cards it fights with.
+func _unit_details(u: Actor) -> void:
+	var b := flow.battle
+	if u.controller == "ai":
+		var lines := []
+		for t in b.telegraphs:
+			if int(t["actor_uid"]) == u.uid:
+				lines.append("%s: %d초 뒤" % [Effects.card_def(t["card_id"], catalog).get("name", ""), int(t["fire_at"]) - b.now])
+		var it := b.ai_intent(u)
+		if it.get("kind", "") == "move":
+			lines.append("이동: %d초 뒤" % (int(it["at"]) - b.now))
+		var seq: Array = u.pattern if not u.pattern.is_empty() else u.deck
+		if not seq.is_empty():
+			var names := []
+			for i in seq.size():
+				names.append(Effects.card_def(seq[(u.pattern_index + i) % seq.size()], catalog).get("name", ""))
+			lines.append("순서: " + " → ".join(names))
+		if not lines.is_empty():
+			_tip("다음 행동", "\n".join(lines), Color("#ff8a7a"))
+	else:
+		var pas := []
+		for p in u.passives:
+			pas.append(p)
+		if "backstab" in pas:
+			_tip("급소 찌르기", catalog.keywords.get("keywords", {}).get("급소 찌르기", ""), Color("#7ee08a"))
 
 # ---- overlays -----------------------------------------------------------------------------------
 
@@ -536,8 +609,15 @@ func _on_board_input(ev: InputEvent) -> void:
 		if ev.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
 			return
 		if ev.button_index == MOUSE_BUTTON_RIGHT:
-			selected = -1
-			_refresh()
+			if selected >= 0:
+				selected = -1
+				_refresh()
+			elif cell.x >= 0:
+				# everything about that cell, nothing cut short
+				_clear_tips()
+				_cell_tips(cell, true)
+		elif ev.button_index == MOUSE_BUTTON_LEFT and cell.x >= 0 and selected < 0:
+			_walk_to(cell)
 		elif ev.button_index == MOUSE_BUTTON_LEFT and cell.x >= 0 and selected >= 0:
 			var played := selected
 			if b.cmd_play(selected, cell):
@@ -547,6 +627,51 @@ func _on_board_input(ev: InputEvent) -> void:
 			else:
 				board.out_of_range_click(cell)
 				wiggle_until = real + 0.3
+
+## Click-to-move: walks there one cell (one second) at a time, and stops early when a new
+## warning appears or the body is hit, so the player can rethink.
+func _walk_to(cell: Vector2i) -> void:
+	var b := flow.battle
+	var h := b.human()
+	if h == null or cell == h.pos:
+		return
+	var path := _path(h.pos, cell)
+	if path.is_empty():
+		board.out_of_range_click(cell)
+		return
+	var warn0 := b.telegraphs.size()
+	var hp0 := h.hp
+	for step in path:
+		var hh := b.human()
+		if hh == null or b.phase != "player" or not b.cmd_move(step - hh.pos):
+			break
+		if b.telegraphs.size() > warn0 or (b.human() != null and b.human().hp < hp0):
+			break
+	_after()
+
+func _path(from: Vector2i, to: Vector2i) -> Array:
+	var g := flow.battle.grid
+	var prev := {from: from}
+	var q := [from]
+	while not q.is_empty():
+		var c: Vector2i = q.pop_front()
+		if c == to:
+			break
+		for n in g.neighbors4(c):
+			if prev.has(n) or not g.passable(n) or (g.unit_at(n) != null and n != to) or g.mat_def(n).get("lethal", false):
+				continue
+			prev[n] = c
+			q.append(n)
+	if not prev.has(to):
+		return []
+	var out := []
+	var c2 := to
+	while c2 != from:
+		out.push_front(c2)
+		c2 = prev[c2]
+	if not out.is_empty() and flow.battle.grid.unit_at(out.back()) != null:
+		out.pop_back()   # clicked a body: walk up to it
+	return out
 
 func _input(ev: InputEvent) -> void:
 	# the wheel turns the ring wherever the mouse is
@@ -558,8 +683,12 @@ func _input(ev: InputEvent) -> void:
 
 func _roll(dir: int) -> void:
 	selected = -1
+	var out_slot := cards.size() - 1 if dir > 0 else 0
+	var leaving: CardView = cards[out_slot] if out_slot >= 0 and out_slot < cards.size() else null
 	if flow.battle.cmd_wheel(dir):
 		spin = -WHEEL_STEP * dir
+		if leaving != null:
+			_drop_out(out_slot, dir)
 	_after()
 
 func _unhandled_input(ev: InputEvent) -> void:
@@ -574,6 +703,11 @@ func _unhandled_input(ev: InputEvent) -> void:
 		KEY_SPACE:
 			selected = -1
 			b.cmd_wait(1)
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5:
+			var i: int = ev.keycode - KEY_1
+			if i < cards.size() and cards[i] != null:
+				_on_card_picked(cards[i])
+			return
 		KEY_Q:
 			_roll(-1)
 			return

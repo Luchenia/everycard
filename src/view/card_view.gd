@@ -7,6 +7,7 @@ extends Control
 
 signal picked(card_view)
 signal hovered(card_view, on)
+signal inspected(card_view)
 
 const SIZE := Vector2(88, 136)      # art px
 const ART_WIN := Rect2(12, 12, 64, 51)
@@ -128,6 +129,9 @@ static func keywords_in(text: String) -> Array:
 func _gui_input(ev: InputEvent) -> void:
 	if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
 		picked.emit(self)
+		accept_event()
+	elif ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_RIGHT:
+		inspected.emit(self)
 		accept_event()
 
 func _process(d: float) -> void:
