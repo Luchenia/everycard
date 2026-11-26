@@ -275,7 +275,7 @@ func _pile_top() -> Vector2:
 	var n := 0
 	if flow != null and flow.battle != null and flow.battle.belt != null:
 		n = maxi(0, flow.battle.belt.ring().size() - 5)
-	return PILE - Vector2(-mini(n, 30) * 0.6, mini(n, 30) * 2.2)
+	return PILE - Vector2(-mini(n, 30) * 1.0, mini(n, 30) * 2.0)
 
 func _draw_back(at: Vector2, sz: Vector2, rot: float, shade: float) -> void:
 	var t := Art.tex("ui/card_back.png")
@@ -297,13 +297,13 @@ func _draw_wheel() -> void:
 	var n := maxi(0, flow.battle.belt.ring().size() - 5)
 	if n == 0:
 		return
-	var sz := CardView.SIZE * 0.9
+	var sz := CardView.SIZE
 	var dim := 0.5 if selected >= 0 else 1.0
 	hand_layer.draw_rect(Rect2(PILE - sz / 2 + Vector2(6, 10), sz), Color(0, 0, 0, 0.35))
-	var layers := mini(n, 30)
+	var layers := mini(n, 24)
 	for i in layers:
 		# the pile's edge: a sliver per card, a little uneven like a real stack
-		var at := PILE + Vector2(i * 0.6 + sin(i * 2.3) * 1.2, -i * 2.2)
+		var at := PILE + Vector2(i * 1.0 + sin(i * 2.3) * 0.8, -i * 2.0)
 		var rot := 0.03 + sin(i * 1.7) * 0.012
 		if i < layers - 1:
 			# only the card edge shows under the next one: a pale paper line

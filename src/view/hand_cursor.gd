@@ -3,7 +3,7 @@ extends Control
 ## The player's hand over the cards (the choice is the player's judgement): it trails the mouse
 ## while it is over the hand, darts to a card picked by hotkey and taps it, and sweeps sideways
 ## when the wheel flips through the hand. Each character can have its own glove.
-## Placeholder art drawn from a tiny bitmap until the real sprite exists.
+## Uses the glove sprite (ui/hand_rogue.png); the tiny bitmap below is only a fallback.
 
 const S := 4
 const ART := [
@@ -91,6 +91,23 @@ func _draw() -> void:
 		at.x += sweep_dir * (e - 0.5) * 2.0 * 70.0
 		at.y += 10.0
 		rot += sweep_dir * 0.6 * sin(e * PI)
+	var tex := Art.tex("ui/hand_rogue.png")
+	if tex != null:
+		# the sprite: 0 point, 1 press, 2 swipe (mirrored for a rightward swipe); fingertip is the hotspot
+		var fr := 0
+		if tk >= 0.0 and tk < 0.22:
+			fr = 1
+		var flip := false
+		if sk >= 0.0 and sk < 0.35:
+			fr = 2
+			flip = sweep_dir > 0
+		var hot := Vector2(6, 4 if fr == 1 else 3)
+		var k := 3.0
+		draw_set_transform(at, 0.0, Vector2(-k if flip else k, k))
+		draw_texture_rect_region(tex, Rect2(-hot + Vector2(1.5, 2), Vector2(24, 28)), Rect2(fr * 24, 0, 24, 28), Color(0, 0, 0, 0.3))
+		draw_texture_rect_region(tex, Rect2(-hot, Vector2(24, 28)), Rect2(fr * 24, 0, 24, 28))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		return
 	draw_set_transform(at, rot, Vector2.ONE)
 	# shadow, then the glove
 	for y in ART.size():
