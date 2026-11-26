@@ -387,7 +387,301 @@
         46
       ]
     },
-    "_notes": "attack/hit: generated attack animations were not readable, so do them in code: attack = 3px lunge toward target over 4 frames + fx/slash.png; hit = 2 frames white flash + 1px knockback + fx/hit.png. Shadow: ellipse 12x4 rgba(0,0,0,110) at the anchor. Sort all units and tall fx by anchor y."
+    "_notes": "attack/hit: generated attack animations were not readable, so do them in code: attack = 3px lunge toward target over 4 frames + fx/slash.png; hit = 2 frames white flash + 1px knockback + fx/hit.png. Shadow: ellipse 12x4 rgba(0,0,0,110) at the anchor. Sort all units and tall fx by anchor y.",
+    "slime_idle.png": {
+      "what": "slime idle, 48 frames (3 different subtle loops that each start and end on the base pose), readable at 0.2x in held time",
+      "frame": [
+        24,
+        24
+      ],
+      "count": 48,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        12,
+        22
+      ]
+    },
+    "slime_windup.png": {
+      "what": "slime windup: driven by attack progress: frame 0 = warning starts, 23 = fully cocked (holdable). Crouch/lean back, tint and a pulsing rim glow build up, trembles in the last third.",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "slime_strike.png": {
+      "what": "slime strike: one-shot release from the cocked pose, then back to base; play at 24fps",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 8,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "slime_hit.png": {
+      "what": "slime hit: one-shot flinch: white flash, knockback, recover to base",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 6,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "ember_imp_idle.png": {
+      "what": "ember_imp idle, 48 frames (3 different subtle loops that each start and end on the base pose), readable at 0.2x in held time",
+      "frame": [
+        24,
+        24
+      ],
+      "count": 48,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        12,
+        22
+      ]
+    },
+    "ember_imp_windup.png": {
+      "what": "ember_imp windup: driven by attack progress: frame 0 = warning starts, 23 = fully cocked (holdable). Crouch/lean back, tint and a pulsing rim glow build up, trembles in the last third.",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "ember_imp_strike.png": {
+      "what": "ember_imp strike: one-shot release from the cocked pose, then back to base; play at 24fps",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 8,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "ember_imp_hit.png": {
+      "what": "ember_imp hit: one-shot flinch: white flash, knockback, recover to base",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 6,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "iron_golem_idle.png": {
+      "what": "iron_golem idle, 48 frames (3 different subtle loops that each start and end on the base pose), readable at 0.2x in held time",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 48,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "iron_golem_windup.png": {
+      "what": "iron_golem windup: driven by attack progress: frame 0 = warning starts, 23 = fully cocked (holdable). Crouch/lean back, tint and a pulsing rim glow build up, trembles in the last third.",
+      "frame": [
+        40,
+        40
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        20,
+        38
+      ]
+    },
+    "iron_golem_strike.png": {
+      "what": "iron_golem strike: one-shot release from the cocked pose, then back to base; play at 24fps",
+      "frame": [
+        40,
+        40
+      ],
+      "count": 8,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        20,
+        38
+      ]
+    },
+    "iron_golem_hit.png": {
+      "what": "iron_golem hit: one-shot flinch: white flash, knockback, recover to base",
+      "frame": [
+        40,
+        40
+      ],
+      "count": 6,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        20,
+        38
+      ]
+    },
+    "boss_tide_warden_idle.png": {
+      "what": "boss_tide_warden idle, 48 frames (3 different subtle loops that each start and end on the base pose), readable at 0.2x in held time",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 48,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        24,
+        46
+      ]
+    },
+    "boss_tide_warden_windup.png": {
+      "what": "boss_tide_warden windup: driven by attack progress: frame 0 = warning starts, 23 = fully cocked (holdable). Crouch/lean back, tint and a pulsing rim glow build up, trembles in the last third.",
+      "frame": [
+        60,
+        60
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        30,
+        58
+      ]
+    },
+    "boss_tide_warden_strike.png": {
+      "what": "boss_tide_warden strike: one-shot release from the cocked pose, then back to base; play at 24fps",
+      "frame": [
+        60,
+        60
+      ],
+      "count": 8,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        30,
+        58
+      ]
+    },
+    "boss_tide_warden_hit.png": {
+      "what": "boss_tide_warden hit: one-shot flinch: white flash, knockback, recover to base",
+      "frame": [
+        60,
+        60
+      ],
+      "count": 6,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        30,
+        58
+      ]
+    },
+    "hero_idle.png": {
+      "what": "hero idle, 48 frames (3 different subtle loops that each start and end on the base pose), readable at 0.2x in held time",
+      "frame": [
+        24,
+        24
+      ],
+      "count": 48,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        12,
+        22
+      ]
+    },
+    "hero_windup.png": {
+      "what": "hero windup: driven by attack progress: frame 0 = warning starts, 23 = fully cocked (holdable). Crouch/lean back, tint and a pulsing rim glow build up, trembles in the last third.",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "hero_strike.png": {
+      "what": "hero strike: one-shot release from the cocked pose, then back to base; play at 24fps",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 8,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "hero_hit.png": {
+      "what": "hero hit: one-shot flinch: white flash, knockback, recover to base",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 6,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "hero_walk.png": {
+      "what": "hero one-cell step in place, 12 frames played over one game second; move the sprite 16px across the 12 frames in code; starts and ends on the base pose",
+      "frame": [
+        24,
+        24
+      ],
+      "count": 12,
+      "fps": 12,
+      "loop": false,
+      "anchor": [
+        12,
+        22
+      ]
+    }
   },
   "ui": {
     "cards/card_frame_<family>_<rarity>.png": {

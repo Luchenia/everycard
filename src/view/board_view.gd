@@ -698,21 +698,46 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 	var ground := f + push + Vector2(0, hop)
 	var idx := Art.frame_at(st, clock * 1.0, u.uid * 3)
 	var tint := Color(0.35, 0.2, 0.55, 0.7) if u.controller == "echo" else Color.WHITE
-	# alive while time is held: slow breathing, and an attacker visibly winding up for its blow
-	var sq := Vector2(1.0, 1.0 + 0.025 * sin(clock * 2.2 + u.uid))
+	# alive while time is held: idle loop (or slow breathing), an attacker visibly winding up for
+	# its blow, then the strike, a flinch when hit, and the hero's step while walking
+	var sid := Art.unit_id(u)
+	var sq := Vector2.ONE
+	var idle := Art.strip("units", sid + "_idle.png")
+	if not idle.is_empty():
+		st = idle
+		idx = Art.frame_at(idle, clock, u.uid * 7)
+	else:
+		sq = Vector2(1.0, 1.0 + 0.025 * sin(clock * 2.2 + u.uid))
+	var lk := (real - float(lunges[u.uid]["t0"])) if lunges.has(u.uid) else 9.0
+	var hit_s := Art.strip("units", sid + "_hit.png")
+	var strike_s := Art.strip("units", sid + "_strike.png")
+	var walk_s := Art.strip("units", sid + "_walk.png")
 	var wind := _windup(u)
-	if wind.has("k"):
+	var flashed := false
+	if not hit_s.is_empty() and hit_k < hit_s["n"] / 24.0:
+		st = hit_s
+		idx = clampi(int(hit_k * 24.0), 0, hit_s["n"] - 1)
+		flashed = true
+	elif not strike_s.is_empty() and lk < strike_s["n"] / 24.0:
+		st = strike_s
+		idx = clampi(int(lk * 24.0), 0, strike_s["n"] - 1)
+	elif wind.has("k"):
 		var k: float = wind["k"]
-		var ws := Art.strip("units", Art.unit_id(u) + "_windup.png")
+		var ws := Art.strip("units", sid + "_windup.png")
 		if not ws.is_empty():
 			st = ws
 			idx = clampi(int(k * (ws["n"] - 1)), 0, ws["n"] - 1)
+			sq = Vector2.ONE
 		else:
 			# crouch and draw back away from the target, trembling harder as the blow nears
 			sq = Vector2(1.0 + 0.10 * k, 1.0 - 0.14 * k)
 			var away: Vector2 = -wind["dir"]
 			ground += away * 3 * S * k + Vector2(sin(real * 40.0 + u.uid), 0) * S * k * k
-		tint = tint.lerp(Color(1.4, 0.75, 0.7, tint.a), 0.6 * k * (0.6 + 0.4 * sin(real * 8.0)))
+			tint = tint.lerp(Color(1.4, 0.75, 0.7, tint.a), 0.6 * k * (0.6 + 0.4 * sin(real * 8.0)))
+	elif replaying and frac > 0.01 and not walk_s.is_empty():
+		st = walk_s
+		idx = clampi(int(replay_k * walk_s["n"]), 0, walk_s["n"] - 1)
+		ground.y -= hop   # the step strip carries its own bounce
 	elif not replaying and u.controller == "ai":
 		# about to step: lean toward the next cell, rocking slowly in held time
 		var it := battle.ai_intent(u)
@@ -720,7 +745,7 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 			var d := (Vector2(it["to"]) - Vector2(u.pos)).normalized()
 			ground += d * S * (1.5 + 0.8 * sin(clock * 3.0 + u.uid))
 	_sprite_sq(tl, st, ground, idx, tint, flip, sq)
-	if hit_k < 0.09:
+	if hit_k < 0.09 and not flashed:
 		_sprite_sq(tl, st, ground, idx, Color(5, 5, 5, 1), flip, sq)   # white flash
 	if u.has_status("shocked"):
 		var sh := Art.fx("shock")
@@ -736,6 +761,15 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 
 ## How far an enemy is into the wind-up of its announced blow: {k: 0..1, dir} or {}.
 func _windup(u: Actor) -> Dictionary:
+	if replaying:
+		var tc := float(shown_now) + replay_k
+		for c in casts:
+			if int(c["uid"]) == u.uid and tc >= float(c["t0"]) and tc < float(c["t1"]):
+				var ck := (tc - float(c["t0"])) / maxf(1.0, float(c["t1"] - c["t0"]))
+				var cd := Vector2.ZERO
+				for p in c["cells"]:
+					cd += Vector2(p) - _pos_of(u)
+				return {"k": ck, "dir": cd.normalized() if cd.length() > 0.01 else Vector2.RIGHT}
 	for t in battle.telegraphs:
 		if int(t["actor_uid"]) != u.uid:
 			continue
