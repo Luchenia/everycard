@@ -25,6 +25,7 @@ var replay_k := 0.0              # 0..1 inside the replayed second
 var moving: Dictionary = {}      # uid -> Vector2i: where a gliding unit is heading
 var casts: Array = []            # {uid, cells, t0, t1}: the player's card being performed
 var _speed := 0.14
+const HELD := 0.2                # how fast the world still drifts while the player thinks
 var play_speed := 1.0            # game speed (1-5 keys): effects run faster with the replay
 var self_aim := false            # a picked card with no target (방어 ...): the hero lights up instead of an arc
 var forecast := 0                # seconds the picked action will take: warnings landing in them stand out
@@ -81,7 +82,7 @@ func fit() -> void:
 func _process(delta: float) -> void:
 	real += delta
 	# effects crawl while the player thinks (bullet time) and ramp back up when time flows
-	var target := play_speed if replaying else (0.0 if battle != null and battle.borrowing() else 0.14)
+	var target := play_speed if replaying else (0.0 if battle != null and battle.borrowing() else HELD)
 	_speed = move_toward(_speed, target, delta * 4.0)
 	clock += delta * _speed
 	if battle != null:
@@ -473,7 +474,7 @@ func _draw_top() -> void:
 		tl.draw_string_outline(font, pp - Vector2(10, 0), q["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 6, Color(0, 0, 0, col.a))
 		tl.draw_string(font, pp - Vector2(10, 0), q["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 	# bullet time: a cool veil and slowly drifting motes while the player decides
-	var calm := 1.0 - clampf((_speed - 0.14) / maxf(0.01, play_speed - 0.14), 0.0, 1.0)
+	var calm := 1.0 - clampf((_speed - HELD) / maxf(0.01, play_speed - HELD), 0.0, 1.0)
 	if calm > 0.01:
 		# a slow breathing vignette closes in while time is held
 		var breath := 0.5 + 0.5 * sin(real * 1.4)
@@ -589,15 +590,15 @@ func _hand(tl: Control, c: Vector2, ang: float, col: Color) -> void:
 	tl.draw_line(c, c + Vector2(sin(ang), -cos(ang)) * 4 * S, col, S)
 
 ## One sprite from an fx strip with its anchor on the cell's ground point.
-func _sprite(tl: Control, st: Dictionary, ground: Vector2, i: int, mod := Color.WHITE, flip := false, sc := 1.0) -> void:
+func _sprite(tl: Control, st: Dictionary, ground: Vector2, i: int, mod := Color.WHITE, flip := false, sc := 1.0, sq := Vector2.ONE) -> void:
 	if st.is_empty():
 		return
 	var src := Art.frame_src(st, i)
 	var sz := src.size * S * sc
 	var at := ground - Vector2(st["ax"], st["ay"]) * S * sc
-	if flip:
-		# mirror around the anchor with a transform: a negative-size rect is not drawn mirrored in place
-		tl.draw_set_transform(ground, 0.0, Vector2(-1, 1))
+	if flip or sq != Vector2.ONE:
+		# mirror / squash around the anchor with a transform: a negative-size rect is not drawn mirrored in place
+		tl.draw_set_transform(ground, 0.0, Vector2(-sq.x if flip else sq.x, sq.y))
 		tl.draw_texture_rect_region(st["tex"], Rect2(at - ground, sz), src, mod)
 		tl.draw_set_transform(Vector2.ZERO)
 		return
@@ -671,9 +672,30 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 	var ground := f + push + Vector2(0, hop)
 	var idx := Art.frame_at(st, clock * 1.0, u.uid * 3)
 	var tint := Color(0.35, 0.2, 0.55, 0.7) if u.controller == "echo" else Color.WHITE
-	_sprite(tl, st, ground, idx, tint, flip)
+	# alive while time is held: slow breathing, and an attacker visibly winding up for its blow
+	var sq := Vector2(1.0, 1.0 + 0.025 * sin(clock * 2.2 + u.uid))
+	var wind := _windup(u)
+	if wind.has("k"):
+		var k: float = wind["k"]
+		var ws := Art.strip("units", Art.unit_id(u) + "_windup.png")
+		if not ws.is_empty():
+			st = ws
+			idx = clampi(int(k * (ws["n"] - 1)), 0, ws["n"] - 1)
+		else:
+			# crouch and draw back away from the target, trembling harder as the blow nears
+			sq = Vector2(1.0 + 0.10 * k, 1.0 - 0.14 * k)
+			var away: Vector2 = -wind["dir"]
+			ground += away * 3 * S * k + Vector2(sin(real * 40.0 + u.uid), 0) * S * k * k
+		tint = tint.lerp(Color(1.4, 0.75, 0.7, tint.a), 0.6 * k * (0.6 + 0.4 * sin(real * 8.0)))
+	elif not replaying and u.controller == "ai":
+		# about to step: lean toward the next cell, rocking slowly in held time
+		var it := battle.ai_intent(u)
+		if it.get("kind", "") == "move":
+			var d := (Vector2(it["to"]) - Vector2(u.pos)).normalized()
+			ground += d * S * (1.5 + 0.8 * sin(clock * 3.0 + u.uid))
+	_sprite_sq(tl, st, ground, idx, tint, flip, sq)
 	if hit_k < 0.09:
-		_sprite(tl, st, ground, idx, Color(5, 5, 5, 1), flip)   # white flash
+		_sprite_sq(tl, st, ground, idx, Color(5, 5, 5, 1), flip, sq)   # white flash
 	if u.has_status("shocked"):
 		var sh := Art.fx("shock")
 		_sprite(tl, sh, f - Vector2(0, st["h"] * 0.45 * S), Art.frame_at(sh, clock * 3.0, u.uid))
@@ -685,6 +707,27 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 			_sprite(tl, cr, cg, Art.frame_at(cr, clock, u.uid))
 	if u.has_status("frozen"):
 		tl.draw_rect(Rect2(f - Vector2(st["w"] * 0.4 * S, st["h"] * 0.85 * S), Vector2(st["w"] * 0.8 * S, st["h"] * 0.85 * S)), Color(0.7, 0.9, 1.0, 0.35))
+
+## How far an enemy is into the wind-up of its announced blow: {k: 0..1, dir} or {}.
+func _windup(u: Actor) -> Dictionary:
+	for t in battle.telegraphs:
+		if int(t["actor_uid"]) != u.uid:
+			continue
+		var t_now := (float(shown_now) + replay_k) if replaying else float(battle.now)
+		var t0 := float(t.get("set_at", int(t["fire_at"]) - 2))
+		var span := maxf(1.0, float(t["fire_at"]) - t0)
+		var k := clampf((t_now - t0) / span, 0.0, 1.0)
+		var c := Vector2.ZERO
+		for p in t["cells"]:
+			c += Vector2(p)
+		if not t["cells"].is_empty():
+			c /= t["cells"].size()
+		var d := c - _pos_of(u)
+		return {"k": maxf(k, 0.15), "dir": d.normalized() if d.length() > 0.01 else Vector2.LEFT}
+	return {}
+
+func _sprite_sq(tl: Control, st: Dictionary, ground: Vector2, i: int, mod: Color, flip: bool, sq: Vector2) -> void:
+	_sprite(tl, st, ground, i, mod, flip, 1.0, sq)
 
 ## 시한폭탄: the bomb with a burning fuse, its blast area and the seconds left.
 func _bomb(tl: Control, tm: Dictionary, off: Vector2) -> void:

@@ -581,7 +581,7 @@ func _ai_act(a: Actor) -> void:
 	var secs := maxi(1, action_secs(int(card.get("time", 1)), a))
 	if card.get("telegraph", false):
 		var cells := _attack_cells(card, a, aim, foe)
-		telegraphs.append({"actor_uid": a.uid, "card_id": choice["card_id"], "aim": aim, "cells": cells,
+		telegraphs.append({"actor_uid": a.uid, "card_id": choice["card_id"], "aim": aim, "cells": cells, "set_at": now,
 			"fire_at": now + secs, "track": card.get("track", false), "foe_uid": foe.uid})
 		a.next_at = now + secs + 1
 		_log("telegraph", "%s: %s 예고 (%d초 뒤)" % [a.name, card.get("name", choice["card_id"]), secs], {"cells": cells})

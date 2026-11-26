@@ -22,6 +22,8 @@ var selected := -1
 var seed_value := 0
 var shown_frame := 0
 var replay_t := 0.0
+var flow_from := 0       # first frame of the flow being replayed
+var warp := 0.0           # time-warp factor: eases up from bullet time when time starts flowing, back down at the end
 var cards: Array = []          # CardView per hand slot (null for empty / heavy tail)
 var hovered_card: CardView
 var spin := 0.0                # ring turn animation (radians, eases to 0)
@@ -107,8 +109,16 @@ func _step_replay(delta: float) -> void:
 			board.replaying = false
 			_refresh()
 		return
+	if not board.replaying:
+		warp = BoardView.HELD
+		flow_from = shown_frame
 	board.replaying = true
-	replay_t += delta * speed / SEC_REAL
+	# ramp out of bullet time, and settle back into it over the last moments of the flow
+	var left := float(fr.size() - 1 - shown_frame) - replay_t
+	var tail := lerpf(0.3, 1.0, clampf(left / 0.6, 0.0, 1.0))
+	warp = move_toward(warp, tail, delta * 4.0) if warp < tail else tail
+	board.play_speed = speed * warp
+	replay_t += delta * speed * warp / SEC_REAL
 	while replay_t >= 1.0 and shown_frame < fr.size() - 1:
 		replay_t -= 1.0
 		shown_frame += 1
@@ -121,13 +131,24 @@ func _step_replay(delta: float) -> void:
 	var a: Dictionary = fr[shown_frame]
 	var b: Dictionary = fr[shown_frame + 1]
 	var k := clampf(replay_t, 0.0, 1.0)
-	var e := k * k * (3.0 - 2.0 * k)
+	var prev: Dictionary = fr[shown_frame - 1] if shown_frame > flow_from else {}
+	var next: Dictionary = fr[shown_frame + 2] if shown_frame + 2 < fr.size() else {}
 	board.shown_pos = {}
 	board.moving = {}
 	board.replay_k = k
 	for uid in a["pos"]:
 		var p0 := Vector2(a["pos"][uid])
 		var p1 := Vector2(b["pos"].get(uid, a["pos"][uid]))
+		# a walk over several seconds glides at a steady pace: ease only where it starts and stops
+		var went: bool = prev.has("pos") and Vector2(prev["pos"].get(uid, a["pos"][uid])) != p0
+		var goes: bool = next.has("pos") and Vector2(next["pos"].get(uid, b["pos"].get(uid, a["pos"][uid]))) != p1
+		var e := k
+		if went and not goes:
+			e = 1.0 - (1.0 - k) * (1.0 - k)
+		elif goes and not went:
+			e = k * k
+		elif not went and not goes:
+			e = k * k * (3.0 - 2.0 * k)
 		board.shown_pos[uid] = p0.lerp(p1, e)
 		if p1 != p0:
 			board.moving[uid] = Vector2i(p1)
