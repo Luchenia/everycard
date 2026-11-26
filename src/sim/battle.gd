@@ -340,6 +340,22 @@ func _frame() -> void:
 		hp[a.uid] = a.hp
 	frames.append({"t": now, "pos": pos, "hp": hp})
 
+## Crystals broken outside an effect (shoved units, collisions) still throw their shards.
+func _throw_shards() -> void:
+	ctx.now = now
+	for guard in 8:
+		var any := false
+		while not grid.shatter_queue.is_empty():
+			Effects.shatter(ctx, grid.shatter_queue.pop_front(), null)
+			any = true
+		for a in actors:
+			if a.shattered:
+				a.shattered = false
+				Effects.shatter(ctx, a.pos, a)
+				any = true
+		if not any:
+			break
+
 func _world_second() -> void:
 	for a in actors:
 		if a.shield > 0 and now >= a.shield_until:
@@ -492,6 +508,7 @@ func _cleanup() -> void:
 			_log("death", "%s 쓰러짐" % a.name, {"uid": a.uid})
 
 func _after_action() -> void:
+	_throw_shards()
 	_cleanup()
 	if human() != belt_owner and human() != null:
 		# body swap: the body the player left becomes an AI that needs a moment to get its bearings

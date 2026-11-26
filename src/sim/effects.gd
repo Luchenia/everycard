@@ -126,6 +126,15 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 				var amt := int(round(float(part["amount"]) * float(g.get_var(u.pos, "mana_density"))))
 				var d: int = u.take_damage(amt, part.get("kind", "physical"))
 				_log(ctx, "damage", "%s %d 피해" % [u.name, d], {"uid": u.uid, "amount": d})
+				if u.shattered:
+					u.shattered = false
+					shatter(ctx, u.pos, u)
+			# physical blows and projectiles break crystals standing in the area
+			if part.get("kind", "physical") in ["physical", "true"]:
+				for p in cells:
+					if g.in_bounds(p) and g.get_material(p) == "crystal":
+						g.set_material(p, "none")
+						shatter(ctx, p, null)
 		"heal":
 			for u in _units_in(ctx, cells):
 				u.heal(int(part["amount"]))
@@ -266,11 +275,40 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 			ctx.actors.append(a)
 			_log(ctx, "summon", "%s 소환" % a.name, {"uid": a.uid})
 
+## A crystal (a cell, or a crystallized unit) breaks: shards hit every unit around it.
+static func shatter(ctx: BattleContext, at: Vector2i, source) -> void:
+	_log(ctx, "shatter", "결정이 깨짐", {"cell": at, "cells": [at]})
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			var n := at + Vector2i(dx, dy)
+			if not ctx.grid.in_bounds(n):
+				continue
+			var u = ctx.grid.unit_at(n)
+			if u == null or u == source or not u.alive():
+				continue
+			var d: int = u.take_damage(Actor.SHARD_DAMAGE, "physical")
+			_log(ctx, "damage", "%s 파편 %d" % [u.name, d], {"uid": u.uid, "amount": d})
+			if u.shattered:
+				u.shattered = false
+				shatter(ctx, u.pos, u)
+
+## Light and magic hitting crystal turn left or right at random.
+static func _deflect(ctx: BattleContext, d: Vector2i) -> Vector2i:
+	var turn := Vector2i(d.y, d.x) if ctx.rng.next_int(2) == 0 else Vector2i(-d.y, -d.x)
+	return turn
+
+static func _crystal_at(g: Grid, p: Vector2i) -> bool:
+	if g.get_material(p) == "crystal":
+		return true
+	var u = g.unit_at(p)
+	return u != null and u.has_status("crystal")
+
 static func _beam(part: Dictionary, user, aim: Vector2i, ctx: BattleContext) -> void:
 	var g := ctx.grid
 	var d := Targeting.dir_to(user.pos, aim)
 	var p: Vector2i = user.pos
 	var reflected := false
+	var deflects := 0
 	var length := int(part.get("length", 6))
 	var path: Array = []
 	for i in length:
@@ -284,8 +322,13 @@ static func _beam(part: Dictionary, user, aim: Vector2i, ctx: BattleContext) -> 
 				nxt = shifted
 		if not g.in_bounds(nxt):
 			break
+		if _crystal_at(g, nxt) and deflects < 3:
+			d = _deflect(ctx, d)
+			deflects += 1
+			_log(ctx, "deflect", "빛이 결정에 꺾임", {"cell": nxt, "cells": [nxt]})
+			continue
 		if not g.passable(nxt):
-			if g.mat_def(nxt).get("reflective", false) and not reflected:
+			if g.mat_def(nxt).get("reflective", false):
 				d = -d
 				reflected = true
 				continue
@@ -301,7 +344,7 @@ static func _beam(part: Dictionary, user, aim: Vector2i, ctx: BattleContext) -> 
 			var dealt: int = u.take_damage(int(part["damage"]), part.get("kind", "energy"))
 			_log(ctx, "damage", "%s 광선 %d" % [u.name, dealt], {"uid": u.uid, "amount": dealt})
 			break
-		if g.mat_def(p).get("reflective", false) and not reflected:
+		if g.mat_def(p).get("reflective", false):
 			d = -d
 			reflected = true
 	_log(ctx, "beam", "광선", {"path": path})

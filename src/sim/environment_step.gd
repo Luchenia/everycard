@@ -186,6 +186,10 @@ static func push_unit(grid: Grid, u, dir: Vector2i, dist: int, log: Array) -> vo
 			break
 		if not grid.passable(nxt) or (grid.unit_at(nxt) != null and grid.unit_at(nxt) != u):
 			var dmg: int = max(1, int(round(u.mass * max(1, dist - moved))))
+			if grid.get_material(nxt) == "crystal":
+				# slamming into a crystal breaks it
+				grid.set_material(nxt, "none")
+				grid.shatter_queue.append(nxt)
 			var d: int = u.take_damage(dmg, "physical")
 			log.append({"t": "collision", "msg": "%s 충돌 %d" % [u.name, d], "data": {"uid": u.uid, "amount": d}})
 			var other = grid.unit_at(nxt)

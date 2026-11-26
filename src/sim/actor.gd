@@ -4,6 +4,7 @@ extends RefCounted
 
 const REFILL_DECK := ["strike", "guard", "step"]
 const CRYSTAL_BONUS := 5
+const SHARD_DAMAGE := 4   # a crystal breaking hurts everything around it
 
 var uid := 0
 var def_id := ""
@@ -23,6 +24,7 @@ var deck: Array = []
 var pattern: Array = []
 var pattern_index := 0
 var next_at := 0   # battle second at which an AI actor acts next
+var shattered := false  # set when a hit broke this unit's crystal; the caller throws the shards
 var shield := 0         # absorbs damage first; gone at shield_until
 var shield_until := 0
 var discount := 0       # seconds taken off the next action that costs time (서두름)
@@ -62,10 +64,15 @@ func take_damage(amount: int, kind: String) -> int:
 	if has_status("guard"):
 		dmg *= 0.5
 	var dealt: int = max(0, int(round(dmg)))
-	if dealt > 0 and has_status("crystal"):
-		# 결정: a hit shatters the crystal, freeing the unit and dealing extra damage
-		statuses.erase("crystal")
-		dealt += CRYSTAL_BONUS
+	if has_status("crystal"):
+		# 결정화: the unit counts as crystal. Physical blows (and arrows) break it for extra damage;
+		# light, magic and elements glance off it.
+		if not kind in ["physical", "true"]:
+			return 0
+		if dealt > 0:
+			statuses.erase("crystal")
+			dealt += CRYSTAL_BONUS
+			shattered = true
 	var absorbed: int = mini(shield, dealt)
 	shield -= absorbed
 	dealt -= absorbed

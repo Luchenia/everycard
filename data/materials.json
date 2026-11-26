@@ -84,7 +84,7 @@
   "passable": false,
   "conductivity": 0.0,
   "flammable": false,
-  "reflective": true,
+  "reflective": false,
   "hardness": 5,
   "name": "결정"
  },

@@ -10,6 +10,7 @@ var catalog: Catalog
 var values: Dictionary = {}   # var id -> Array (scalar float or Vector2), index = y * W + x
 var material: Array = []      # material id per cell
 var units: Array = []         # units on the grid
+var shatter_queue: Array = []  # crystal cells broken by the environment; Battle throws their shards
 
 func _init(cat: Catalog) -> void:
 	catalog = cat
