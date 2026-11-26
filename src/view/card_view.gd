@@ -9,8 +9,8 @@ signal picked(card_view)
 signal hovered(card_view, on)
 
 const SIZE := Vector2(88, 137)      # art px
-const ART_WIN := Rect2(12, 31, 64, 46)
-const NAME_PLATE := Rect2(22, 14, 56, 11)
+const ART_WIN := Rect2(12, 12, 64, 51)
+const NAME_PLATE := Rect2(10, 70, 69, 11)
 const TEXT_BOX := Rect2(8, 88, 71, 41)
 const MAX_LINES := 5
 const BADGE := Vector2(11, 11)
@@ -200,7 +200,7 @@ func _picture(aw: Rect2) -> void:
 			return
 	var zz := zoom / 2.0
 	draw_set_transform(aw.get_center(), 0.0, Vector2(zz, zz))
-	_art(Rect2(-64, -46, 128, 92))
+	_art(Rect2(-64, -51, 128, 102))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 ## Card picture. Uses the matching effect sprite where there is one; otherwise a simple emblem.
