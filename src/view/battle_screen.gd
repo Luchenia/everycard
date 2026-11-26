@@ -266,45 +266,54 @@ func _fan_pos(f: float) -> Vector2:
 	var d := f - 2.0
 	return Vector2(640 + d * FAN_GAP, FAN_Y + d * d * 7.0)
 
-## Behind the hand: the whole deck as a ring of card backs seen in 3D. The five cards in front
-## are the ring's window; a flip turns the ring by one card. Roughly how many are left shows by how
-## full the ring is, no number.
+## The rest of the deck as a real pile of face-down cards beside the hand: its height shows
+## roughly how many are left (no number). Flipping the hand deals the next card off the top and
+## tucks the pushed-out card under the pile.
+const PILE := Vector2(1150, 706)
+
+func _pile_top() -> Vector2:
+	var n := 0
+	if flow != null and flow.battle != null and flow.battle.belt != null:
+		n = maxi(0, flow.battle.belt.ring().size() - 5)
+	return PILE - Vector2(-mini(n, 30) * 0.6, mini(n, 30) * 2.2)
+
+func _draw_back(at: Vector2, sz: Vector2, rot: float, shade: float) -> void:
+	var t := Art.tex("ui/card_back.png")
+	hand_layer.draw_set_transform(at, rot, Vector2.ONE)
+	var rr := Rect2(-sz / 2, sz)
+	if t != null:
+		hand_layer.draw_texture_rect(t, rr, false, Color(shade, shade, shade))
+	else:
+		hand_layer.draw_rect(rr.grow(2), Art.INK)
+		hand_layer.draw_rect(rr, Color("#4a3226") * Color(shade, shade, shade))
+		hand_layer.draw_rect(rr.grow(-4), Color(Color("#8a6a3a"), shade), false, 2)
+		var dm := PackedVector2Array([Vector2(0, -sz.y * 0.18), Vector2(sz.x * 0.2, 0), Vector2(0, sz.y * 0.18), Vector2(-sz.x * 0.2, 0)])
+		hand_layer.draw_colored_polygon(dm, Color(Art.GOLD, 0.7 * shade))
+	hand_layer.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
 func _draw_wheel() -> void:
 	if flow == null or flow.phase != "battle" or flow.battle.belt == null:
 		return
-	var ring: Array = flow.battle.belt.ring()
-	var n := ring.size()
+	var n := maxi(0, flow.battle.belt.ring().size() - 5)
 	if n == 0:
 		return
-	var c := Vector2(640, 742)
-	var rad := Vector2(440, 40)
-	var step := TAU / maxf(float(n), 5.0)
-	var slide := spin / WHEEL_STEP
-	var backs := []
-	for i in n:
-		# card 0..4 sit at the front (the hand); the rest run round the back
-		var ang := PI / 2 + (float(i) - 2.0 + slide) * step
-		var depth := sin(ang)   # 1 = front, -1 = far back
-		if depth > 0.35:
-			continue   # those are the cards in hand, drawn as real cards
-		backs.append([depth, ang])
-	backs.sort_custom(func(a, b): return a[0] < b[0])
-	var dim := 0.45 if selected >= 0 else 1.0
-	for e in backs:
-		var depth: float = e[0]
-		var ang: float = e[1]
-		var k := 0.55 + 0.25 * (depth + 1.0) / 1.35
-		var p := c + Vector2(cos(ang) * rad.x, -absf(sin(ang)) * rad.y - 50)
-		var sz := Vector2(44, 66) * k
-		var shade := (0.45 + 0.4 * (depth + 1.0) / 1.35) * dim
-		hand_layer.draw_set_transform(p, cos(ang) * -0.25, Vector2.ONE)
-		var rr := Rect2(-sz / 2, sz)
-		hand_layer.draw_rect(rr.grow(2), Color(Art.INK, shade))
-		hand_layer.draw_rect(rr, Color(Color("#5a3a2a").darkened(0.2), shade))
-		hand_layer.draw_rect(rr.grow(-3), Color(Color("#2a2733"), shade), false, 2)
-		var dm := PackedVector2Array([Vector2(0, -sz.y * 0.22), Vector2(sz.x * 0.2, 0), Vector2(0, sz.y * 0.22), Vector2(-sz.x * 0.2, 0)])
-		hand_layer.draw_colored_polygon(dm, Color(Art.GOLD, 0.55 * shade))
-		hand_layer.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var sz := CardView.SIZE * 0.9
+	var dim := 0.5 if selected >= 0 else 1.0
+	hand_layer.draw_rect(Rect2(PILE - sz / 2 + Vector2(6, 10), sz), Color(0, 0, 0, 0.35))
+	var layers := mini(n, 30)
+	for i in layers:
+		# the pile's edge: a sliver per card, a little uneven like a real stack
+		var at := PILE + Vector2(i * 0.6 + sin(i * 2.3) * 1.2, -i * 2.2)
+		var rot := 0.03 + sin(i * 1.7) * 0.012
+		if i < layers - 1:
+			# only the card edge shows under the next one: a pale paper line
+			hand_layer.draw_set_transform(at, rot, Vector2.ONE)
+			hand_layer.draw_rect(Rect2(-sz / 2 - Vector2(2, 2), sz + Vector2(4, 4)), Art.INK)
+			hand_layer.draw_rect(Rect2(Vector2(-sz.x / 2, sz.y / 2 - 1), Vector2(sz.x, 2)), Color(Color("#b8a888"), (0.5 + 0.4 * float(i) / layers) * dim))
+			hand_layer.draw_rect(Rect2(Vector2(-sz.x / 2 - 1, -sz.y / 2), Vector2(2, sz.y)), Color(Color("#8a7a62"), 0.6 * dim))
+			hand_layer.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		else:
+			_draw_back(at, sz, rot, dim)
 
 func _layout_hand() -> void:
 	hand_layer.queue_redraw()
@@ -339,6 +348,11 @@ func _layout_hand() -> void:
 			cv.position = anchor - cv.size / 2
 			cv.rotation = (f - 2.0) * 0.07
 			cv.scale = Vector2(maxf(0.02, sx), 1.0)
+			if entering:
+				# dealt off the top of the pile, turning face up on the way
+				var k := absf(slide)
+				cv.position = cv.position.lerp(_pile_top() - cv.size / 2, k)
+				cv.rotation = lerpf(cv.rotation, 0.03, k)
 			if cv.lit:
 				# the picked card stays small (the board must stay visible) but rises out of the hand
 				cv.position.y -= 34
@@ -358,11 +372,12 @@ func _drop_out(slot: int, dir: int) -> void:
 	cv.rotation = src.rotation
 	cv.pivot_offset = cv.size / 2
 	add_child(cv)
-	var dest := _fan_pos(float(slot) + dir * 1.2) - cv.size / 2 + Vector2(0, 60)
+	var dest := _pile_top() - cv.size / 2 + Vector2(0, 8)   # tucked under the pile
 	var tw := create_tween().set_parallel(true)
 	tw.tween_property(cv, "position", dest, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tw.tween_property(cv, "rotation", cv.rotation + dir * 0.3, 0.3)
-	tw.tween_property(cv, "modulate", Color(1, 1, 1, 0.0), 0.3)
+	tw.tween_property(cv, "rotation", 0.03, 0.3)
+	tw.tween_property(cv, "scale", Vector2(0.9, 0.9), 0.3)
+	tw.tween_property(cv, "modulate", Color(0.6, 0.6, 0.6, 0.0), 0.3).set_delay(0.12)
 	tw.chain().tween_callback(cv.queue_free)
 
 # ---- hud ----------------------------------------------------------------------------------------
