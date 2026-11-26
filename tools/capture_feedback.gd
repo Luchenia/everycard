@@ -65,9 +65,19 @@ func _process(_d: float) -> bool:
 				_shot("12_hand_flip"); step = 6
 		6:
 			if not screen._replaying() and frame - t0 > 40:
-				screen._walk_to(b.human().pos + Vector2i(0, 2))
+				var h = b.human()
+				screen.dragging = true
+				screen.drag_from = h.pos
+				screen.drag_manual = false
+				screen._drag_to(h.pos + Vector2i(2, 2))
 				step = 7; t0 = frame
 		7:
+			if frame - t0 == 5:
+				_shot("14_drag_path")
+				var h2 = b.human()
+				screen._end_drag(h2.pos + Vector2i(2, 2))
+				step = 8; t0 = frame
+		8:
 			if frame - t0 == 15:
 				_shot("13_walking"); return true
 	return false

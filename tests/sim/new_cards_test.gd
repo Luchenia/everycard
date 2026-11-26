@@ -21,6 +21,7 @@ func run() -> void:
 	test_borrowed_time_freezes_world_then_exhausts()
 	test_wait_ends_borrow_early()
 	test_crystal_roots_and_shatters()
+	test_oil_on_fire_flares()
 
 func test_shield_absorbs_then_expires() -> void:
 	var b := _battle("guard")
@@ -102,3 +103,11 @@ func test_crystal_roots_and_shatters() -> void:
 	assert_eq(foe.hp, hp0 - dealt, "hp went down")
 	assert_true(b.cmd_play(0, Vector2i(2, 1)), "crystallize empty cell")
 	assert_eq(b.grid.get_material(Vector2i(2, 1)), "crystal", "a crystal grows on an empty cell")
+
+func test_oil_on_fire_flares() -> void:
+	var b := _battle("oil_spill")
+	var aim := Vector2i(3, 3)
+	b.grid.set_material(aim, "fire")
+	assert_true(b.cmd_play(0, aim), "oil poured on fire")
+	assert_eq(b.grid.get_material(aim), "fire", "the fire is not put out")
+	assert_eq(b.grid.get_material(aim + Vector2i(1, 0)), "fire", "the spill around it catches at once")

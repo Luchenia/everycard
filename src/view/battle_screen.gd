@@ -27,6 +27,9 @@ var spin := 0.0                # ring turn animation (radians, eases to 0)
 var wiggle_until := 0.0
 var real := 0.0
 var cell_hover_t := 0.0
+var dragging := false     # left button held on the board with no card: drawing a walk
+var drag_manual := false  # started on the hero: the path follows the mouse cell by cell
+var drag_from := Vector2i(-1, -1)
 var focus_at := -9.0     # when the window got focus: the click that focuses it never walks
 var log_i := 0           # battle log entries already shown as flashes
 
@@ -55,6 +58,7 @@ func _ready() -> void:
 	timeline.size = Vector2(560, 40)
 	timeline.position = Vector2(360, 0)
 	timeline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	timeline.visible = false   # warnings and their seconds now live on the board itself
 	add_child(timeline)
 	hud = Control.new()
 	hud.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -187,9 +191,11 @@ func _process(delta: float) -> void:
 	_flashes()
 	spin = move_toward(spin, 0.0, delta * 1.6)
 	_layout_hand()
-	if board.hover.x >= 0 and selected < 0 and hovered_card == null:
+	if _replaying() and tips.visible and hovered_card == null:
+		_clear_tips()   # bodies are still on their way: no stale facts under the mouse
+	if board.hover.x >= 0 and selected < 0 and hovered_card == null and not _replaying() and not dragging:
 		cell_hover_t += delta
-		if cell_hover_t > 0.35 and tips.get_child_count() == 0:
+		if cell_hover_t > 0.25 and tips.get_child_count() == 0:
 			_cell_tips(board.hover)
 	hud.queue_redraw()
 
@@ -324,6 +330,21 @@ func _draw_hud() -> void:
 		if i == 2:
 			col = col if i <= flow.index else Color("#5a2a3a")
 		hud.draw_colored_polygon(PackedVector2Array([c + Vector2(0, -5), c + Vector2(5, 0), c + Vector2(0, 5), c + Vector2(-5, 0)]), col)
+	# the hero's health, always readable in the corner (bars on the board carry no numbers)
+	var me := b.human()
+	if me != null:
+		var hp_at := Vector2(16, 40)
+		hud.draw_rect(Rect2(hp_at, Vector2(120, 14)), Art.INK)
+		hud.draw_rect(Rect2(hp_at + Vector2(2, 2), Vector2(116, 10)), Color("#3a1418"))
+		hud.draw_rect(Rect2(hp_at + Vector2(2, 2), Vector2(116 * clampf(float(me.hp) / me.max_hp, 0, 1), 10)), Color("#58c46a"))
+		var ht := "%d / %d" % [me.hp, me.max_hp] + ("  +%d" % me.shield if me.shield > 0 else "")
+		hud.draw_string_outline(font, hp_at + Vector2(128, 13), ht, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, 5, Art.INK)
+		hud.draw_string(font, hp_at + Vector2(128, 13), ht, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
+	# hand refill: a small ring on the deck icon counts the seconds to the next card
+	var dr := b.next_draw_at() - b.now
+	var dk := Vector2(1214, 20)
+	if dr >= 1:
+		hud.draw_arc(dk, 17, -PI / 2, -PI / 2 + TAU * (1.0 - float(dr) / maxf(1.0, float(b.round_time()))), 24, Color("#9cc8f0"), 2)
 	# small icons (top-right): help and deck size
 	var hc := Vector2(1252, 20)
 	hud.draw_circle(hc, 12, Art.INK)
@@ -343,6 +364,8 @@ func _draw_hud() -> void:
 func _update_span() -> void:
 	var b := flow.battle
 	board.range_cells = []
+	board.self_aim = false
+	board.forecast = 0
 	timeline.span_secs = 0
 	timeline.span_exhaust = 0
 	if selected < 0 or b.belt == null or selected >= b.belt.slots.size() or b.belt.slots[selected] == null or b.human() == null:
@@ -353,11 +376,14 @@ func _update_span() -> void:
 		for p in b.grid.all_cells():
 			if b.can_play(selected, p):
 				board.range_cells.append(p)
+	else:
+		board.self_aim = true
 	var secs := maxi(0, b.action_secs(int(c.get("time", 0)), b.human()))
 	if secs > 0:
 		secs = maxi(0, secs - b.human().discount)
 	timeline.span_secs = secs
 	timeline.span_exhaust = int(c.get("exhaust", 0))
+	board.forecast = secs
 
 # ---- tips ---------------------------------------------------------------------------------------
 
@@ -448,6 +474,13 @@ func _cell_tips(p: Vector2i, full := false) -> void:
 		_tip("멈춘 시간", kw.get("멈춘 시간", ""), Color("#9cc8f0"))
 	elif ts < 0.95 and m != "swamp":
 		_tip("느림", kw.get("느림", ""), Color("#9cc8f0"))
+	# what the floor marks are: sparks, wind streaks, crushing rings
+	if float(b.grid.get_var(p, "charge")) > 0.5:
+		_tip("전기", kw.get("전기", ""), Color("#ffe14a"))
+	if EnvironmentStep.force_at(b.grid, p).length() > 0.4:
+		_tip("돌풍", kw.get("돌풍", ""), Color("#9cc8f0"))
+	if float(b.grid.get_var(p, "pressure")) > 2.0:
+		_tip("짓누름", kw.get("짓누름", ""), Color("#9cc8f0"))
 	if full:
 		# keywords named inside those explanations too, one level deep
 		var titles := []
@@ -605,9 +638,18 @@ func _on_board_input(ev: InputEvent) -> void:
 			cell_hover_t = 0.0
 			_clear_tips()
 			board.preview = b.preview(selected, c) if selected >= 0 and c.x >= 0 else {}
+			if dragging and c.x >= 0:
+				_drag_to(c)
+			board.walk_hint = _path(b.human().pos, c) if not dragging and selected < 0 and c.x >= 0 and b.human() != null and b.grid.unit_at(c) == null else []
+	elif ev is InputEventMouseButton and not ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT and dragging:
+		_end_drag(board.cell_at(ev.position))
 	elif ev is InputEventMouseButton and ev.pressed:
 		var cell := board.cell_at(ev.position)
 		if ev.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+			return
+		if ev.button_index == MOUSE_BUTTON_RIGHT and dragging:
+			dragging = false
+			board.walk_path = []
 			return
 		if ev.button_index == MOUSE_BUTTON_RIGHT:
 			if selected >= 0:
@@ -618,9 +660,17 @@ func _on_board_input(ev: InputEvent) -> void:
 				_clear_tips()
 				_cell_tips(cell, true)
 		elif ev.button_index == MOUSE_BUTTON_LEFT and cell.x >= 0 and selected < 0:
-			_walk_to(cell)
+			if real - focus_at < 0.4 or b.human() == null:
+				return   # the click that only focuses the window
+			dragging = true
+			drag_from = cell
+			drag_manual = cell == b.human().pos
+			board.walk_path = []
+			_clear_tips()
 		elif ev.button_index == MOUSE_BUTTON_LEFT and cell.x >= 0 and selected >= 0:
 			var played := selected
+			if board.self_aim and b.human() != null:
+				cell = b.human().pos   # a card on oneself: a click anywhere on the board uses it
 			if b.cmd_play(selected, cell):
 				_fly(played, cell)
 				selected = -1
@@ -635,33 +685,58 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_IN or what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
 		focus_at = real
 
-func _foe_next_to(b: Battle, p: Vector2i) -> bool:
-	for a in b.actors:
-		if a.controller == "ai" and a.alive() and b.grid.units.has(a) and Battle.dist(a.pos, p) <= 1:
-			return true
-	return false
-
-func _walk_to(cell: Vector2i) -> void:
-	if real - focus_at < 0.4:
-		return
+## Walking: hold the button and drag. From anywhere the shortest way to the cell under the mouse is
+## shown; starting on the hero, the path follows the mouse cell by cell. Releasing walks it; a plain
+## click only steps onto a neighbouring cell, so a slip never sends the hero across the room.
+func _drag_to(c: Vector2i) -> void:
 	var b := flow.battle
 	var h := b.human()
-	if h == null or cell == h.pos:
+	if h == null:
 		return
-	var path := _path(h.pos, cell)
+	var path: Array = board.walk_path
+	if drag_manual:
+		var last: Vector2i = path.back() if not path.is_empty() else h.pos
+		if c == last:
+			return
+		var back := path.find(c)
+		if c == h.pos:
+			path = []
+		elif back >= 0:
+			path = path.slice(0, back + 1)
+		elif Battle.dist(c, last) == 1 and absi(c.x - last.x) + absi(c.y - last.y) == 1 and b.grid.passable(c) and b.grid.unit_at(c) == null:
+			path.append(c)
+		else:
+			var tail := _path(last, c)
+			if tail.is_empty():
+				return
+			for q in tail:
+				if q in path or q == h.pos:
+					return
+			path.append_array(tail)
+	else:
+		path = _path(h.pos, c)
+	board.walk_path = path
+
+func _end_drag(cell: Vector2i) -> void:
+	dragging = false
+	var b := flow.battle
+	var h := b.human()
+	var path: Array = board.walk_path
+	board.walk_path = []
+	if h == null:
+		return
+	if path.is_empty() and cell == drag_from and cell.x >= 0 and absi(cell.x - h.pos.x) + absi(cell.y - h.pos.y) == 1:
+		path = [cell]   # a plain click next to the hero: one step
 	if path.is_empty():
-		board.out_of_range_click(cell)
+		_refresh()
 		return
-	var warn0 := b.telegraphs.size()
 	var hp0 := h.hp
 	for step in path:
 		var hh := b.human()
 		if hh == null or b.phase != "player" or not b.cmd_move(step - hh.pos):
 			break
-		if b.telegraphs.size() > warn0 or (b.human() != null and b.human().hp < hp0):
-			break
-		if b.human() != null and _foe_next_to(b, b.human().pos):
-			break   # an enemy came close: hand control back
+		if b.human() != null and b.human().hp < hp0:
+			break   # hit on the way: hand control back
 	_after()
 
 func _path(from: Vector2i, to: Vector2i) -> Array:

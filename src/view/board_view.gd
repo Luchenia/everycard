@@ -25,6 +25,10 @@ var replay_k := 0.0              # 0..1 inside the replayed second
 var moving: Dictionary = {}      # uid -> Vector2i: where a gliding unit is heading
 var casts: Array = []            # {uid, cells, t0, t1}: the player's card being performed
 var _speed := 0.14
+var self_aim := false            # a picked card with no target (방어 ...): the hero lights up instead of an arc
+var forecast := 0                # seconds the picked action will take: warnings landing in them stand out
+var walk_path: Array = []        # cells of the walk being dragged
+var walk_hint: Array = []        # faint walk preview under the mouse
 
 var origin := Vector2(C, C * 2)  # top-left of cell (0,0) inside this control
 var clock := 0.0                 # effect time: crawls while paused (bullet time), runs during replay
@@ -319,8 +323,7 @@ func _draw_top() -> void:
 		var fr := cell_rect(cell, 2 * S)
 		fr.position += off
 		var fc := Color("#58c46a") if u.controller == "human" else (Color("#9a7ad8") if u.controller == "echo" else Color("#ff6a5a"))
-		tl.draw_rect(fr, Color(fc, 0.13))
-		_corners(tl, fr, Color(fc, 0.8), 3 * S)
+		tl.draw_rect(fr, Color(fc, 0.12))
 		# a ring on the floor around the feet
 		var fp := cell_rect(cell).get_center() + off + Vector2(0, C * 0.25)
 		var ring := PackedVector2Array()
@@ -435,6 +438,18 @@ func _draw_top() -> void:
 			if it.get("kind", "") == "move":
 				_move_arrow(tl, Vector2(a.pos), it["to"], off, false, int(it["at"]) - battle.now)
 	_casts(tl, off)
+	if not replaying:
+		if not walk_path.is_empty():
+			_walk(tl, walk_path, off, false)
+		elif not walk_hint.is_empty() and not aiming:
+			_walk(tl, walk_hint, off, true)
+	if self_aim and not replaying and battle.human() != null:
+		# no target to pick: the hero glows, click the card again to use it
+		var hc := cell_rect(battle.human().pos)
+		hc.position += off
+		var k5 := 0.5 + 0.5 * sin(real * 5.0)
+		tl.draw_rect(hc.grow(-S), Color(Art.GOLD, 0.12 + 0.10 * k5))
+		_corners(tl, hc.grow((-1.0 + k5) * S), Color(Art.GOLD, 0.95), 5 * S)
 	# enemy warnings: always above effects and units
 	for t in battle.telegraphs:
 		_telegraph(tl, t, off)
@@ -716,10 +731,12 @@ func _hp_bar(tl: Control, u: Actor, off: Vector2) -> void:
 	if u.shield > 0:
 		var sw := w * clampf(float(u.shield) / u.max_hp, 0.05, 1)
 		tl.draw_rect(Rect2(r.position - Vector2(0, S), Vector2(sw, r.size.y + 2 * S)), Color(0.55, 0.8, 1.0, 0.85))
-	var txt := "%d" % hp + ("+%d" % u.shield if u.shield > 0 else "")
-	var tp := Vector2(r.end.x + 2 * S, r.end.y + 2)
-	tl.draw_string_outline(font, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, 5, Art.INK)
-	tl.draw_string(font, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#bfe3ff") if u.shield > 0 else Color.WHITE)
+	if Vector2i(_pos_of(u).round()) == hover:
+		# numbers only where they are wanted: the hero's own, or the body under the mouse
+		var txt := "%d" % hp + ("+%d" % u.shield if u.shield > 0 else "")
+		var tp := Vector2(r.end.x + 2 * S, r.end.y + 2)
+		tl.draw_string_outline(font, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, 5, Art.INK)
+		tl.draw_string(font, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#bfe3ff") if u.shield > 0 else Color.WHITE)
 	# states as small marks above the head
 	var marks := []
 	for s in ["burning", "wet", "frozen", "crystal", "shocked", "rooted", "shadowed", "poisoned"]:
@@ -749,6 +766,15 @@ func _telegraph(tl: Control, t: Dictionary, off: Vector2) -> void:
 	var pulse := 0.5 + 0.5 * sin(real * (9.0 if hot else 4.0))
 	var col := Art.DANGER if hot else Color("#ff8a3a")
 	var cells: Array = t["cells"]
+	var soon := not replaying and left <= _ahead() and _ahead() > 0
+	if soon:
+		# lands during the action being planned: bolder, and a mark if it catches the hero there
+		hot = true
+		col = Art.DANGER
+		pulse = 0.5 + 0.5 * sin(real * 10.0)
+		var spot := _hero_at(left)
+		if cells.has(spot):
+			_danger_mark(tl, cell_rect(spot).get_center() + off, _blow_damage(t))
 	var centre := Vector2.ZERO
 	var box := Rect2()
 	for p in cells:
@@ -769,20 +795,22 @@ func _telegraph(tl: Control, t: Dictionary, off: Vector2) -> void:
 	var txt := "%d" % maxi(left, 0)
 	var d := centre - from
 	if d.length() < C * 0.5:
-		# a blow around itself: the number sits on the area's corner
-		var bp := Vector2(box.end.x, box.position.y) + off + Vector2(-2 * S, 2 * S)
-		_badge(tl, bp, txt, col, hot, pulse)
+		# a blow around itself: the number rides above its head too
+		var ast0 := Art.unit(Art.unit_id(a))
+		_badge(tl, feet(_pos_of(a)) + off - Vector2(0, (float(ast0.get("ay", 22)) + 10) * S), txt, col, hot, pulse)
 		return
 	var start := from + d.normalized() * C * 0.3
 	var h := (d.length() * 0.35 + C * 0.45) if leap else 0.0
-	var label := _arrow(tl, start, centre, col, h, hot, pulse)
-	_badge(tl, label, txt, col, hot, pulse)
+	_arrow(tl, start, centre, col, h, hot, pulse)
+	# the seconds ride above the attacker's head, where the arrow starts
+	var ast := Art.unit(Art.unit_id(a))
+	_badge(tl, feet(_pos_of(a)) + off - Vector2(0, (float(ast.get("ay", 22)) + 10) * S), txt, col, hot, pulse)
 
 func _badge(tl: Control, at: Vector2, txt: String, col: Color, hot: bool, pulse: float) -> void:
-	var r := 9 * S * 0.7 * (1.0 + (0.12 * pulse if hot else 0.0))
+	var r := 5.5 * S * (1.0 + (0.12 * pulse if hot else 0.0))
 	tl.draw_circle(at, r + S, Art.INK)
 	tl.draw_circle(at, r, col)
-	tl.draw_string(font, at + Vector2(-5 if txt.length() == 1 else -9, 7), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Art.INK)
+	tl.draw_string(font, at + Vector2(-5 if txt.length() == 1 else -9, 6), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Art.INK)
 
 ## Point on a straight or arched (leaping) path from a to b at k.
 func _arc_pt(a: Vector2, b: Vector2, h: float, k: float) -> Vector2:
@@ -807,9 +835,6 @@ func _arrow(tl: Control, a: Vector2, b: Vector2, col: Color, h: float, hot: bool
 	var head := PackedVector2Array([tip + dir * S, tip - dir * 6 * S + nrm * 4 * S, tip - dir * 6 * S - nrm * 4 * S])
 	tl.draw_colored_polygon(PackedVector2Array([head[0] + dir * S, head[1] + (nrm - dir) * S, head[2] - (nrm + dir) * S]), Art.INK)
 	tl.draw_colored_polygon(head, a_col)
-	# a bright pip running along the shaft, faster when the blow is about to land
-	var run := fmod(real * (1.6 if hot else 0.8), 1.0)
-	tl.draw_circle(_arc_pt(a, b, h, run * 0.9), 1.5 * S, Color(1, 1, 1, 0.8))
 	var mid := _arc_pt(a, b, h, 0.5)
 	var side := (b - a).normalized()
 	var off_n := Vector2(-side.y, side.x)
@@ -883,6 +908,73 @@ func _ghost(tl: Control, t: Dictionary, off: Vector2) -> void:
 	var ghost_at := centre + Vector2(0, -C * 0.5 + 12 * S)
 	_sprite(tl, st, ghost_at, 0, Color(1, 0.3, 0.25, 0.18 + 0.12 * pulse), not _faces_left(a) == bool(st.get("faces_right", false)))
 
+## How many seconds the action being planned takes (picked card or dragged walk).
+func _ahead() -> int:
+	if not walk_path.is_empty():
+		return walk_path.size()
+	return forecast
+
+## Where the hero will stand `secs` seconds from now in the planned action.
+func _hero_at(secs: int) -> Vector2i:
+	var h := battle.human()
+	if h == null:
+		return Vector2i(-1, -1)
+	if not walk_path.is_empty():
+		return walk_path[clampi(secs - 1, 0, walk_path.size() - 1)]
+	return h.pos
+
+func _blow_damage(t: Dictionary) -> int:
+	var dmg := 0
+	for part in Effects.card_def(t["card_id"], battle.catalog).get("parts", []):
+		if part.get("op", "") == "damage":
+			dmg += int(part.get("amount", 0)) * maxi(1, int(part.get("hits", 1)))
+	return dmg
+
+func _danger_mark(tl: Control, c: Vector2, dmg: int) -> void:
+	var k := 0.5 + 0.5 * sin(real * 10.0)
+	var at := c + Vector2(0, -C * 0.9)
+	tl.draw_circle(at, (7 + k) * S, Art.INK)
+	tl.draw_circle(at, (6 + k) * S, Art.DANGER)
+	tl.draw_rect(Rect2(at + Vector2(-S, -4 * S), Vector2(2 * S, 5 * S)), Color.WHITE)
+	tl.draw_rect(Rect2(at + Vector2(-S, 2 * S), Vector2(2 * S, 2 * S)), Color.WHITE)
+	if dmg > 0:
+		var tx := "-%d" % dmg
+		tl.draw_string_outline(font, at + Vector2(9 * S, 6), tx, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, 6, Art.INK)
+		tl.draw_string(font, at + Vector2(9 * S, 6), tx, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Art.DANGER)
+
+## A walk: the route cell by cell, the seconds it takes at its end, red where a blow lands on the way.
+func _walk(tl: Control, path: Array, off: Vector2, faint: bool) -> void:
+	var h := battle.human()
+	if h == null or path.is_empty():
+		return
+	var pts := PackedVector2Array([cell_rect(h.pos).get_center() + off])
+	for q in path:
+		pts.append(cell_rect(q).get_center() + off)
+	var col := Color("#9fe8b0", 0.45 if faint else 0.95)
+	for i in path.size():
+		var arrive := battle.now + i + 1
+		var bad := false
+		for t in battle.telegraphs:
+			if int(t["fire_at"]) == arrive and t["cells"].has(path[i]):
+				bad = true
+		var seg_col := Color(Art.DANGER, col.a) if bad else col
+		tl.draw_line(pts[i], pts[i + 1], Color(Art.INK, col.a), 5 * S)
+		tl.draw_line(pts[i], pts[i + 1], seg_col, 2 * S)
+		var r := cell_rect(path[i], 4 * S)
+		r.position += off
+		tl.draw_rect(r, Color(seg_col, 0.10 if faint else 0.18))
+		if bad and not faint:
+			tl.draw_line(r.position, r.end, Art.DANGER, 2 * S)
+			tl.draw_line(Vector2(r.end.x, r.position.y), Vector2(r.position.x, r.end.y), Art.DANGER, 2 * S)
+	var end := pts[pts.size() - 1]
+	var dir := (end - pts[pts.size() - 2]).normalized()
+	var nrm := Vector2(-dir.y, dir.x)
+	tl.draw_colored_polygon(PackedVector2Array([end + dir * 5 * S, end - dir * 3 * S + nrm * 5 * S, end - dir * 3 * S - nrm * 5 * S]), col)
+	var tx := "%d초" % path.size()
+	var tp := end + Vector2(6 * S, -6 * S)
+	tl.draw_string_outline(font, tp, tx, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, 6, Color(Art.INK, col.a))
+	tl.draw_string(font, tp, tx, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 1, 1, col.a))
+
 ## Aiming: the hovered cell, and when it is out of reach a line that falls short and fizzles.
 func _aim(tl: Control, off: Vector2) -> void:
 	var h := battle.human()
@@ -892,7 +984,7 @@ func _aim(tl: Control, off: Vector2) -> void:
 		fr.position += off
 		tl.draw_line(fr.position, fr.end, Color(Art.DANGER, 1.0 - k), 2 * S)
 		tl.draw_line(Vector2(fr.end.x, fr.position.y), Vector2(fr.position.x, fr.end.y), Color(Art.DANGER, 1.0 - k), 2 * S)
-	if hover.x < 0 or h == null or replaying:
+	if hover.x < 0 or h == null or replaying or self_aim:
 		return
 	var hr := cell_rect(hover)
 	hr.position += off
@@ -915,16 +1007,19 @@ func _aim(tl: Control, off: Vector2) -> void:
 		if cq.x >= 0 and (cq in range_cells or cq == h.pos):
 			reach_k = k
 	_dotted_arc(tl, from, to, arch, reach_k, Color(Art.GOLD, 0.95))
+	# the rest of the way stays on the same arc, faint and red, broken where reach runs out
 	var last := _arc_pt(from, to, arch, reach_k)
-	var vel := (_arc_pt(from, to, arch, reach_k) - _arc_pt(from, to, arch, maxf(0.0, reach_k - 0.05))) / 0.05
-	var dropped := last
-	for i in 7:
-		var t := float(i + 1) / 7.0 * 0.35
-		var q := last + vel * t * 0.5 + Vector2(0, 260.0 * S * t * t)
-		dropped = q
-		tl.draw_rect(Rect2(q.snapped(Vector2(S, S)) - Vector2(S, S), Vector2(2 * S, 2 * S)), Color(Art.DANGER, 0.85 * (1.0 - float(i) / 8.0)))
-	var puff := fmod(real * 1.5, 1.0)
-	tl.draw_arc(dropped, (2 + puff * 5) * S, 0, TAU, 12, Color(Art.DANGER, 0.85 * (1.0 - puff)), 2 * S)
+	var n2 := int(from.distance_to(to) / (5 * S)) + 2
+	for i in n2:
+		var k := float(i) / n2
+		if k <= reach_k + 0.04:
+			continue
+		var q := _arc_pt(from, to, arch, k)
+		tl.draw_rect(Rect2(q.snapped(Vector2(S, S)) - Vector2(S, S), Vector2(2 * S, 2 * S)), Color(Art.DANGER, 0.45))
+	tl.draw_line(last + Vector2(-3, -3) * S, last + Vector2(3, 3) * S, Art.INK, 3 * S)
+	tl.draw_line(last + Vector2(3, -3) * S, last + Vector2(-3, 3) * S, Art.INK, 3 * S)
+	tl.draw_line(last + Vector2(-3, -3) * S, last + Vector2(3, 3) * S, Art.DANGER, S)
+	tl.draw_line(last + Vector2(3, -3) * S, last + Vector2(-3, 3) * S, Art.DANGER, S)
 	# the cell itself: a red frame exactly on its edges
 	var cr := cell_rect(hover, S)
 	cr.position += off

@@ -165,7 +165,22 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 				var md: Dictionary = ctx.catalog.materials.get(part["id"], {})
 				if (not md.get("passable", true) or md.has("trap")) and g.unit_at(p) != null:
 					continue
+				if part["id"] == "oil" and g.get_material(p) == "fire":
+					continue   # oil poured on fire feeds it instead of covering it
 				g.set_material(p, part["id"])
+			if part["id"] == "oil":
+				# 기름: fresh oil touching fire flares up at once, through the whole spill
+				var lit := true
+				while lit:
+					lit = false
+					for p in cells:
+						if g.get_material(p) != "oil":
+							continue
+						for n in g.neighbors4(p):
+							if g.get_material(n) == "fire":
+								g.set_material(p, "fire")
+								lit = true
+								break
 		"damage":
 			var hit := _units_in(ctx, cells)
 			if hit.is_empty():
