@@ -1,0 +1,23 @@
+{
+ "id": "flurry",
+ "weight": 1,
+ "name": "연속 찌르기",
+ "time": 3,
+ "rarity": "common",
+ "family": "sword",
+ "pool": "wanderer",
+ "target": {
+  "shape": "cell",
+  "range": 1,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "damage",
+   "amount": 3,
+   "hits": 3,
+   "kind": "physical"
+  }
+ ],
+ "desc": "붙어 있는 적에게 3의 피해를 세 번 입힙니다."
+}

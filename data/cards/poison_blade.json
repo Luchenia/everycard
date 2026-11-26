@@ -1,0 +1,23 @@
+{
+ "id": "poison_blade",
+ "weight": 1,
+ "name": "독 바르기",
+ "time": 1,
+ "rarity": "common",
+ "family": "sword",
+ "pool": "wanderer",
+ "target": {
+  "shape": "self",
+  "range": 0,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "coat",
+   "status": "poisoned",
+   "charges": 2,
+   "status_turns": 3
+  }
+ ],
+ "desc": "다음 공격 카드 두 장이 맞힌 적을 [중독]시킵니다."
+}

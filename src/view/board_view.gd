@@ -402,6 +402,8 @@ func _draw_top() -> void:
 	# enemy warnings: always above effects and units
 	for t in battle.telegraphs:
 		_telegraph(tl, t, off)
+	for tm in battle.ctx.timers:
+		_bomb(tl, tm, off)
 	# hp bars and states, never hidden behind sprites
 	for it in items:
 		if it.has("unit"):
@@ -459,6 +461,20 @@ func _aura(tl: Control, p: Vector2i, off: Vector2) -> void:
 	if surf.has(m) and (m != "water" or (p.x * 7 + p.y * 3) % 3 == 0):
 		var ss := Art.fx(surf[m])
 		_sprite(tl, ss, c, Art.frame_at(ss, clock * 1.5, p.x * 5 + p.y * 9))
+	if m == "trap_rabbit":
+		# a sprung-open jaw trap: iron ring with teeth
+		var tc := c + Vector2(0, 3 * S)
+		tl.draw_arc(tc, 5 * S, 0, TAU, 16, Color("#2a2730"), 2 * S)
+		tl.draw_arc(tc, 5 * S, 0, TAU, 16, Color("#8a8f9c"), S)
+		for k5 in 6:
+			var an := k5 * TAU / 6.0
+			tl.draw_line(tc + Vector2(cos(an), sin(an) * 0.6) * 5 * S, tc + Vector2(cos(an), sin(an) * 0.6) * 2.5 * S, Color("#c8ccd6"), S)
+		tl.draw_circle(tc, S, Color("#b08840"))
+	elif m == "smoke_screen":
+		for k6 in 4:
+			var ph := real * 0.4 + k6 * 1.7 + p.x * 0.9 + p.y * 1.3
+			var pc := c + Vector2(sin(ph) * 5, cos(ph * 0.8) * 3 - 2) * S
+			tl.draw_circle(pc, (6 + 1.5 * sin(ph * 1.3)) * S, Color(0.72, 0.72, 0.78, 0.22))
 	if m == "fire":
 		var fl := 0.8 + 0.2 * sin(real * 7.0 + p.x)
 		for k3 in 3:
@@ -583,7 +599,8 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 	var flip: bool = look_left == bool(st["faces_right"])
 	var ground := f + push + Vector2(0, hop)
 	var idx := Art.frame_at(st, clock * 1.0, u.uid * 3)
-	_sprite(tl, st, ground, idx, Color.WHITE, flip)
+	var tint := Color(0.35, 0.2, 0.55, 0.7) if u.controller == "echo" else Color.WHITE
+	_sprite(tl, st, ground, idx, tint, flip)
 	if hit_k < 0.09:
 		_sprite(tl, st, ground, idx, Color(5, 5, 5, 1), flip)   # white flash
 	if u.has_status("shocked"):
@@ -598,7 +615,30 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 	if u.has_status("frozen"):
 		tl.draw_rect(Rect2(f - Vector2(st["w"] * 0.4 * S, st["h"] * 0.85 * S), Vector2(st["w"] * 0.8 * S, st["h"] * 0.85 * S)), Color(0.7, 0.9, 1.0, 0.35))
 
+## 시한폭탄: the bomb with a burning fuse, its blast area and the seconds left.
+func _bomb(tl: Control, tm: Dictionary, off: Vector2) -> void:
+	var left: int = int(tm["at"]) - battle.now
+	var pulse := 0.5 + 0.5 * sin(real * (10.0 if left <= 1 else 5.0))
+	for p in tm["cells"]:
+		var r := cell_rect(p, S)
+		r.position += off
+		tl.draw_rect(r, Color(1.0, 0.45, 0.2, 0.10 + 0.10 * pulse))
+		tl.draw_rect(r, Color(1.0, 0.5, 0.2, 0.55), false, S)
+	var c := cell_rect(tm["aim"]).get_center() + off + Vector2(0, 2 * S)
+	tl.draw_circle(c + Vector2(0, S), 5 * S, Color(0, 0, 0, 0.35))
+	tl.draw_circle(c, 5 * S, Color("#1d1b24"))
+	tl.draw_circle(c - Vector2(1.5, 1.5) * S, 1.5 * S, Color(1, 1, 1, 0.35))
+	tl.draw_line(c + Vector2(2, -4) * S, c + Vector2(4, -7) * S, Color("#b08840"), S)
+	tl.draw_circle(c + Vector2(4, -7) * S, (1.2 + pulse) * S, Color(1.0, 0.8, 0.3, 0.9))
+	var txt := "%d" % maxi(0, left)
+	var bp := cell_rect(tm["aim"]).position + off + Vector2(C - 6 * S, 2 * S)
+	tl.draw_string_outline(font, bp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, 5, Art.INK)
+	tl.draw_string(font, bp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#ffcf6a"))
+
 func _faces_left(u: Actor) -> bool:
+	# the body's own facing (back attacks depend on it); straight up/down keeps the nearest foe
+	if u.facing.x != 0:
+		return u.facing.x < 0
 	var best := 999
 	var dx := 0
 	for o in battle.actors:
@@ -630,7 +670,7 @@ func _hp_bar(tl: Control, u: Actor, off: Vector2) -> void:
 	tl.draw_string(font, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#bfe3ff") if u.shield > 0 else Color.WHITE)
 	# states as small marks above the head
 	var marks := []
-	for s in ["burning", "wet", "frozen", "crystal", "shocked", "rooted"]:
+	for s in ["burning", "wet", "frozen", "crystal", "shocked", "rooted", "shadowed", "poisoned"]:
 		if u.has_status(s):
 			marks.append(s)
 	var ust := Art.unit(Art.unit_id(u))
@@ -647,7 +687,7 @@ func _hp_bar(tl: Control, u: Actor, off: Vector2) -> void:
 
 func _mark(tl: Control, s: String, c: Vector2) -> void:
 	var col: Color = {"burning": Color("#ff8a3a"), "wet": Color("#5aa8ff"), "frozen": Color("#bfe8ff"),
-		"crystal": Color("#b48cff"), "shocked": Color("#ffe14a"), "rooted": Color("#b0a090")}[s]
+		"crystal": Color("#b48cff"), "shocked": Color("#ffe14a"), "rooted": Color("#b0a090"), "shadowed": Color("#5a3a8a"), "poisoned": Color("#7ad04a")}[s]
 	tl.draw_circle(c, 3 * S, Art.INK)
 	tl.draw_circle(c, 2 * S, col)
 

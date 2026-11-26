@@ -4,7 +4,9 @@ extends RefCounted
 
 const REFILL_DECK := ["strike", "guard", "step"]
 const CRYSTAL_BONUS := 5
-const SHARD_DAMAGE := 4   # a crystal breaking hurts everything around it
+const SHARD_DAMAGE := 4
+const SHADOW_BONUS := 3   # [그림자]: extra damage on the next hit taken
+const BACKSTAB_BONUS := 4 # 도적 passive: a blow from behind   # a crystal breaking hurts everything around it
 
 var uid := 0
 var def_id := ""
@@ -29,6 +31,11 @@ var shield := 0         # absorbs damage first; gone at shield_until
 var shield_until := 0
 var discount := 0       # seconds taken off the next action that costs time (서두름)
 var pos := Vector2i(-1, -1)
+var facing := Vector2i.LEFT   # which way the body looks; a blow from the other side is a back attack
+var passives: Array = []      # e.g. "backstab" (도적: back attacks deal extra damage)
+var next_bonus := 0           # 빈틈 노리기: extra damage on the next attack card
+var coat: Dictionary = {}     # 독 바르기: {status, turns, charges}
+var expires_at := -1          # summoned shadows vanish at this second
 
 static func from_def(def: Dictionary, new_uid: int) -> Actor:
 	var a := Actor.new()
@@ -45,6 +52,9 @@ static func from_def(def: Dictionary, new_uid: int) -> Actor:
 	a.base_ability = def.get("base_ability", "step1")
 	a.deck = Array(def.get("deck", [])).duplicate()
 	a.pattern = Array(def.get("pattern", [])).duplicate()
+	a.passives = Array(def.get("passives", [])).duplicate()
+	if def.has("facing"):
+		a.facing = Vector2i(def["facing"][0], def["facing"][1])
 	return a
 
 func alive() -> bool:
@@ -63,6 +73,10 @@ func take_damage(amount: int, kind: String) -> int:
 		dmg -= armor
 	if has_status("guard"):
 		dmg *= 0.5
+	if has_status("shadowed") and dmg > 0:
+		# 그림자: the next blow lands harder, then the shadow is gone
+		dmg += SHADOW_BONUS
+		statuses.erase("shadowed")
 	var dealt: int = max(0, int(round(dmg)))
 	if has_status("crystal"):
 		# 결정화: the unit counts as crystal. Physical blows (and arrows) break it for extra damage;

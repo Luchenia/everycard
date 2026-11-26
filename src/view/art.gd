@@ -76,7 +76,7 @@ static func unit(def_id: String) -> Dictionary:
 
 ## Sprite id for an actor: the player's body uses the hero art.
 static func unit_id(a: Actor) -> String:
-	if a.controller == "human" and a.def_id == "walker":
+	if (a.controller == "human" and a.def_id == "walker") or a.controller == "echo":
 		return "hero"
 	return a.def_id
 

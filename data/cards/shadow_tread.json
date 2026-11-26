@@ -1,0 +1,20 @@
+{
+ "id": "shadow_tread",
+ "weight": 1,
+ "name": "그림자 밟기",
+ "time": 0,
+ "rarity": "common",
+ "family": "sword",
+ "pool": "wanderer",
+ "target": {
+  "shape": "cell",
+  "range": 3,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "behind"
+  }
+ ],
+ "desc": "3칸 안에 있는 적의 바로 뒤로 순간이동합니다."
+}

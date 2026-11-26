@@ -14,9 +14,10 @@
    "op": "swap_bodies"
   }
  ],
- "desc": "적과 [몸을 맞바꿉니다]. [탈진]",
+ "desc": "적과 [몸을 맞바꿉니다]. [탈진] [일회성]",
  "exhaust": 3,
  "family": "neutral",
  "pool": "common",
- "drop_weight": 0.15
+ "drop_weight": 0.15,
+ "once": true
 }

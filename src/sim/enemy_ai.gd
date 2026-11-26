@@ -9,6 +9,8 @@ static func nearest_foe(actor: Actor, battle) -> Actor:
 	for a in battle.actors:
 		if a == actor or not a.alive() or a.team == actor.team or not battle.grid.units.has(a):
 			continue
+		if battle.grid.mat_def(a.pos).get("blocks_sight", false):
+			continue   # 연막: cannot be singled out
 		var d := absi(a.pos.x - actor.pos.x) + absi(a.pos.y - actor.pos.y)
 		if d < best_d:
 			best_d = d

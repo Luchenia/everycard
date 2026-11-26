@@ -1,0 +1,21 @@
+{
+ "id": "rabbit_trap",
+ "weight": 1,
+ "name": "토끼 덫",
+ "time": 1,
+ "rarity": "common",
+ "family": "neutral",
+ "pool": "common",
+ "target": {
+  "shape": "cell",
+  "range": 2,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "material",
+   "id": "trap_rabbit"
+  }
+ ],
+ "desc": "1×1 칸에 [덫]을 설치합니다. 밟은 적은 4의 피해를 입고 [속박]됩니다."
+}

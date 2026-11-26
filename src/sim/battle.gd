@@ -111,6 +111,24 @@ func _on_meta(part: Dictionary, user) -> void:
 	if user != human():
 		return
 	match part["op"]:
+		"interrupt":
+			var n0 := telegraphs.size()
+			telegraphs = telegraphs.filter(func(t): return int(t["actor_uid"]) != int(part["uid"]))
+			var v := _actor(int(part["uid"]))
+			if n0 != telegraphs.size() and v != null:
+				v.next_at = maxi(v.next_at, now + 1)
+				_log("interrupt", "%s의 공격을 끊음" % v.name, {"uid": v.uid, "cells": [v.pos]})
+		"delay_actor":
+			var v2 := _actor(int(part["uid"]))
+			if v2 != null:
+				var s2 := int(part.get("secs", 2))
+				v2.next_at += s2
+				for t in telegraphs:
+					if int(t["actor_uid"]) == v2.uid:
+						t["fire_at"] = int(t["fire_at"]) + s2
+				_log("delay_actor", "%s 행동 %d초 늦춤" % [v2.name, s2], {"uid": v2.uid, "cells": [v2.pos]})
+		"clone":
+			_spawn_clone(user, part["aim"], int(part.get("secs", 8)))
 		"time_budget":
 			# buys time: every other team's next action and pending telegraph is pushed back
 			var d := int(part.get("delta", 0))
@@ -126,6 +144,28 @@ func _on_meta(part: Dictionary, user) -> void:
 					for i in int(part.get("amount", 1)):
 						belt.roll(1)
 				"reverse": belt.reverse_next = true
+
+## 그림자 분신: a shadow of the player that repeats every attack card from where it stands.
+func _spawn_clone(user: Actor, at: Vector2i, secs: int) -> void:
+	var spot := at
+	if not (grid.passable(spot) and grid.unit_at(spot) == null):
+		spot = Vector2i(-1, -1)
+		for n in grid.neighbors4(user.pos):
+			if grid.passable(n) and grid.unit_at(n) == null:
+				spot = n
+				break
+	if spot == Vector2i(-1, -1):
+		_log("no_target", "분신을 둘 자리가 없음", {})
+		return
+	var c := Actor.from_def({"id": "shadow_clone", "name": "그림자 분신", "hp": 1, "mass": 1}, ctx.next_uid)
+	ctx.next_uid += 1
+	c.team = user.team
+	c.controller = "echo"
+	c.facing = user.facing
+	c.expires_at = now + secs
+	grid.place_unit(c, spot)
+	actors.append(c)
+	_log("clone", "그림자 분신", {"uid": c.uid, "cells": [spot]})
 
 ## A card gained mid-battle (cardify, steal, plant) becomes the next card the hand draws.
 func _on_deck_add(actor, card_id: String) -> void:
@@ -173,6 +213,7 @@ func cmd_move(dir: Vector2i) -> bool:
 	_spend(secs, func():
 		if grid.passable(to) and grid.unit_at(to) == null:
 			grid.move_unit(h, to)
+			h.facing = dir
 			if grid.mat_def(to).get("lethal", false):
 				h.hp = 0
 			_log("move", "%s 이동" % h.name, {"to": to}))
@@ -230,15 +271,29 @@ func cmd_play(slot: int, aim: Vector2i) -> bool:
 		return false
 	var h := human()
 	var id := belt.take(slot)
-	belt.refill_one()   # the used slot fills straight away
 	var card := Effects.card_def(id, catalog)
+	if card.get("once", false):
+		# 일회성: gone from the deck once played
+		if not belt.draw_pile.is_empty() and belt.draw_pile.back() == id:
+			belt.draw_pile.pop_back()
+		h.deck.erase(id)
+		_log("once", "%s 사라짐" % card.get("name", id), {"card": id})
+	belt.refill_one()   # the used slot fills straight away
 	var secs := action_secs(int(card.get("time", 0)), h)
 	_log("play", "%s: %s (%d초)" % [h.name, card.get("name", id), secs], {"card": id, "aim": aim})
 	_spend(secs, func():
 		var tg: Dictionary = card.get("target", {})
 		_log("land", "%s 발동" % card.get("name", id), {"card": id, "user": h.uid,
 			"cells": Targeting.cells(tg.get("shape", "cell"), h.pos, aim, int(tg.get("size", 0)))})
+		if aim != h.pos:
+			h.facing = Targeting.dir_to(h.pos, aim)
 		Effects.apply(card, h, aim, ctx)
+		if Effects.is_attack(card):
+			for c2 in actors.duplicate():
+				if c2.controller == "echo" and c2.alive() and grid.units.has(c2) and c2.team == h.team:
+					_log("land", "분신: %s" % card.get("name", id), {"card": id, "user": c2.uid,
+						"cells": Targeting.cells(tg.get("shape", "cell"), c2.pos, aim, int(tg.get("size", 0)))})
+					Effects.apply(card, c2, aim, ctx)
 		_after_action())
 	var ex := int(card.get("exhaust", 0))
 	if ex > 0 and phase == "player":
@@ -348,6 +403,18 @@ func _throw_shards() -> void:
 		while not grid.shatter_queue.is_empty():
 			Effects.shatter(ctx, grid.shatter_queue.pop_front(), null)
 			any = true
+		while not grid.trap_queue.is_empty():
+			var v = grid.trap_queue.pop_front()
+			var md: Dictionary = grid.mat_def(v.pos)
+			if not md.has("trap") or not v.alive():
+				continue
+			var tr: Dictionary = md["trap"]
+			grid.set_material(v.pos, "none")
+			_log("trap", "%s 덫에 걸림" % v.name, {"uid": v.uid, "cells": [v.pos]})
+			v.add_status(tr.get("status", "rooted"), int(tr.get("turns", 2)))
+			var dd: int = v.take_damage(int(tr.get("damage", 0)), "physical")
+			_log("damage", "%s 덫 %d" % [v.name, dd], {"uid": v.uid, "amount": dd})
+			any = true
 		for a in actors:
 			if a.shattered:
 				a.shattered = false
@@ -360,6 +427,17 @@ func _world_second() -> void:
 	for a in actors:
 		if a.shield > 0 and now >= a.shield_until:
 			a.shield = 0
+		if a.expires_at >= 0 and now >= a.expires_at and grid.units.has(a):
+			a.hp = 0
+			_log("vanish", "%s 사라짐" % a.name, {"uid": a.uid, "cells": [a.pos]})
+	ctx.now = now
+	var due := ctx.timers.filter(func(t): return int(t["at"]) <= now)
+	if not due.is_empty():
+		ctx.timers = ctx.timers.filter(func(t): return int(t["at"]) > now)
+		for t in due:
+			_log("timer_fire", "시한폭탄 폭발", {"cells": t["cells"], "cell": t["aim"]})
+			Effects.apply_part(t["part"], t["user"], t["aim"], t["cells"], ctx)
+		_after_action()
 	if now % int(cfg["env_every"]) == 0:
 		EnvironmentStep.run(grid, catalog, rng, log, true)
 		Effects.tick_pending(ctx, true)
@@ -471,6 +549,8 @@ func _ai_act(a: Actor) -> void:
 		a.next_at = now + maxi(1, action_secs(int(cfg["move_time"]), a))
 		return
 	a.pattern_index += 1
+	if aim != a.pos:
+		a.facing = Targeting.dir_to(a.pos, aim)
 	var secs := maxi(1, action_secs(int(card.get("time", 1)), a))
 	if card.get("telegraph", false):
 		var cells := _attack_cells(card, a, aim, foe)
@@ -493,6 +573,7 @@ func _ai_step_toward(a: Actor, target: Vector2i) -> void:
 			best = n
 			best_d = dist(n, target)
 	if best != a.pos:
+		a.facing = best - a.pos
 		grid.move_unit(a, best)
 
 func _actor(uid: int) -> Actor:
@@ -540,7 +621,8 @@ func preview(slot: int, aim: Vector2i) -> Dictionary:
 	var h := human()
 	var card := Effects.card_def(belt.slots[slot]["card_id"], catalog)
 	var gsnap := grid.duplicate_state()
-	var asnap := actors.map(func(a): return [a, a.hp, a.statuses.duplicate(), a.deck.duplicate(), a.controller, a.team, a.shield, a.shield_until, a.discount])
+	var asnap := actors.map(func(a): return [a, a.hp, a.statuses.duplicate(), a.deck.duplicate(), a.controller, a.team, a.shield, a.shield_until, a.discount, a.facing, a.next_bonus, a.coat.duplicate()])
+	var qsnap := [grid.shatter_queue.duplicate(), grid.trap_queue.duplicate()]
 	var rstate = rng.get_state()
 	var tmp := Effects.BattleContext.new()
 	tmp.grid = grid
@@ -548,6 +630,7 @@ func preview(slot: int, aim: Vector2i) -> Dictionary:
 	tmp.rng = rng
 	tmp.actors = actors.duplicate()
 	tmp.next_uid = ctx.next_uid
+	tmp.now = now
 	var before := {}
 	for a in actors:
 		before[a.uid] = [a.hp, a.pos]
@@ -565,6 +648,9 @@ func preview(slot: int, aim: Vector2i) -> Dictionary:
 	for s in asnap:
 		s[0].hp = s[1]; s[0].statuses = s[2]; s[0].deck = s[3]; s[0].controller = s[4]; s[0].team = s[5]
 		s[0].shield = s[6]; s[0].shield_until = s[7]; s[0].discount = s[8]
+		s[0].facing = s[9]; s[0].next_bonus = s[10]; s[0].coat = s[11]
+	grid.shatter_queue = qsnap[0]
+	grid.trap_queue = qsnap[1]
 	rng.set_state(rstate)
 	return {"cells": cells, "damage_by_uid": dmg, "moved_by_uid": moved,
 		"secs": maxi(0, action_secs(int(card.get("time", 0)), h) - (h.discount if int(card.get("time", 0)) > 0 else 0)), "exhaust": int(card.get("exhaust", 0))}

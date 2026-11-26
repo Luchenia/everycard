@@ -102,5 +102,25 @@
   "conductivity": 0.6,
   "flammable": false,
   "name": "늪"
+ },
+ {
+  "id": "trap_rabbit",
+  "passable": true,
+  "conductivity": 0.0,
+  "flammable": false,
+  "name": "토끼 덫",
+  "trap": {
+   "status": "rooted",
+   "turns": 3,
+   "damage": 4
+  }
+ },
+ {
+  "id": "smoke_screen",
+  "passable": true,
+  "conductivity": 0.0,
+  "flammable": false,
+  "blocks_sight": true,
+  "name": "연막"
  }
 ]

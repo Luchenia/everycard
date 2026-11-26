@@ -1,0 +1,24 @@
+{
+ "id": "dagger_fan",
+ "weight": 1,
+ "name": "단검 세례",
+ "time": 3,
+ "rarity": "rare",
+ "family": "sword",
+ "pool": "wanderer",
+ "target": {
+  "shape": "line",
+  "range": 4,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "beam",
+   "damage": 4,
+   "kind": "physical",
+   "length": 4,
+   "spread": 3
+  }
+ ],
+ "desc": "앞쪽 세 갈래로 단검을 던져 각각 처음 맞는 적에게 4의 피해를 입힙니다."
+}

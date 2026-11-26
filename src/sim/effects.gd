@@ -22,6 +22,9 @@ class BattleContext extends RefCounted:
 	var on_deck_add: Callable = Callable()   # (actor, card_id) -> void, lets Battle put gained cards into the hand
 	var next_uid := 1000
 	var now := 0   # battle clock (seconds), kept in step by Battle
+	var timers: Array = []   # 시한폭탄: {at, part, user, aim, cells}
+	var bonus := 0           # 빈틈 노리기 bonus for the card being applied
+	var coat: Dictionary = {}  # 독 바르기 coating for the card being applied
 
 ## Card definition by id, including generated "foe:<actor>" (cardified enemy) and "summon:<actor>" cards.
 static func card_def(id: String, catalog: Catalog) -> Dictionary:
@@ -51,7 +54,52 @@ static func card_def(id: String, catalog: Catalog) -> Dictionary:
 
 ## cells_override: fixed cells for parts without their own shape (a telegraph hits exactly the
 ## cells it showed, e.g. a safe-zone attack).
+static func is_attack(card: Dictionary) -> bool:
+	for part in card.get("parts", []):
+		if part.get("op", "") in ["damage", "beam", "shadow_dash"]:
+			return true
+	return false
+
 static func apply(card: Dictionary, user, aim: Vector2i, ctx: BattleContext, cells_override: Array = []) -> void:
+	var tgt: Dictionary = card.get("target", {})
+	var attack := is_attack(card)
+	ctx.bonus = 0
+	ctx.coat = {}
+	if attack and user != null:
+		ctx.bonus = user.next_bonus
+		user.next_bonus = 0
+		if not user.coat.is_empty():
+			ctx.coat = user.coat
+			user.coat = user.coat.duplicate()
+			user.coat["charges"] = int(user.coat.get("charges", 1)) - 1
+			if user.coat["charges"] <= 0:
+				user.coat = {}
+	_apply_parts(card, user, aim, ctx, cells_override)
+	ctx.bonus = 0
+	ctx.coat = {}
+
+## One blow from `user` to `u`: card bonus, back attack, poison coating, crystal shards.
+static func hit(ctx: BattleContext, user, u, amount: int, kind: String, label := "피해") -> int:
+	var amt := amount + ctx.bonus
+	var back := false
+	if user != null and u != user and "backstab" in user.passives and u.team != user.team:
+		var rel: Vector2i = user.pos - u.pos
+		if rel.x * u.facing.x + rel.y * u.facing.y < 0:
+			amt += Actor.BACKSTAB_BONUS
+			back = true
+	var d: int = u.take_damage(amt, kind)
+	_log(ctx, "damage", "%s %s %d" % [u.name, label, d], {"uid": u.uid, "amount": d, "back": back})
+	if back:
+		_log(ctx, "backstab", "뒤치기", {"uid": u.uid, "cells": [u.pos]})
+	if not ctx.coat.is_empty() and d > 0 and u.alive():
+		u.add_status(ctx.coat.get("status", "poisoned"), int(ctx.coat.get("turns", 3)))
+		_log(ctx, "status", "%s %s" % [u.name, ctx.coat.get("status", "poisoned")], {"uid": u.uid, "status": ctx.coat.get("status", "poisoned")})
+	if u.shattered:
+		u.shattered = false
+		shatter(ctx, u.pos, u)
+	return d
+
+static func _apply_parts(card: Dictionary, user, aim: Vector2i, ctx: BattleContext, cells_override: Array = []) -> void:
 	var tgt: Dictionary = card.get("target", {})
 	for part in card.get("parts", []):
 		var shape: String = part.get("shape", tgt.get("shape", "cell"))
@@ -115,7 +163,7 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 		"material":
 			for p in cells:
 				var md: Dictionary = ctx.catalog.materials.get(part["id"], {})
-				if not md.get("passable", true) and g.unit_at(p) != null:
+				if (not md.get("passable", true) or md.has("trap")) and g.unit_at(p) != null:
 					continue
 				g.set_material(p, part["id"])
 		"damage":
@@ -124,11 +172,9 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 				_log(ctx, "no_target", "대상 없음")
 			for u in hit:
 				var amt := int(round(float(part["amount"]) * float(g.get_var(u.pos, "mana_density"))))
-				var d: int = u.take_damage(amt, part.get("kind", "physical"))
-				_log(ctx, "damage", "%s %d 피해" % [u.name, d], {"uid": u.uid, "amount": d})
-				if u.shattered:
-					u.shattered = false
-					shatter(ctx, u.pos, u)
+				for k in maxi(1, int(part.get("hits", 1))):
+					if u.alive():
+						hit(ctx, user, u, amt, part.get("kind", "physical"))
 			# physical blows and projectiles break crystals standing in the area
 			if part.get("kind", "physical") in ["physical", "true"]:
 				for p in cells:
@@ -172,7 +218,72 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 			else:
 				_log(ctx, "no_target", "이동할 수 없는 칸")
 		"beam":
-			_beam(part, user, aim, ctx)
+			var d0 := Targeting.dir_to(user.pos, aim)
+			if int(part.get("spread", 1)) >= 3:
+				# 단검 세례: straight ahead and the two diagonals beside it
+				var side := Vector2i(d0.y, d0.x)
+				for dd in [d0, d0 + side, d0 - side]:
+					_beam(part, user, aim, ctx, dd)
+			else:
+				_beam(part, user, aim, ctx)
+		"behind":
+			# 그림자 밟기: step into the cell at the target's back
+			var t2 = g.unit_at(aim)
+			if t2 == null or t2 == user:
+				_log(ctx, "no_target", "대상 없음")
+				return
+			var spot: Vector2i = aim - t2.facing
+			if not (g.in_bounds(spot) and g.passable(spot) and (g.unit_at(spot) == null or g.unit_at(spot) == user)):
+				_log(ctx, "no_target", "뒤에 설 자리가 없음")
+				return
+			var from0: Vector2i = user.pos
+			g.move_unit(user, spot)
+			user.facing = t2.facing
+			_log(ctx, "teleport", "%s 그림자 밟기" % user.name, {"uid": user.uid, "to": spot, "from": from0, "cells": [from0, spot]})
+		"shadow_dash":
+			# 그림자 걸음: run straight through foes, cutting each and leaving [그림자] on them
+			var d3 := Targeting.dir_to(user.pos, aim)
+			var last: Vector2i = user.pos
+			var crossed := [user.pos]
+			for i in range(1, int(part.get("dist", 4)) + 1):
+				var c3: Vector2i = user.pos + d3 * i
+				if not g.in_bounds(c3) or not g.passable(c3):
+					break
+				crossed.append(c3)
+				var o = g.unit_at(c3)
+				if o == null:
+					last = c3
+				elif o.team != user.team and o.alive():
+					hit(ctx, user, o, int(part.get("amount", 4)), "physical")
+					o.add_status("shadowed", int(part.get("shadow_turns", 3)))
+					_log(ctx, "status", "%s 그림자" % o.name, {"uid": o.uid, "status": "shadowed"})
+			if last != user.pos:
+				g.move_unit(user, last)
+			user.facing = d3
+			_log(ctx, "dash", "%s 그림자 걸음" % user.name, {"uid": user.uid, "to": user.pos, "cells": crossed})
+		"timer":
+			# 시한폭탄: goes off `secs` seconds later on the cells around the aim
+			var around := Targeting.cells("circle", aim, aim, int(part.get("size", 1)))
+			ctx.timers.append({"at": ctx.now + int(part.get("secs", 3)), "part": part["part"], "user": user, "aim": aim, "cells": around})
+			_log(ctx, "timer_set", "시한폭탄 설치", {"cell": aim, "cells": around, "at": ctx.now + int(part.get("secs", 3))})
+		"empower":
+			user.next_bonus += int(part.get("amount", 0))
+			_log(ctx, "empower", "%s 다음 공격 +%d" % [user.name, user.next_bonus], {"uid": user.uid})
+		"coat":
+			user.coat = {"status": part.get("status", "poisoned"), "turns": int(part.get("status_turns", 3)), "charges": int(part.get("charges", 2))}
+			_log(ctx, "coat", "%s 독 바름" % user.name, {"uid": user.uid})
+		"interrupt":
+			# 기습: the target's announced attack is cancelled
+			var v4 = g.unit_at(aim)
+			if v4 != null and ctx.on_meta.is_valid():
+				ctx.on_meta.call({"op": "interrupt", "uid": v4.uid}, user)
+		"delay_actor":
+			var v5 = g.unit_at(aim)
+			if v5 != null and v5 != user and ctx.on_meta.is_valid():
+				ctx.on_meta.call({"op": "delay_actor", "uid": v5.uid, "secs": int(part.get("secs", 2))}, user)
+		"clone":
+			if ctx.on_meta.is_valid():
+				ctx.on_meta.call({"op": "clone", "aim": aim, "secs": int(part.get("secs", 8))}, user)
 		"shield":
 			user.shield += int(part.get("amount", 0))
 			user.shield_until = ctx.now + int(part.get("secs", 6))
@@ -303,9 +414,9 @@ static func _crystal_at(g: Grid, p: Vector2i) -> bool:
 	var u = g.unit_at(p)
 	return u != null and u.has_status("crystal")
 
-static func _beam(part: Dictionary, user, aim: Vector2i, ctx: BattleContext) -> void:
+static func _beam(part: Dictionary, user, aim: Vector2i, ctx: BattleContext, dir_override := Vector2i.ZERO) -> void:
 	var g := ctx.grid
-	var d := Targeting.dir_to(user.pos, aim)
+	var d := Targeting.dir_to(user.pos, aim) if dir_override == Vector2i.ZERO else dir_override
 	var p: Vector2i = user.pos
 	var reflected := false
 	var deflects := 0
@@ -352,11 +463,7 @@ static func _beam(part: Dictionary, user, aim: Vector2i, ctx: BattleContext) -> 
 		path.append(p)
 		var u = g.unit_at(p)
 		if u != null and (u != user or reflected or deflects > 0) and u.alive():
-			var dealt: int = u.take_damage(int(part["damage"]), part.get("kind", "energy"))
-			_log(ctx, "damage", "%s 광선 %d" % [u.name, dealt], {"uid": u.uid, "amount": dealt})
-			if u.shattered:
-				u.shattered = false
-				shatter(ctx, u.pos, u)
+			hit(ctx, user, u, int(part["damage"]), part.get("kind", "energy"), "광선")
 			break
 		if g.mat_def(p).get("reflective", false):
 			d = -d

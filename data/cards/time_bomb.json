@@ -1,0 +1,27 @@
+{
+ "id": "time_bomb",
+ "weight": 1,
+ "name": "시한폭탄",
+ "time": 2,
+ "rarity": "common",
+ "family": "neutral",
+ "pool": "common",
+ "target": {
+  "shape": "cell",
+  "range": 1,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "timer",
+   "secs": 3,
+   "size": 1,
+   "part": {
+    "op": "damage",
+    "amount": 8,
+    "kind": "physical"
+   }
+  }
+ ],
+ "desc": "붙어 있는 칸에 폭탄을 설치합니다. 3초 뒤 3×3 범위에 8의 피해를 입힙니다."
+}

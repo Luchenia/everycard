@@ -147,6 +147,13 @@ func _flashes() -> void:
 				board.burst([] if is_beam else e["data"].get("cells", []), col, from)
 				if c.get("parts", []).any(func(pt): return pt.get("op", "") == "damage"):
 					board.attack(int(e["data"].get("user", -1)), e["data"].get("cells", []))
+			"trap", "interrupt", "delay_actor", "clone", "vanish":
+				board.burst(e["data"].get("cells", []), Color("#c0a0ff") if e["t"] in ["clone", "vanish", "delay_actor"] else Color("#ffcf6a"))
+			"backstab":
+				board.burst(e["data"].get("cells", []), Color("#ff5a7a"))
+			"timer_fire":
+				board.burst(e["data"].get("cells", []), Color("#ff8a3a"))
+				board.shake(0.25)
 			"shatter":
 				board.shatter(e["data"]["cell"])
 				board.shake(0.12)

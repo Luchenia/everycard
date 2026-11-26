@@ -1,0 +1,30 @@
+{
+ "id": "smoke_bomb",
+ "weight": 1,
+ "name": "연막탄",
+ "time": 2,
+ "rarity": "rare",
+ "family": "neutral",
+ "pool": "wanderer",
+ "target": {
+  "shape": "circle",
+  "range": 3,
+  "size": 1
+ },
+ "parts": [
+  {
+   "op": "material",
+   "id": "smoke_screen"
+  },
+  {
+   "op": "timer",
+   "secs": 6,
+   "size": 1,
+   "part": {
+    "op": "material",
+    "id": "none"
+   }
+  }
+ ],
+ "desc": "3×3 범위를 [연막] 상태로 만듭니다."
+}

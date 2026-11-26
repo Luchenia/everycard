@@ -30,5 +30,12 @@
  "pools": [
   "wanderer",
   "common"
+ ],
+ "facing": [
+  1,
+  0
+ ],
+ "passives": [
+  "backstab"
  ]
 }

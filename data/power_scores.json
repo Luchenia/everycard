@@ -1,41 +1,145 @@
 {
-  "budgets": {"basic": 8, "common": 12, "rare": 18, "epic": 28, "legendary": 28, "boss": 120},
+  "budgets": {
+    "basic": 8,
+    "common": 12,
+    "rare": 18,
+    "epic": 28,
+    "legendary": 28,
+    "boss": 120
+  },
   "time_credit": 2.5,
   "exhaust_credit": 3.0,
   "area_exponent": 0.6,
   "turns_factor": 1.0,
   "ops": {
-    "damage": {"per_amount": 1.0},
-    "heal": {"per_amount": 0.8},
-    "beam": {"per_damage": 1.2},
-    "push": {"per_dist": 2.0},
-    "teleport": {"flat": 3.0},
-    "belt": {"per_amount": 3.0},
-    "time_budget": {"per_delta": 2.5},
-    "swap_bodies": {"flat": 30.0},
-    "steal_card": {"flat": 6.0},
-    "plant_card": {"flat": 3.0},
-    "cardify": {"flat": 12.0},
-    "summon": {"flat": 8.0},
-    "delay": {"inner_factor": 0.8},
-    "shield": {"per_amount": 0.8},
-    "discount": {"per_amount": 2.5},
-    "borrow": {"per_sec": 2.0},
-    "dash": {"flat": 3.0},
-    "encase": {"flat": 6.0},
-    "if": {"inner_factor": 0.6}
+    "damage": {
+      "per_amount": 1.0
+    },
+    "heal": {
+      "per_amount": 0.8
+    },
+    "beam": {
+      "per_damage": 1.2
+    },
+    "push": {
+      "per_dist": 2.0
+    },
+    "teleport": {
+      "flat": 3.0
+    },
+    "belt": {
+      "per_amount": 3.0
+    },
+    "time_budget": {
+      "per_delta": 2.5
+    },
+    "swap_bodies": {
+      "flat": 30.0
+    },
+    "steal_card": {
+      "flat": 6.0
+    },
+    "plant_card": {
+      "flat": 3.0
+    },
+    "cardify": {
+      "flat": 12.0
+    },
+    "summon": {
+      "flat": 8.0
+    },
+    "delay": {
+      "inner_factor": 0.8
+    },
+    "shield": {
+      "per_amount": 0.8
+    },
+    "discount": {
+      "per_amount": 2.5
+    },
+    "borrow": {
+      "per_sec": 2.0
+    },
+    "dash": {
+      "flat": 3.0
+    },
+    "encase": {
+      "flat": 6.0
+    },
+    "if": {
+      "inner_factor": 0.6
+    },
+    "behind": {
+      "flat": 3
+    },
+    "shadow_dash": {
+      "flat": 8
+    },
+    "empower": {
+      "flat": 4
+    },
+    "coat": {
+      "flat": 5
+    },
+    "interrupt": {
+      "flat": 4
+    },
+    "delay_actor": {
+      "flat": 4
+    },
+    "clone": {
+      "flat": 14
+    },
+    "timer": {
+      "flat": 0
+    }
   },
   "var_weights": {
-    "temperature": 0.05, "pressure": 1.0, "gravity": 1.5, "wind": 1.0, "humidity": 3.0, "oxygen": 3.0,
-    "friction": 2.0, "charge": 0.6, "radiation": 1.0, "magnetism": 1.0, "light": 0.5, "noise": 0.4,
-    "toxicity": 0.8, "time_scale": 6.0, "mana_density": 5.0
+    "temperature": 0.05,
+    "pressure": 1.0,
+    "gravity": 1.5,
+    "wind": 1.0,
+    "humidity": 3.0,
+    "oxygen": 3.0,
+    "friction": 2.0,
+    "charge": 0.6,
+    "radiation": 1.0,
+    "magnetism": 1.0,
+    "light": 0.5,
+    "noise": 0.4,
+    "toxicity": 0.8,
+    "time_scale": 6.0,
+    "mana_density": 5.0
   },
   "material_scores": {
-    "none": 1.0, "water": 1.5, "ice": 2.0, "steam": 1.5, "oil": 2.0, "fire": 4.0, "gas_flammable": 3.0,
-    "smoke": 1.0, "wall": 3.0, "metal": 4.0, "crystal": 3.0, "void": 10.0, "swamp": 2.0
+    "none": 1.0,
+    "water": 1.5,
+    "ice": 2.0,
+    "steam": 1.5,
+    "oil": 2.0,
+    "fire": 4.0,
+    "gas_flammable": 3.0,
+    "smoke": 1.0,
+    "wall": 3.0,
+    "metal": 4.0,
+    "crystal": 3.0,
+    "void": 10.0,
+    "swamp": 2.0,
+    "trap_rabbit": 4,
+    "smoke_screen": 3
   },
   "status_scores": {
-    "guard": 4.0, "wet": 1.0, "burning": 3.0, "shocked": 3.0, "poisoned": 3.0, "stunned": 6.0, "haste": 4.0, "crystal": 5.0, "rooted": 4.0, "frozen": 5.0
+    "guard": 4.0,
+    "wet": 1.0,
+    "burning": 3.0,
+    "shocked": 3.0,
+    "poisoned": 3.0,
+    "stunned": 6.0,
+    "haste": 4.0,
+    "crystal": 5.0,
+    "rooted": 4.0,
+    "frozen": 5.0,
+    "shadowed": 3
   },
   "status_turn_factor": 0.6
 }
