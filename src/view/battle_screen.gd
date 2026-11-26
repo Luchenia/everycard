@@ -40,6 +40,13 @@ var speed := 1.0             # playback speed of passing seconds (1-5 keys)
 var speed_shown_at := -9.0
 var hand_cursor: HandCursor     # when the window got focus: the click that focuses it never walks
 var log_i := 0           # battle log entries already shown as flashes
+var board_base := Vector2.ZERO  # where the board sits; slides move it off and back
+var slide_dir := Vector2i.ZERO  # walking through a door: the camera slides toward the next room
+var slide_t := 0.0              # 0..1 out, then 1..2 in
+var banner := ""                # room name shown for a moment on entering
+var banner_at := -9.0
+const SLIDE_OUT := 0.22
+const SLIDE_IN := 0.32
 
 func _ready() -> void:
 	font = load("res://assets/fonts/Galmuri11.ttf")
@@ -117,8 +124,11 @@ func _step_replay(delta: float) -> void:
 	var left := float(fr.size() - 1 - shown_frame) - replay_t
 	var tail := lerpf(0.3, 1.0, clampf(left / 0.6, 0.0, 1.0))
 	warp = move_toward(warp, tail, delta * 4.0) if warp < tail else tail
+	if flow.calm():
+		warp = 1.0   # nothing to fight: walking needs no slow motion
+	var calm_k := 3.0 if flow.calm() else 1.0
 	board.play_speed = speed * warp
-	replay_t += delta * speed * warp / SEC_REAL
+	replay_t += delta * speed * warp * calm_k / SEC_REAL
 	while replay_t >= 1.0 and shown_frame < fr.size() - 1:
 		replay_t -= 1.0
 		shown_frame += 1
@@ -218,6 +228,7 @@ func _process(delta: float) -> void:
 		return
 	board.play_speed = speed
 	_step_replay(delta)
+	_step_slide(delta)
 	_flashes()
 	spin = move_toward(spin, 0.0, delta * 1.6)
 	_layout_hand()
@@ -229,6 +240,63 @@ func _process(delta: float) -> void:
 			_cell_tips(board.hover)
 	hud.queue_redraw()
 
+# ---- rooms --------------------------------------------------------------------------------------
+
+## Walking through a door: the view slides toward the next room, the room changes, and the
+## new room slides in from the side the player came from.
+func _step_slide(delta: float) -> void:
+	if slide_dir == Vector2i.ZERO:
+		if flow.phase == "battle" and flow.exit_dir != Vector2i.ZERO and not _replaying():
+			slide_dir = flow.exit_dir
+			slide_t = 0.0
+			selected = -1
+			_clear_tips()
+		else:
+			return
+	var before := slide_t
+	slide_t += delta / (SLIDE_OUT if slide_t < 1.0 else SLIDE_IN)
+	if before < 1.0 and slide_t >= 1.0:
+		flow.go(slide_dir)
+		shown_frame = flow.battle.frames.size() - 1
+		log_i = flow.battle.log.size()
+		board.reset_tracking()
+		var r := flow.room()
+		banner = RunFlow.KIND_NAME.get(r["kind"], "")
+		if banner == "":
+			banner = RunFlow.THEME_NAME.get(r["theme"], "")
+		banner_at = real
+		_refresh()
+	if slide_t >= 2.0:
+		slide_dir = Vector2i.ZERO
+		slide_t = 0.0
+	board.position = board_base + _slide_off()
+
+func _slide_off() -> Vector2:
+	if slide_dir == Vector2i.ZERO:
+		return Vector2.ZERO
+	var span := Vector2(board.size.x, board.size.y) * 0.6
+	var d := Vector2(slide_dir)
+	if slide_t < 1.0:
+		var k := slide_t * slide_t
+		return -d * span * k
+	var k2 := 1.0 - (slide_t - 1.0)
+	return d * span * k2 * k2
+
+## Tools and tests: jump straight into the first room of a kind, as if walked in.
+func debug_enter(kind: String) -> void:
+	for p in flow.dungeon.rooms:
+		if flow.dungeon.rooms[p]["kind"] == kind:
+			flow.at = p
+			flow._enter(-flow.dungeon.doors(p)[0])
+			break
+	shown_frame = flow.battle.frames.size() - 1
+	log_i = flow.battle.log.size()
+	board.reset_tracking()
+	_refresh()
+
+func _sliding() -> bool:
+	return slide_dir != Vector2i.ZERO
+
 # ---- layout -------------------------------------------------------------------------------------
 
 func _refresh() -> void:
@@ -237,7 +305,8 @@ func _refresh() -> void:
 	var b := flow.battle
 	board.battle = b
 	board.fit()
-	board.position = Vector2(round((1280 - board.size.x) / 2), 44)
+	board_base = Vector2(round((1280 - board.size.x) / 2), 44)
+	board.position = board_base + _slide_off()
 	board.preview = {}
 	board.aiming = selected >= 0
 	timeline.battle = b
@@ -248,6 +317,8 @@ func _refresh() -> void:
 	hand_layer.visible = flow.phase == "battle"
 	if flow.phase == "reward":
 		_reward_overlay()
+	elif flow.phase == "shop":
+		_shop_overlay()
 	elif flow.phase in ["game_over", "victory"]:
 		_end_overlay()
 
@@ -422,15 +493,12 @@ func _drop_out(slot: int, dir: int) -> void:
 
 func _draw_hud() -> void:
 	var b := flow.battle
-	# fight pips (top-left)
-	for i in 3:
-		var c := Vector2(24 + i * 22, 20)
-		var dia := PackedVector2Array([c + Vector2(0, -8), c + Vector2(8, 0), c + Vector2(0, 8), c + Vector2(-8, 0)])
-		hud.draw_colored_polygon(dia, Art.INK)
-		var col := Color("#e0b040") if i < flow.index else (Color("#ff6a4a") if i == flow.index else Color("#3a3644"))
-		if i == 2:
-			col = col if i <= flow.index else Color("#5a2a3a")
-		hud.draw_colored_polygon(PackedVector2Array([c + Vector2(0, -5), c + Vector2(5, 0), c + Vector2(0, 5), c + Vector2(-5, 0)]), col)
+	_draw_map(Vector2(1068, 62))
+	# room name for a moment after walking in
+	if banner != "" and real - banner_at < 1.6:
+		var ba := clampf(1.6 - (real - banner_at), 0.0, 1.0)
+		hud.draw_string_outline(font, Vector2(0, 104), banner, HORIZONTAL_ALIGNMENT_CENTER, 1280, 28, 8, Color(Art.INK, ba))
+		hud.draw_string(font, Vector2(0, 104), banner, HORIZONTAL_ALIGNMENT_CENTER, 1280, 28, Color(Art.GOLD, ba))
 	# the hero's health, always readable in the corner (bars on the board carry no numbers)
 	var me := b.human()
 	if me != null:
@@ -441,6 +509,13 @@ func _draw_hud() -> void:
 		var ht := "%d / %d" % [me.hp, me.max_hp] + ("  +%d" % me.shield if me.shield > 0 else "")
 		hud.draw_string_outline(font, hp_at + Vector2(128, 13), ht, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, 5, Art.INK)
 		hud.draw_string(font, hp_at + Vector2(128, 13), ht, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
+	# gold: a coin and the count under the health
+	var gc := Vector2(24, 72)
+	hud.draw_circle(gc, 8, Art.INK)
+	hud.draw_circle(gc, 6, Color("#e0b040"))
+	hud.draw_circle(gc + Vector2(-1, -1), 3, Color("#ffe48a"))
+	hud.draw_string_outline(font, gc + Vector2(14, 6), "%d" % flow.gold, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, 5, Art.INK)
+	hud.draw_string(font, gc + Vector2(14, 6), "%d" % flow.gold, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Art.GOLD)
 	# hand refill: a small ring on the deck icon counts the seconds to the next card
 	var dr := b.next_draw_at() - b.now
 	var dk := Vector2(1214, 20)
@@ -470,6 +545,66 @@ func _draw_hud() -> void:
 		var p := board.position + board.feet(Vector2(h.pos)) - Vector2(-26, 90)
 		hud.draw_string_outline(font, p, "-%d초" % h.discount, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 5, Art.INK)
 		hud.draw_string(font, p, "-%d초" % h.discount, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#bfe8ff"))
+
+## The floor map (top-right): every room is a small card face down until you have been in it;
+## rooms next to visited ones show as outlines. Special rooms carry a glyph once seen.
+func _draw_map(at: Vector2) -> void:
+	var dg := flow.dungeon
+	var lo := Vector2i(99, 99)
+	var hi := Vector2i(-1, -1)
+	for p in dg.rooms:
+		if dg.seen(p):
+			lo = Vector2i(mini(lo.x, p.x), mini(lo.y, p.y))
+			hi = Vector2i(maxi(hi.x, p.x), maxi(hi.y, p.y))
+	if hi.x < 0:
+		return
+	var pitch := Vector2(26, 30)
+	var sz := Vector2(18, 24)
+	var w := float(hi.x - lo.x + 1) * pitch.x
+	var o := at + Vector2(196 - w, 0)
+	# corridors first
+	for p in dg.rooms:
+		if not dg.rooms[p]["visited"]:
+			continue
+		for d in dg.doors(p):
+			var a := o + Vector2(p - lo) * pitch + sz / 2
+			hud.draw_line(a, a + Vector2(d) * pitch * 0.5, Color("#5a5468"), 3)
+	for p in dg.rooms:
+		if not dg.seen(p):
+			continue
+		var r: Dictionary = dg.rooms[p]
+		var rc := Rect2(o + Vector2(p - lo) * pitch, sz)
+		var here: bool = p == flow.at
+		hud.draw_rect(rc.grow(2), Art.INK)
+		if r["visited"]:
+			hud.draw_rect(rc, Color("#e8dcc0") if here else Color("#8a8296"))
+		else:
+			hud.draw_rect(rc, Color("#24203a"))
+			hud.draw_rect(rc.grow(-2), Color("#2a4a9a"))
+		if here:
+			var pulse := 0.6 + 0.4 * sin(real * 4.0)
+			hud.draw_rect(rc.grow(3), Color(Art.GOLD, pulse), false, 2)
+		var c := rc.get_center()
+		var ink := Color("#2a2630") if r["visited"] else Color("#e8dcc0")
+		match r["kind"]:
+			"boss":
+				var crown := PackedVector2Array([c + Vector2(-6, 4), c + Vector2(-6, -4), c + Vector2(-3, 0), c + Vector2(0, -6), c + Vector2(3, 0), c + Vector2(6, -4), c + Vector2(6, 4)])
+				hud.draw_colored_polygon(crown, Color("#e04a4a"))
+			"shop":
+				hud.draw_circle(c, 5, Color("#e0b040"))
+				hud.draw_circle(c, 2, ink)
+			"chest":
+				if not r["used"]:
+					hud.draw_rect(Rect2(c - Vector2(5, 3), Vector2(10, 7)), Color("#b07038"))
+					hud.draw_rect(Rect2(c - Vector2(5, 1), Vector2(10, 1)), Color("#e0b040"))
+			"spring":
+				if not r["used"]:
+					hud.draw_circle(c + Vector2(0, 2), 4, Color("#4a8ae0"))
+					hud.draw_colored_polygon(PackedVector2Array([c + Vector2(-3, 1), c + Vector2(0, -6), c + Vector2(3, 1)]), Color("#4a8ae0"))
+			"fight":
+				if not r["cleared"] and r["visited"]:
+					hud.draw_line(c + Vector2(-4, -4), c + Vector2(4, 4), Color("#c04040"), 2)
+					hud.draw_line(c + Vector2(4, -4), c + Vector2(-4, 4), Color("#c04040"), 2)
 
 func _update_span() -> void:
 	var b := flow.battle
@@ -651,7 +786,8 @@ func _title(t: String, y: float) -> void:
 
 func _reward_overlay() -> void:
 	_veil()
-	_title("승리", 200)
+	_title("보물 상자" if flow.room()["kind"] == "chest" else "방 정리", 200)
+	_button("넘기기", Vector2(590, 560), func(): _pick_reward(-1))
 	for i in flow.rewards.size():
 		var cv := CardView.new()
 		cv.setup(flow.rewards[i], catalog, font, 2)
@@ -665,9 +801,61 @@ func _reward_overlay() -> void:
 				tips.position = Vector2(c.position.x + 164, 280))
 		overlay.add_child(cv)
 
+func _button(text: String, at: Vector2, on_press: Callable, enabled := true) -> Button:
+	var bt := Button.new()
+	bt.text = text
+	bt.position = at
+	bt.size = Vector2(100, 36)
+	bt.disabled = not enabled
+	bt.pressed.connect(on_press)
+	overlay.add_child(bt)
+	return bt
+
+## The shop: cards on the merchant's rug with their prices, a heal, and the way out.
+func _shop_overlay() -> void:
+	_veil()
+	_title("상점   금화 %d" % flow.gold, 150)
+	var items := flow.stock()
+	for i in items.size():
+		var it: Dictionary = items[i]
+		var x := 640 - 2 * 190 + i * 190 + 18
+		if not it["sold"]:
+			var cv := CardView.new()
+			cv.setup(it["id"], catalog, font, 2)
+			cv.position = Vector2(x, 220)
+			var idx := i
+			cv.picked.connect(func(_c):
+				if flow.buy(idx):
+					_refresh())
+			cv.hovered.connect(func(c, on):
+				_clear_tips()
+				if on:
+					_keyword_tips(c.def().get("desc", ""))
+					tips.position = Vector2(c.position.x + 164, 230))
+			if flow.gold < int(it["price"]):
+				cv.modulate = Color(0.55, 0.55, 0.6)
+			overlay.add_child(cv)
+		var pl := Label.new()
+		pl.text = "팔림" if it["sold"] else "%d" % it["price"]
+		pl.position = Vector2(x, 470)
+		pl.size = Vector2(152, 24)
+		pl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		pl.add_theme_font_size_override("font_size", 20)
+		pl.add_theme_color_override("font_color", Art.GOLD if not it["sold"] and flow.gold >= int(it["price"]) else Color(0.6, 0.6, 0.65))
+		pl.add_theme_color_override("font_outline_color", Art.INK)
+		pl.add_theme_constant_override("outline_size", 6)
+		overlay.add_child(pl)
+	var me := flow.battle.human()
+	_button("회복 +%d (%d)" % [RunFlow.HEAL_AMOUNT, RunFlow.HEAL_PRICE], Vector2(480, 540), func():
+		if flow.buy_heal():
+			_refresh(), flow.gold >= RunFlow.HEAL_PRICE and me != null and me.hp < me.max_hp).size = Vector2(150, 36)
+	_button("나가기", Vector2(660, 540), func():
+		flow.leave_shop()
+		_refresh())
+
 func _end_overlay() -> void:
 	_veil()
-	_title("쓰러졌다" if flow.phase == "game_over" else "3연전 돌파", 300)
+	_title("쓰러졌다" if flow.phase == "game_over" else "보스 격파", 300)
 	var again := Button.new()
 	again.text = "새 판"
 	again.position = Vector2(590, 380)
@@ -688,7 +876,7 @@ func _pick_reward(i: int) -> void:
 # ---- input --------------------------------------------------------------------------------------
 
 func _on_card_picked(cv: CardView) -> void:
-	if flow.phase != "battle" or _replaying():
+	if flow.phase != "battle" or _replaying() or _sliding():
 		return
 	var i: int = cv.get_meta("slot")
 	var b := flow.battle
@@ -730,7 +918,7 @@ func _fly(slot: int, target: Vector2i) -> void:
 	tw.chain().tween_callback(cv.queue_free)
 
 func _on_board_input(ev: InputEvent) -> void:
-	if flow.phase != "battle" or _replaying():
+	if flow.phase != "battle" or _replaying() or _sliding():
 		return
 	var b := flow.battle
 	if ev is InputEventMouseMotion:
@@ -828,8 +1016,8 @@ func _end_drag(cell: Vector2i, at: Vector2) -> void:
 	if not drag_manual:
 		if dx < -DRAG_GO:
 			path = []   # dragged left: cancelled
-		elif dx <= DRAG_GO:
-			# no drag: only a step onto a neighbouring cell counts
+		elif dx <= DRAG_GO and not flow.calm():
+			# no drag: only a step onto a neighbouring cell counts (in a calm room, any click walks)
 			path = [drag_from] if absi(drag_from.x - h.pos.x) + absi(drag_from.y - h.pos.y) == 1 else []
 	if path.is_empty():
 		_refresh()
@@ -841,6 +1029,8 @@ func _end_drag(cell: Vector2i, at: Vector2) -> void:
 			break
 		if b.human() != null and b.human().hp < hp0:
 			break   # hit on the way: hand control back
+		if b.grid.get_material(b.human().pos) in ["door", "chest", "stall", "spring"]:
+			break   # stepped on something that does something
 	_after()
 
 func _path(from: Vector2i, to: Vector2i) -> Array:
@@ -890,7 +1080,7 @@ const SPEEDS := [1.0, 1.5, 2.0, 3.0, 4.0]
 const CARD_KEYS := [KEY_Q, KEY_W, KEY_E, KEY_R, KEY_T]
 
 func _unhandled_input(ev: InputEvent) -> void:
-	if flow == null or flow.phase != "battle" or not (ev is InputEventKey) or not ev.pressed or ev.echo:
+	if flow == null or flow.phase != "battle" or not (ev is InputEventKey) or not ev.pressed or ev.echo or _sliding():
 		return
 	# physical keys, so a Korean input mode (ㅂㅈㄷㄱㅅ) still works
 	var pk: int = ev.physical_keycode

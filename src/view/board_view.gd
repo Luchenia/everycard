@@ -220,6 +220,7 @@ func _draw() -> void:
 		_tile(wall, _wall[(y + 2) * (W + 2) + W + 1], origin + off + Vector2(W * C, y * C))
 	for x in range(0, W):
 		_tile(wall, _wall[(H + 2) * (W + 2) + x + 1], origin + off + Vector2(x * C, H * C), Color(0.85, 0.85, 0.9))
+	_doors(off)
 	# floor
 	var g := battle.grid
 	for p in g.all_cells():
@@ -349,6 +350,8 @@ func _draw_top() -> void:
 			items.append({"y": float(p.y) + (0.97 if over else 0.75), "fx": ("mirror" if m == "metal" else m), "p": p})
 		elif m == "wall":
 			items.append({"y": float(p.y) + 0.95, "block": m, "p": p})
+		elif m in ["chest", "chest_open", "stall", "spring", "spring_dry"]:
+			items.append({"y": float(p.y) + (0.2 if m in ["stall", "spring", "spring_dry"] else 0.7), "feature": m, "p": p})
 	for u in battle.actors:
 		if replaying and not shown_pos.has(u.uid):
 			continue
@@ -364,6 +367,8 @@ func _draw_top() -> void:
 			_fx(tl, it["fx"], it["p"], off)
 		elif it.has("block"):
 			_block(tl, it["block"], it["p"], off)
+		elif it.has("feature"):
+			_feature(tl, it["feature"], it["p"], off)
 		else:
 			_unit(tl, it["unit"], off)
 	# one-shot effects: slashes, hit bursts, fire going out, ice breaking
@@ -649,6 +654,101 @@ func _fx(tl: Control, kind: String, p: Vector2i, off: Vector2) -> void:
 	if kind != "fire":
 		tl.draw_rect(Rect2(ground + Vector2(-7 * S, 1 * S), Vector2(14 * S, 3 * S)), Color(0, 0, 0, 0.3 * alpha))
 	_sprite(tl, st, ground, Art.frame_at(st, clock, p.x * 7 + p.y * 5), Color(1, 1, 1, alpha))
+
+## Doorways cut into the outer wall next to door cells. A sealed one is barred by violet
+## crystal that shatters when the room is cleared.
+func _doors(off: Vector2) -> void:
+	var g := battle.grid
+	for p in g.all_cells():
+		var m := g.get_material(p)
+		if m != "door" and m != "door_sealed":
+			continue
+		var out := Vector2i.ZERO
+		if p.x == 0: out = Vector2i.LEFT
+		elif p.x == Grid.W - 1: out = Vector2i.RIGHT
+		elif p.y == 0: out = Vector2i.UP
+		else: out = Vector2i.DOWN
+		var r := cell_rect(p + out)
+		r.position += off
+		if out == Vector2i.UP:
+			r = Rect2(r.position - Vector2(0, C), Vector2(C, 2 * C))
+		var inner := r.grow(-3 * S)
+		draw_rect(r.grow(-S), Color("#e0b040"))
+		draw_rect(r.grow(-2 * S), Art.INK)
+		draw_rect(inner, Color("#050408"))
+		# light spilling in from the next room
+		var lc := Color(0.95, 0.8, 0.45, 0.10 + 0.04 * sin(real * 2.0))
+		draw_rect(inner.grow(-2 * S), lc)
+		var cr := cell_rect(p)
+		cr.position += off
+		if m == "door":
+			draw_rect(cr.grow(-2 * S), Color(0.95, 0.8, 0.45, 0.10), false, S)
+		else:
+			var pulse := 0.7 + 0.3 * sin(real * 3.0 + p.x)
+			for k in 3:
+				var t := (k + 1) / 4.0
+				if out.x != 0:
+					var y := inner.position.y + inner.size.y * t
+					draw_rect(Rect2(inner.position.x, y - S, inner.size.x, 2 * S), Color(0.72, 0.55, 1.0, pulse))
+				else:
+					var x := inner.position.x + inner.size.x * t
+					draw_rect(Rect2(x - S, inner.position.y, 2 * S, inner.size.y), Color(0.72, 0.55, 1.0, pulse))
+			draw_rect(inner, Color(0.6, 0.4, 1.0, 0.12 * pulse))
+
+## Room features you step on: a chest, the shop's rug, the spring.
+func _feature(tl: Control, kind: String, p: Vector2i, off: Vector2) -> void:
+	var r := cell_rect(p)
+	r.position += off
+	var c := r.get_center()
+	match kind:
+		"chest", "chest_open":
+			var base := Rect2(c + Vector2(-7, -2) * S, Vector2(14, 9) * S)
+			tl.draw_rect(Rect2(base.position + Vector2(0, base.size.y), Vector2(base.size.x, 2 * S)), Color(0, 0, 0, 0.35))
+			tl.draw_rect(base.grow(S), Art.INK)
+			tl.draw_rect(base, Color("#7a4a26"))
+			tl.draw_rect(Rect2(base.position + Vector2(0, 3 * S), Vector2(base.size.x, S)), Color("#e0b040"))
+			if kind == "chest":
+				var bob := sin(real * 2.0) * 0.5 * S
+				var lid := Rect2(c + Vector2(-7, -7) * S + Vector2(0, bob), Vector2(14, 5) * S)
+				tl.draw_rect(lid.grow(S), Art.INK)
+				tl.draw_rect(lid, Color("#93592c"))
+				tl.draw_rect(Rect2(lid.position + Vector2(6 * S, 2 * S), Vector2(2 * S, 3 * S)), Color("#ffd86a"))
+				for k in 2:
+					var gk := fmod(real * 0.6 + k * 0.5, 1.0)
+					tl.draw_rect(Rect2(c + Vector2(-4 + k * 7, -9 - gk * 8) * S, Vector2(S, S)), Color(1, 0.9, 0.5, sin(gk * PI)))
+			else:
+				tl.draw_rect(Rect2(base.position + Vector2(S, S), Vector2(base.size.x - 2 * S, 2 * S)), Color("#1a1016"))
+				var lid2 := Rect2(c + Vector2(-7, -12) * S, Vector2(14, 4) * S)
+				tl.draw_rect(lid2.grow(S), Art.INK)
+				tl.draw_rect(lid2, Color("#5e3a1e"))
+		"stall":
+			# a merchant's rug with a fan of cards on it
+			var rug := r.grow(-2 * S)
+			tl.draw_rect(rug, Color("#5a1e2a"))
+			tl.draw_rect(rug.grow(-S), Color("#8a2e3a"), false, S)
+			tl.draw_rect(rug.grow(-3 * S), Color("#e0b040"), false, S)
+			for k in 3:
+				var ang := (k - 1) * 0.35
+				tl.draw_set_transform(c + Vector2(0, 2 * S), ang)
+				tl.draw_rect(Rect2(Vector2(-3, -9) * S, Vector2(6, 9) * S), Art.INK)
+				tl.draw_rect(Rect2(Vector2(-2, -8) * S, Vector2(4, 7) * S), Color("#2a4a9a") if k != 1 else Color("#e8dcc0"))
+				tl.draw_set_transform(Vector2.ZERO)
+			var coin := 0.5 + 0.5 * sin(real * 3.0)
+			tl.draw_circle(c + Vector2(6, 5) * S, 2 * S, Color("#e0b040"))
+			tl.draw_circle(c + Vector2(6, 5) * S, S, Color(1, 0.95, 0.6, coin))
+		"spring", "spring_dry":
+			var rim := r.grow(-S)
+			tl.draw_rect(rim, Color("#6a6a7a"))
+			tl.draw_rect(rim.grow(-S), Art.INK, false, S)
+			var pool := rim.grow(-2 * S)
+			if kind == "spring":
+				tl.draw_rect(pool, Color("#2f6fd0"))
+				for k in 3:
+					var wk := fmod(real * 0.5 + k / 3.0, 1.0)
+					tl.draw_rect(Rect2(pool.get_center() - Vector2(wk * 6, wk * 3) * S, Vector2(wk * 12, wk * 6) * S), Color(0.75, 0.9, 1.0, 0.6 * (1.0 - wk)), false, S)
+				tl.draw_circle(pool.get_center(), 2 * S, Color(0.8, 0.95, 1.0, 0.5 + 0.3 * sin(real * 2.5)))
+			else:
+				tl.draw_rect(pool, Color("#2a2630"))
 
 func _crystal_glow(tl: Control, ground: Vector2, alpha: float) -> void:
 	var c := ground - Vector2(0, 10 * S)

@@ -3,7 +3,7 @@ extends TestCase
 func run() -> void:
 	var c := Catalog.load_dir("res://data")
 	assert_eq(c.states.size(), 17, "17 cell states")
-	assert_eq(c.materials.size(), 15, "15 materials")
+	assert_eq(c.materials.size(), 22, "22 materials")
 	assert_true(c.reactions.size() >= 9, "reactions loaded")
 	var errs := c.validate()
 	assert_true(errs.is_empty(), "real catalog valid: " + str(errs))

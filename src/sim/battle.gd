@@ -19,6 +19,7 @@ var belt: HandBelt
 var belt_owner: Actor
 var now := 0                 # battle clock in seconds
 var phase := "player"        # player | won | lost
+var stays_open := false      # a room you can walk around in: no foes left does not end it
 var telegraphs: Array = []   # {actor_uid, card_id, aim, cells, fire_at, track, foe_uid}
 var log: Array = []
 var borrow_left := 0          # 불릿타임: borrowed seconds still to spend while the world stays frozen
@@ -650,7 +651,7 @@ func _check_end() -> bool:
 		phase = "lost"
 		return true
 	var foes := actors.filter(func(a): return a.alive() and a.team == 1 and grid.units.has(a))
-	if foes.is_empty():
+	if foes.is_empty() and not stays_open:
 		phase = "won"
 		return true
 	return false

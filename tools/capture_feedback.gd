@@ -18,6 +18,8 @@ func _shot(name: String) -> void:
 
 func _process(_d: float) -> bool:
 	frame += 1
+	if frame == 2:
+		screen.debug_enter("fight")
 	var b = screen.flow.battle
 	match step:
 		0:

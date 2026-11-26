@@ -27,6 +27,8 @@ func _slot_of(b, id: String) -> int:
 
 func _process(_d: float) -> bool:
 	frame += 1
+	if frame == 2:
+		screen.debug_enter("fight")
 	if frame % 20 != 0:
 		return false
 	var flow = screen.flow

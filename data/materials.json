@@ -122,5 +122,55 @@
   "flammable": false,
   "blocks_sight": true,
   "name": "연막"
+ },
+ {
+  "id": "door",
+  "passable": true,
+  "conductivity": 0.0,
+  "flammable": false,
+  "name": "문"
+ },
+ {
+  "id": "door_sealed",
+  "passable": false,
+  "conductivity": 0.0,
+  "flammable": false,
+  "hardness": 99,
+  "name": "봉인된 문"
+ },
+ {
+  "id": "chest",
+  "passable": true,
+  "conductivity": 0.0,
+  "flammable": false,
+  "name": "보물 상자"
+ },
+ {
+  "id": "chest_open",
+  "passable": true,
+  "conductivity": 0.0,
+  "flammable": false,
+  "name": "열린 상자"
+ },
+ {
+  "id": "stall",
+  "passable": true,
+  "conductivity": 0.0,
+  "flammable": false,
+  "name": "상점 깔개"
+ },
+ {
+  "id": "spring",
+  "passable": true,
+  "conductivity": 1.0,
+  "flammable": false,
+  "name": "샘"
+ },
+ {
+  "id": "spring_dry",
+  "passable": true,
+  "conductivity": 0.0,
+  "flammable": false,
+  "name": "마른 샘"
  }
 ]
