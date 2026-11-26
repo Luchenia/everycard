@@ -139,18 +139,19 @@ func _flashes() -> void:
 					if part.get("kind", "") == "electric":
 						col = FLASH["electric"]
 				var from := Vector2i(-1, -1)
-				if c.get("target", {}).get("shape", "") == "line":
+				var is_beam: bool = c.get("parts", []).any(func(pt): return pt.get("op", "") == "beam")
+				if c.get("target", {}).get("shape", "") == "line" and not is_beam:
 					var u := b._actor(int(e["data"].get("user", -1)))
 					if u:
 						from = u.pos
-				board.burst(e["data"].get("cells", []), col, from)
+				board.burst([] if is_beam else e["data"].get("cells", []), col, from)
 				if c.get("parts", []).any(func(pt): return pt.get("op", "") == "damage"):
 					board.attack(int(e["data"].get("user", -1)), e["data"].get("cells", []))
 			"shatter":
-				board.burst(e["data"].get("cells", []), Color("#d8c0ff"))
+				board.shatter(e["data"]["cell"])
 				board.shake(0.12)
-			"deflect":
-				board.burst(e["data"].get("cells", []), Color("#fff4c8"))
+			"beam":
+				board.beam(e["data"].get("from", Vector2i(-1, -1)), e["data"].get("path", []), e["data"].get("bends", []))
 			"telegraph_hit":
 				board.burst(e["data"].get("cells", []), Art.DANGER)
 				board.attack(int(e["data"].get("user", -1)), e["data"].get("cells", []))

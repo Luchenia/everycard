@@ -309,6 +309,7 @@ static func _beam(part: Dictionary, user, aim: Vector2i, ctx: BattleContext) -> 
 	var p: Vector2i = user.pos
 	var reflected := false
 	var deflects := 0
+	var bends: Array = []   # crystal cells where light turned
 	var length := int(part.get("length", 6))
 	var path: Array = []
 	for i in length:
@@ -325,11 +326,14 @@ static func _beam(part: Dictionary, user, aim: Vector2i, ctx: BattleContext) -> 
 		if _crystal_at(g, nxt) and deflects < 3:
 			d = _deflect(ctx, d)
 			deflects += 1
+			path.append(nxt)
+			bends.append(nxt)
 			_log(ctx, "deflect", "빛이 결정에 꺾임", {"cell": nxt, "cells": [nxt]})
 			continue
 		if not g.passable(nxt):
 			if g.mat_def(nxt).get("reflective", false):
 				d = -d
+				path.append(nxt)
 				reflected = true
 				continue
 			break
@@ -347,7 +351,7 @@ static func _beam(part: Dictionary, user, aim: Vector2i, ctx: BattleContext) -> 
 		if g.mat_def(p).get("reflective", false):
 			d = -d
 			reflected = true
-	_log(ctx, "beam", "광선", {"path": path})
+	_log(ctx, "beam", "광선", {"path": path, "from": user.pos, "bends": bends})
 
 ## Call after every environment step. Sustained effects re-apply each call; their remaining
 ## turns (and delays) only count down when count_down is true (once per round in Battle).

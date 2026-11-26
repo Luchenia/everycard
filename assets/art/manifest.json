@@ -280,6 +280,26 @@
   },
   "_fills": {
    "what": "[젖음] water, [빙결] ice, [기름] oil, [늪] swamp are NOT tiles: draw one organic puddle per connected group of cells, edges shrink 1.5-4.7px inward with noise (never spill into other cells), wet-stone ring, animated ripple. Reference implementation: reference/puddle.py (mask) + reference/states.py (colours per state, 48-frame loop). Port to a shader or bake per group at runtime."
+  },
+  "crystal_shatter.png": {
+   "what": "one-shot: a crystal (or a [결정화] unit) is broken by a projectile or physical hit. Cracks and shakes (0-5), white flash (6), bursts, shards fly into all 8 neighbour cells pointing outward, neighbour cells flash white then red (12-14) = the damage area, fade, empty tail. Remove the crystal sprite on frame 6.",
+   "frame": [
+    48,
+    48
+   ],
+   "count": 24,
+   "fps": 24,
+   "loop": false,
+   "anchor": [
+    24,
+    24
+   ],
+   "anchor_means": "centre of the crystal cell",
+   "layer": "above units (shards fly over neighbours)",
+   "also": "apply damage + unit hit flash to neighbours on frame 12"
+  },
+  "crystal_deflect": {
+   "what": "code effect, no sheet: light/magic beam drawn as 3px glow line (255,230,120,~45%) with 1px core (255,255,230), travels ~9px/frame (216px/s), bends at the GEM (cell centre y-7, not the floor) to a random angle; gem flashes white-yellow and a small ring expands at the bend. See reference/deflect.py, demo dungeon-floor/37_crystal_deflect.gif"
   }
  },
  "units": {

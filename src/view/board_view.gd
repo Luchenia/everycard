@@ -39,6 +39,7 @@ var shake_until := 0.0
 var fizzle: Dictionary = {}      # {cell, t0}: an out-of-range click
 var bursts: Array = []           # {cells, col, t0, beam_from}: a card or a blow landing
 var lunges: Dictionary = {}      # uid -> {t0, dir}: attacker leaning into its blow
+var beams: Array = []            # {from, path, bends, t0}
 var oneshots: Array = []         # {fx, ground (local), t0, flip}: slash / hit bursts
 var cell_events: Dictionary = {} # cell -> {kind, t0}: fire lighting up / going out, ice breaking
 var _prev_mat: Dictionary = {}
@@ -92,6 +93,16 @@ func cell_rect(p: Vector2i, inset := 0.0) -> Rect2:
 func feet(cp: Vector2) -> Vector2:
 	return origin + (cp + Vector2(0.5, 0.0)) * C + Vector2(0, 12 * S)
 
+## A crystal (cell or crystallized unit) breaking: the one-shot sheet, centred on the cell, above units.
+func shatter(p: Vector2i) -> void:
+	var st := Art.fx("crystal_shatter")
+	var life: float = (st["n"] / st["fps"]) if not st.is_empty() else 0.8
+	oneshots.append({"fx": "crystal_shatter", "ground": cell_rect(p).get_center(), "t0": real, "flip": false, "life": life})
+
+## A beam's real path (bounces off mirrors, turns at crystal gems): glow plus core, fading out.
+func beam(from: Vector2i, path: Array, bends: Array) -> void:
+	beams.append({"from": from, "path": path, "bends": bends, "t0": real})
+
 func shake(secs := 0.25) -> void:
 	shake_until = real + secs
 
@@ -126,7 +137,7 @@ func _track_cells() -> void:
 				cell_events[p] = {"kind": "fire_ignite", "t0": real}
 			elif was == "fire":
 				cell_events[p] = {"kind": "fire_out", "t0": real}
-			elif was == "ice" or was == "crystal":
+			elif was == "ice":
 				cell_events[p] = {"kind": "ice_shatter", "t0": real}
 		_prev_mat[p] = m
 
@@ -321,7 +332,7 @@ func _draw_top() -> void:
 		else:
 			_unit(tl, it["unit"], off)
 	# one-shot effects: slashes, hit bursts, fire going out, ice breaking
-	oneshots = oneshots.filter(func(q): return real - float(q["t0"]) < 0.8)
+	oneshots = oneshots.filter(func(q): return real - float(q["t0"]) < float(q.get("life", 0.8)))
 	for q in oneshots:
 		var k: float = real - float(q["t0"])
 		if k < 0.0:
@@ -339,6 +350,23 @@ func _draw_top() -> void:
 			var st2 := Art.fx(ev["kind"])
 			if not st2.is_empty() and k2 * st2["fps"] < st2["n"]:
 				_sprite(tl, st2, feet(Vector2(p)) + off, Art.frame_at(st2, k2))
+	# beams: 3 px glow with a 1 px core; light turns at the gem itself (7 art px above the cell centre)
+	beams = beams.filter(func(q): return real - q["t0"] < 0.5)
+	for q in beams:
+		var k3: float = (real - float(q["t0"])) / 0.5
+		var pts := PackedVector2Array([cell_rect(q["from"]).get_center() + off])
+		for c3 in q["path"]:
+			var pt := cell_rect(c3).get_center() + off
+			if c3 in q["bends"]:
+				pt.y -= 7 * S
+			pts.append(pt)
+		if pts.size() >= 2:
+			tl.draw_polyline(pts, Color(1.0, 0.95, 0.7, 0.45 * (1.0 - k3)), 3 * S)
+			tl.draw_polyline(pts, Color(1, 1, 1, 1.0 - k3), S)
+		for b3 in q["bends"]:
+			var gp := cell_rect(b3).get_center() + off - Vector2(0, 7 * S)
+			tl.draw_circle(gp, (3 - 2 * k3) * S, Color(1, 1, 1, 1.0 - k3))
+			tl.draw_arc(gp, (2 + 9 * k3) * S, 0, TAU, 20, Color(0.85, 0.75, 1.0, 1.0 - k3), S)
 	# cards and blows landing: a bright flash on the struck cells
 	bursts = bursts.filter(func(q): return real - q["t0"] < 0.45)
 	for q in bursts:
