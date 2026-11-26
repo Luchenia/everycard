@@ -9,9 +9,10 @@ signal picked(card_view)
 signal hovered(card_view, on)
 
 const SIZE := Vector2(88, 137)      # art px
-const ART_WIN := Rect2(12, 12, 64, 65)
-const NAME_PLATE := Rect2(10, 84, 69, 11)
-const TEXT_BOX := Rect2(8, 102, 71, 27)
+const ART_WIN := Rect2(12, 31, 64, 46)
+const NAME_PLATE := Rect2(22, 14, 56, 11)
+const TEXT_BOX := Rect2(8, 88, 71, 41)
+const MAX_LINES := 5
 const BADGE := Vector2(11, 11)
 const FXMAP := {"strike": "slash", "spark": "fire", "crystallize": "crystal", "rain": "water_splash", "mirror": "mirror",
 	"frost": "ice_glint", "slow_field": "swamp_bubbles", "gust": "gust_right", "shock": "shock", "hurry": "haste", "haste_field": "haste"}
@@ -21,6 +22,7 @@ var catalog: Catalog
 var font: Font
 var desc: RichTextLabel
 var chips: Array = []
+var lines := 1
 var real := 0.0
 var zoom := 1
 var lit := false     # selected
@@ -40,9 +42,9 @@ func setup(id: String, cat: Catalog, f: Font, z := 1) -> void:
 	desc.add_theme_font_override("normal_font", Art.font("Galmuri7"))
 	desc.add_theme_color_override("default_color", Color("#34281E"))
 	desc.add_theme_constant_override("line_separation", 0)
-	var split := CardView.split_chips(def().get("desc", ""))
-	chips = split[1]
-	desc.text = "[center]%s[/center]" % CardView.rich(CardView.wrap_words(split[0], Art.font("Galmuri7"), 8, TEXT_BOX.size.x - 4))
+	var wrapped := CardView.wrap_words(def().get("desc", ""), Art.font("Galmuri7"), 8, TEXT_BOX.size.x - 2)
+	lines = wrapped.count("\n") + 1
+	desc.text = "[center]%s[/center]" % CardView.rich(wrapped, "#964614")
 	add_child(desc)
 	set_zoom(z)
 	mouse_entered.connect(func(): hovered.emit(self, true))
@@ -52,9 +54,11 @@ func set_zoom(z: int) -> void:
 	zoom = z
 	size = SIZE * z
 	pivot_offset = Vector2(size.x / 2, size.y)
-	desc.position = (TEXT_BOX.position + Vector2(2, 0)) * z
-	desc.size = (TEXT_BOX.size - Vector2(4, -2)) * z
+	# the block is centred vertically in the text box (8 px per line)
+	desc.position = (TEXT_BOX.position + Vector2(0, 1 + (MAX_LINES - mini(lines, MAX_LINES)) * 4)) * z
+	desc.size = Vector2(TEXT_BOX.size.x, TEXT_BOX.size.y + 4) * z
 	desc.add_theme_font_size_override("normal_font_size", 8 * z)
+	desc.add_theme_constant_override("line_separation", -z)
 
 func def() -> Dictionary:
 	return Effects.card_def(card_id, catalog)
@@ -88,7 +92,7 @@ static func wrap_words(text: String, f: Font, px: int, width: float) -> String:
 		lines.append(cur)
 	return "\n".join(lines)
 
-static func rich(text: String) -> String:
+static func rich(text: String, col := "#9a3d12") -> String:
 	var out := ""
 	var i := 0
 	while i < text.length():
@@ -100,7 +104,7 @@ static func rich(text: String) -> String:
 		if b < 0:
 			out += text.substr(i)
 			break
-		out += text.substr(i, a - i) + "[color=#9a3d12]" + text.substr(a + 1, b - a - 1) + "[/color]"
+		out += text.substr(i, a - i) + "[color=" + col + "]" + text.substr(a + 1, b - a - 1) + "[/color]"
 		i = b + 1
 	return out
 
@@ -196,7 +200,7 @@ func _picture(aw: Rect2) -> void:
 			return
 	var zz := zoom / 2.0
 	draw_set_transform(aw.get_center(), 0.0, Vector2(zz, zz))
-	_art(Rect2(-64, -65, 128, 130))
+	_art(Rect2(-64, -46, 128, 92))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 ## Card picture. Uses the matching effect sprite where there is one; otherwise a simple emblem.

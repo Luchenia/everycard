@@ -377,23 +377,23 @@
     137
    ],
    "boxes": {
+    "name_plate": [
+     22,
+     14,
+     56,
+     11
+    ],
     "art_window": [
      12,
-     12,
+     31,
      64,
-     65
-    ],
-    "name_plate": [
-     10,
-     84,
-     69,
-     11
+     46
     ],
     "text_box": [
      8,
-     102,
+     88,
      71,
-     27
+     41
     ],
     "time_badge_centre": [
      11,
@@ -402,11 +402,11 @@
     "time_badge_radius": 9
    },
    "text": {
-    "name": "fonts/Galmuri9.ttf size 10, colour #F0ECE0, centred",
-    "description": "fonts/Galmuri7.ttf size 8, line height 8, max 3 lines, colour #34281E, centred (reference/cardtext2.py)",
+    "name": "fonts/Galmuri9.ttf size 10, #F0ECE0, centred in name_plate (the badge covers the plate left end, so the plate box starts at x 22)",
+    "description": "fonts/Galmuri7.ttf size 8, line height 8, up to 5 lines, ink #34281E, [keywords] drawn without brackets in #964614, block centred vertically (reference/cardtext3.py)",
     "time": "fonts/Galmuri11-Bold.ttf size 12, #FFF0C8 with 1px dark outline, centred on badge"
    },
-   "check": "2026-11-26 Luchenia: art window felt the same size as the text box, so the card is now wider and the art window taller (64x65 vs text 71x27). 18 of 21 texts fit in 3 lines; 낙뢰, 광명 있으라, 중력장 need 4: move trailing keywords ([감전] [반사] [탈진]) into small chips, or shorten 중력장 to e.g. \"3×3 범위의 상대를 중앙으로 끌어당깁니다.\" Show the hovered card enlarged."
+   "check": "2026-11-26 v3 (Luchenia: title moved above the art so descriptions can be long like other deckbuilders). All 21 current texts fit (max 4 lines); a 5-line text of about 45 Hangul characters also fits."
   },
   "window_frame.png": {
    "what": "stone window frame, empty centre, 9-slice",
