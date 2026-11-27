@@ -1225,16 +1225,21 @@ func _step_held(delta: float) -> void:
 		# while the button is held the card keeps the mouse, so the board hears nothing: aim for it
 		board.hover = hc
 		board.preview = flow.battle.preview(selected, hc) if hc.x >= 0 else {}
-	var sc := 0.85 if over_board else 1.35
-	var goal := m - held_cv.size / 2 - Vector2(0, 10 if over_board else 40)
+	# lifted only a little above the hand and leaning toward the mouse: it never covers the board
+	var sc := 1.15
+	var rest := src.position + src.size * src.scale / 2   # where the card sits in the hand (centre)
+	var gx := clampf(lerpf(rest.x, m.x, 0.45), held_cv.size.x * sc / 2 + 8, 1280 - held_cv.size.x * sc / 2 - 8)
+	var gy := maxf(rest.y - 46, m.y + held_cv.size.y * sc * 0.5) if not over_board else rest.y - 46
+	var goal := Vector2(gx, minf(gy, rest.y - 30)) - held_cv.size / 2
 	var k := 1.0 - exp(-delta * 18.0)
 	held_cv.position = held_cv.position.lerp(goal, k)
 	held_cv.scale = held_cv.scale.lerp(Vector2(sc, sc), 1.0 - exp(-delta * 12.0))
 	var v := (m - held_prev) / maxf(delta, 0.001)
 	held_prev = m
 	held_vel = held_vel.lerp(v, 1.0 - exp(-delta * 10.0))
-	held_cv.rotation = lerpf(held_cv.rotation, clampf(held_vel.x * 0.0007, -0.35, 0.35), 1.0 - exp(-delta * 14.0))
-	held_cv.modulate.a = 0.8 if over_board else 1.0
+	var lean := clampf((m.x - gx) * 0.0012, -0.3, 0.3) + clampf(held_vel.x * 0.0004, -0.15, 0.15)
+	held_cv.rotation = lerpf(held_cv.rotation, lean, 1.0 - exp(-delta * 14.0))
+	held_cv.modulate.a = 1.0
 
 func _input(ev: InputEvent) -> void:
 	# a hand card pressed, dragged onto the board and let go: played on that cell
