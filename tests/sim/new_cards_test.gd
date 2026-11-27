@@ -24,6 +24,7 @@ func run() -> void:
 	test_borrowed_time_freezes_world_then_exhausts()
 	test_wait_ends_borrow_early()
 	test_bullet_time_slows_the_world()
+	test_haste_field_shortens_actions()
 	test_crystal_roots_and_shatters()
 	test_oil_on_fire_flares()
 
@@ -119,6 +120,26 @@ func test_bullet_time_slows_the_world() -> void:
 	t0 = b.tick
 	b.cmd_wait(1)
 	assert_eq(b.tick - t0, Battle.TPS, "back to full speed")
+
+## [가속] (x1.5): a 1-second action in the field takes 0.7 s, and the card shows it.
+func test_haste_field_shortens_actions() -> void:
+	var b := _battle("strike", "slow_hitter")
+	var h := b.human()
+	for p in [h.pos, h.pos + Vector2i.UP, h.pos + Vector2i.DOWN]:
+		b.grid.add_state(p, "haste", 99.0)
+	assert_eq(b.cost_secs(1), 0.7, "1-second card shows 0.7 s in the field")
+	var t0 := b.tick
+	assert_true(b.cmd_move(Vector2i.UP), "step in the field")
+	assert_eq(b.tick - t0, 7, "the step took 0.7 s")
+	var foe: Actor = b.actors[1]
+	b.grid.add_state(foe.pos, "haste", 99.0)
+	for i in 4:
+		if not b.telegraphs.is_empty():
+			break
+		b.cmd_wait(1)
+	assert_eq(int(b.telegraphs[0]["fire_at"]) - int(b.telegraphs[0]["set_at"]), 27, "a 4-second wind-up in the field takes 2.7 s")
+	b._on_meta({"op": "slow", "factor": 3, "secs": 4}, h)
+	assert_eq(b.cost_secs(1), 0.2, "and a third of that in bullet time")
 
 func test_crystal_roots_and_shatters() -> void:
 	var lay := {"player_pos": [1, 3], "enemy_pos": [[3, 3]], "materials": []}

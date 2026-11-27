@@ -622,7 +622,7 @@ func _layout_hand() -> void:
 		var sc := 0.6 + 0.4 * (depth + 1.0) / 2.0
 		var w := maxf(0.06, absf(depth))
 		cv.lit = in_hand and int(cv.get_meta("slot")) == selected
-		cv.time_rate = flow.battle.world_rate() if flow.battle != null else 1.0
+		cv.shown_time = flow.battle.cost_secs(int(cv.def().get("time", 0))) if flow.battle != null else -1.0
 		var big := in_hand and cv == hovered_card and not aiming
 		var z := 2 if big else 1
 		if cv.zoom != z:
@@ -725,6 +725,7 @@ func _update_span() -> void:
 	board.self_aim = false
 	board.forecast = 0
 	timeline.span_secs = 0
+	timeline.span_world = -1.0
 	timeline.span_exhaust = 0
 	if selected < 0 or b.belt == null or selected >= b.belt.slots.size() or b.belt.slots[selected] == null or b.human() == null:
 		return
@@ -740,6 +741,7 @@ func _update_span() -> void:
 	if secs > 0:
 		secs = maxi(0, secs - b.human().discount)
 	timeline.span_secs = secs
+	timeline.span_world = maxf(0.0, b.cost_secs(int(c.get("time", 0))) - (b.human().discount if int(c.get("time", 0)) > 0 else 0))
 	timeline.span_exhaust = int(c.get("exhaust", 0))
 	board.forecast = secs
 

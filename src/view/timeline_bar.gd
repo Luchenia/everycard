@@ -9,6 +9,7 @@ var battle: Battle
 var font: Font
 var span_secs := 0
 var span_exhaust := 0
+var span_world := -1.0   # world seconds the picked action takes ([가속] cell, 불릿타임); -1: span_secs
 var real := 0.0
 
 func _process(d: float) -> void:
@@ -41,9 +42,10 @@ func _draw() -> void:
 			draw_rect(Rect2(x0 + i * w + 2, y + 8, w - 4, 3), Color(0.6, 0.6, 0.7, 0.6))
 	elif span_secs > 0 or span_exhaust > 0:
 		var wr := battle.world_rate()   # 불릿타임: the player's seconds cover a third of the world's
-		draw_rect(Rect2(x0, y - 5, minf(span_secs * wr, SECS) * w, 10), Color(Art.GOLD, 0.8))
+		var sw := span_world if span_world >= 0.0 else span_secs * wr
+		draw_rect(Rect2(x0, y - 5, minf(sw, SECS) * w, 10), Color(Art.GOLD, 0.8))
 		for i in mini(span_exhaust, SECS - span_secs):
-			var r := Rect2(x0 + (span_secs + i) * wr * w, y - 5, w * wr, 10)
+			var r := Rect2(x0 + (sw + i * wr) * w, y - 5, w * wr, 10)
 			draw_rect(r, Color(0.5, 0.5, 0.58, 0.6))
 			draw_line(r.position + Vector2(2, 10), r.position + Vector2(10, 0), Color(0.2, 0.2, 0.25, 0.8), 2)
 	for i in SECS + 1:

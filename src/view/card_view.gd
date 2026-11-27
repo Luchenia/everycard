@@ -27,10 +27,10 @@ var lines := 1
 var real := 0.0
 var zoom := 1
 var lit := false     # selected
-var time_rate := 1.0:   # world seconds per card second (불릿타임 shows a third)
+var shown_time := -1.0:   # what the card really costs right now in world seconds ([가속] cell, 불릿타임); -1: as printed
 	set(v):
-		if v != time_rate:
-			time_rate = v
+		if not is_equal_approx(v, shown_time):
+			shown_time = v
 			queue_redraw()
 var ghost := false
 
@@ -176,7 +176,7 @@ func _draw() -> void:
 	draw_string(nf, Vector2(np.x, round(base)), nm, HORIZONTAL_ALIGNMENT_CENTER, NAME_PLATE.size.x * z, nfs, Color("#F0ECE0"))
 	# seconds
 	var bf := Art.font("Galmuri11-Bold")
-	var st := "%d" % int(c.get("time", 0)) if time_rate == 1.0 else Battle.fmt_secs(float(c.get("time", 0)) * time_rate)
+	var st := "%d" % int(c.get("time", 0)) if shown_time < 0.0 or is_equal_approx(shown_time, float(c.get("time", 0))) else Battle.fmt_secs(shown_time)
 	var bc := BADGE * z
 	var bp := Vector2(bc.x - 9 * z, bc.y + 4.5 * z)
 	var fs := int(12 * z) if st.length() < 3 else int(8 * z)   # "0.3" (불릿타임) in a smaller hand to fit the gem
