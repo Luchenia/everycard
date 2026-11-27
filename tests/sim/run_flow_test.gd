@@ -33,6 +33,10 @@ func run() -> void:
 	win(f)
 	f.choose_reward(-1)
 	assert_eq(f.battle.human().hp, 20, "hp carries over")
+	assert_eq(f.battle.frames.size(), 1, "the new fight's replay starts from its first moment")
+	assert_eq(int(f.battle.frames[0]["hp"][f.battle.human().uid]), 20, "...with the carried hp, not a full bar")
+	f.battle.cmd_wait(1)
+	assert_true(not f.battle.log.any(func(e): return e["t"] == "unknown"), "carried hp is not logged as an unknown hit")
 	assert_eq(f.deck.size(), n + 1, "a reward can be skipped")
 	# loss
 	var l := RunFlow.new(c, 12)

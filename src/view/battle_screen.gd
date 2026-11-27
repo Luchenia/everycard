@@ -464,10 +464,17 @@ var press_px := Vector2(-1, -1)   # where the mouse went down on a hand card (dr
 var hand_n := 5.0                # eases to the number of cards in the hand
 var snap_index := -1             # old ring place of a card that just flew off to be played
 
+var _ring_for: HandBelt
+
 ## Matches the new ring to the cards already shown, so each card glides from where it was.
 func _sync_ring() -> void:
 	var ids: Array = flow.battle.belt.ring()
 	var n := ids.size()
+	if _ring_for != flow.battle.belt:
+		# a new fight or a new run: the ring starts afresh instead of gliding from the last one's
+		_ring_for = flow.battle.belt
+		ring_tokens = []
+		snap_index = -1
 	var old := ring_tokens
 	var on := maxi(1, old.size())
 	var match_of := {}   # new index -> old token index
@@ -1037,7 +1044,7 @@ func _on_board_input(ev: InputEvent) -> void:
 			if dragging and drag_manual and c.x >= 0:
 				_drag_to(c)
 		if dragging and not drag_manual:
-			var dx: float = ev.position.x - drag_px.x
+			var dx: float = _drag_along(ev.position)
 			board.walk_mode = "go" if dx > DRAG_GO else ("cancel" if dx < -DRAG_GO else "hold")
 	elif ev is InputEventMouseButton and not ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT and dragging:
 		_end_drag(board.cell_at(ev.position), ev.position)
@@ -1091,8 +1098,17 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_IN or what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
 		focus_at = real
 
-## Walking, like a ping: press on the destination, drag right and release to go; drag left or
-## right-click to cancel. The destination is the cell first pressed. Pressing on the hero instead
+## How far the mouse has been dragged the way the hero would walk (towards the pressed cell from
+## the hero): forward confirms the walk, backward cancels it, whichever side the cell is on.
+func _drag_along(at: Vector2) -> float:
+	var h := flow.battle.human()
+	var way := Vector2(drag_from - h.pos) if h != null else Vector2.RIGHT
+	if way.length() < 0.01:
+		way = Vector2.RIGHT
+	return (at - drag_px).dot(way.normalized())
+
+## Walking, like a ping: press on the destination, drag the way you are going and release to go;
+## drag back or right-click to cancel. The destination is the cell first pressed. Pressing on the hero instead
 ## draws the route by hand, cell by cell (it may cross itself). A plain click steps to a neighbour.
 func _drag_to(c: Vector2i) -> void:
 	var b := flow.battle
@@ -1123,7 +1139,7 @@ func _end_drag(cell: Vector2i, at: Vector2) -> void:
 	board.walk_path = []
 	if h == null:
 		return
-	var dx := at.x - drag_px.x
+	var dx := _drag_along(at)
 	if not drag_manual:
 		if dx < -DRAG_GO:
 			path = []   # dragged left: cancelled

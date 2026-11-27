@@ -99,6 +99,14 @@ func human() -> Actor:
 			return a
 	return null
 
+## The run has set this fight's body (hp carried over, its deck): start the records from here,
+## so the replay and the damage log do not see the carried-over hp as a hit.
+func restart_records() -> void:
+	frames.clear()
+	_audit_hp.clear()
+	_audit_log_i = log.size()
+	_frame()
+
 func _rebuild_belt() -> void:
 	belt_owner = human()
 	if belt_owner != null:

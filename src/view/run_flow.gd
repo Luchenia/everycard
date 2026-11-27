@@ -111,6 +111,7 @@ func start_battle(i: int) -> void:
 	if hp > 0:
 		me.hp = mini(hp, me.max_hp)
 	battle._rebuild_belt()
+	battle.restart_records()
 	exit_dir = Vector2i.ZERO
 	_last_pos = player
 	from_chest = false

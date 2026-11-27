@@ -425,6 +425,32 @@ func _track_hits() -> void:
 func reset_tracking() -> void:
 	_last_hp.clear()
 	popups.clear()
+	if _tracked_battle != battle:
+		# a new fight (next battle or a new run): nothing of the last one's motions carries over
+		_tracked_battle = battle
+		acts.clear()
+		casts.clear()
+		lunges.clear()
+		trails.clear()
+		_last_look.clear()
+		_xfade.clear()
+		flashes.clear()
+		flash_rt.clear()
+		shown_pos.clear()
+		shown_hp.clear()
+		moving.clear()
+		walk_link.clear()
+		bursts.clear()
+		beams.clear()
+		oneshots.clear()
+		cell_events.clear()
+		_prev_mat.clear()
+		fizzle = {}
+		walk_path = []
+		replaying = false
+		hitstop_until = 0.0
+
+var _tracked_battle: Battle
 
 # ---- top layer ----------------------------------------------------------------------------------
 
