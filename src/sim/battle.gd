@@ -569,8 +569,16 @@ func _ai_act(a: Actor) -> void:
 	var aim: Vector2i = choice["aim"]
 	var foe: Actor = choice["foe"]
 	var shape: String = tgt.get("shape", "cell")
+	if hazard(a.pos) and not a.rooted():
+		# standing in fire or a curse: get out before anything else
+		var out := ai_step_cell(a, aim, int(tgt.get("range", 1)))
+		if out != a.pos and not hazard(out):
+			a.facing = out - a.pos
+			grid.move_unit(a, out)
+			a.next_at = now + maxi(1, action_secs(int(cfg["move_time"]), a))
+			return
 	if shape != "self" and shape != "all" and shape != "around" and dist(a.pos, aim) > int(tgt.get("range", 1)):
-		_ai_step_toward(a, aim)
+		_ai_step_toward(a, aim, int(tgt.get("range", 1)))
 		a.next_at = now + maxi(1, action_secs(int(cfg["move_time"]), a))
 		return
 	a.pattern_index += 1
@@ -588,23 +596,74 @@ func _ai_act(a: Actor) -> void:
 		Effects.apply(card, a, aim, ctx)
 		a.next_at = now + secs
 
-func _ai_step_toward(a: Actor, target: Vector2i) -> void:
-	var best := ai_step_cell(a, target)
+func _ai_step_toward(a: Actor, target: Vector2i, reach := 1) -> void:
+	var best := ai_step_cell(a, target, reach)
 	if best != a.pos:
 		a.facing = best - a.pos
 		grid.move_unit(a, best)
 
+## Cells an enemy will not walk into when there is another way: burning ground, curses, live wires.
+func hazard(p: Vector2i) -> bool:
+	var m := grid.get_material(p)
+	if m == "fire":
+		return true
+	for id in ["blaze", "curse", "miasma", "charged", "collapse"]:
+		if grid.has_state(p, id):
+			return true
+	return false
+
 ## The cell an enemy steps to when its target is out of reach (its own cell if it cannot move).
-func ai_step_cell(a: Actor, target: Vector2i) -> Vector2i:
+## A real path search: it goes around bodies and walls instead of stalling behind them, and
+## around hazards unless the detour is very long. An enemy standing in a hazard steps out first.
+func ai_step_cell(a: Actor, target: Vector2i, reach := 1) -> Vector2i:
 	if a.rooted():
 		return a.pos
+	var free := func(p: Vector2i) -> bool:
+		return grid.passable(p) and not grid.mat_def(p).get("lethal", false) and (grid.unit_at(p) == null or grid.unit_at(p) == a)
+	# cheapest path (hazards cost extra) to any cell within reach of the target
+	var cost := {a.pos: 0}
+	var first := {a.pos: a.pos}
+	var open: Array = [a.pos]
 	var best := a.pos
+	var best_cost := 1 << 30
 	var best_d := dist(a.pos, target)
+	while not open.is_empty():
+		var bi := 0
+		for i in open.size():
+			if cost[open[i]] < cost[open[bi]]:
+				bi = i
+		var c: Vector2i = open[bi]
+		open.remove_at(bi)
+		if cost[c] > 24:
+			break
+		var d := dist(c, target)
+		if d <= reach and c != a.pos and cost[c] < best_cost:
+			best_cost = cost[c]
+			best = c
+		for n in grid.neighbors4(c):
+			if not free.call(n):
+				continue
+			var nc: int = cost[c] + (8 if hazard(n) else 1)
+			if not cost.has(n) or nc < cost[n]:
+				cost[n] = nc
+				first[n] = n if c == a.pos else first[c]
+				open.append(n)
+	if best != a.pos:
+		var step: Vector2i = first[best]
+		# a detour through fire is not worth it if waiting a moment is free
+		if not (hazard(step) and not hazard(a.pos)):
+			return step
+	# no way in reach: at least get closer without stepping into harm
+	var fallback := a.pos
 	for n in grid.neighbors4(a.pos):
-		if grid.passable(n) and grid.unit_at(n) == null and not grid.mat_def(n).get("lethal", false) and dist(n, target) < best_d:
-			best = n
+		if free.call(n) and not hazard(n) and dist(n, target) < best_d:
+			fallback = n
 			best_d = dist(n, target)
-	return best
+	if fallback == a.pos and hazard(a.pos):
+		for n in grid.neighbors4(a.pos):
+			if free.call(n) and not hazard(n):
+				return n
+	return fallback
 
 ## What an idle enemy will do next, for the view: {kind: "move", to, at} or {kind: "attack", at}.
 func ai_intent(a: Actor) -> Dictionary:
@@ -616,11 +675,24 @@ func ai_intent(a: Actor) -> Dictionary:
 	var card := Effects.card_def(choice["card_id"], catalog)
 	var tgt: Dictionary = card.get("target", {})
 	var shape: String = tgt.get("shape", "cell")
+	var at := maxi(a.next_at, now + 1)
+	if hazard(a.pos) and not a.rooted():
+		var out := ai_step_cell(a, choice["aim"], int(tgt.get("range", 1)))
+		if out != a.pos and not hazard(out):
+			return {"kind": "move", "to": out, "at": at}
 	if shape != "self" and shape != "all" and shape != "around" and dist(a.pos, choice["aim"]) > int(tgt.get("range", 1)):
-		var to := ai_step_cell(a, choice["aim"])
+		var to := ai_step_cell(a, choice["aim"], int(tgt.get("range", 1)))
 		if to != a.pos:
-			return {"kind": "move", "to": to, "at": maxi(a.next_at, now + 1)}
-	return {}
+			return {"kind": "move", "to": to, "at": at}
+		return {}
+	# in reach: the blow it will start at `at`, where it would land if nobody moves
+	var has_damage: bool = card.get("parts", []).any(func(p): return p.get("op", "") == "damage")
+	if not has_damage:
+		return {}
+	var cells: Array = Targeting.cells(shape, a.pos, choice["aim"], int(tgt.get("size", 0))) if int(card.get("safe", 0)) == 0 else []
+	var secs := maxi(1, action_secs(int(card.get("time", 1)), a)) if card.get("telegraph", false) else 0
+	return {"kind": "attack", "at": at, "fire_at": at + secs, "cells": cells, "card_id": choice["card_id"],
+		"actor_uid": a.uid, "aim": choice["aim"], "pending": true}
 
 func _actor(uid: int) -> Actor:
 	for a in actors:

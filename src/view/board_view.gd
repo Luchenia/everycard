@@ -469,6 +469,12 @@ func _draw_top() -> void:
 	# enemy warnings: always above effects and units
 	for t in battle.telegraphs:
 		_telegraph(tl, t, off)
+	if not replaying:
+		# blows not started yet: an enemy in reach shows where and when its next one would land
+		for a in battle.actors:
+			var it := battle.ai_intent(a)
+			if it.get("kind", "") == "attack" and not it["cells"].is_empty():
+				_telegraph(tl, it, off)
 	for tm in battle.ctx.timers:
 		_bomb(tl, tm, off)
 	# hp bars and states, never hidden behind sprites
@@ -973,6 +979,10 @@ func _telegraph(tl: Control, t: Dictionary, off: Vector2) -> void:
 	var pulse := 0.5 + 0.5 * sin(real * (9.0 if hot else 4.0))
 	var col := Art.DANGER if hot else Color("#ff8a3a")
 	var cells: Array = t["cells"]
+	var pending: bool = t.get("pending", false)
+	if pending and not hot:
+		col = Color("#d9a35a")
+		pulse = 0.2
 	var soon := not replaying and left <= _ahead() and _ahead() > 0
 	if soon:
 		# lands during the action being planned: bolder, and a mark if it catches the hero there
@@ -988,8 +998,9 @@ func _telegraph(tl: Control, t: Dictionary, off: Vector2) -> void:
 		box = cell_rect(p) if box.size == Vector2.ZERO else box.merge(cell_rect(p))
 		var r := cell_rect(p, S)
 		r.position += off
-		tl.draw_rect(r, Color(col, 0.16 + 0.12 * pulse))
-		_corners(tl, r, Color(col, 0.75 + 0.25 * pulse), 4 * S)
+		var fa := 0.5 if pending else 1.0
+		tl.draw_rect(r, Color(col, (0.16 + 0.12 * pulse) * fa))
+		_corners(tl, r, Color(col, (0.75 + 0.25 * pulse) * fa), (3 if pending else 4) * S)
 		centre += r.get_center()
 	if cells.is_empty():
 		return
