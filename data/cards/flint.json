@@ -7,7 +7,8 @@
  "target": {
   "shape": "cell",
   "range": 1,
-  "size": 0
+  "size": 0,
+  "reach": "square"
  },
  "parts": [
   {

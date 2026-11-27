@@ -9,7 +9,8 @@
  "target": {
   "shape": "line",
   "range": 4,
-  "size": 0
+  "size": 0,
+  "reach": "line"
  },
  "parts": [
   {

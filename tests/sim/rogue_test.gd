@@ -13,6 +13,7 @@ func _lay(p: Array, foes: Array) -> Dictionary:
 
 func run() -> void:
 	c = Catalog.load_dir("res://data")
+	test_diagonal_throw()
 	c.config = {"round_time": 10, "grid_w": 9, "grid_h": 7, "env_every": 2, "move_time": 1, "wheel_time": 1, "draws_per_round": 2}
 	c.actors["idle"] = {"id": "idle", "hp": 30, "mass": 1, "deck": [], "pattern": []}
 	c.cards["slow_hit"] = {"id": "slow_hit", "time": 3, "weight": 1, "telegraph": true, "target": {"shape": "cell", "range": 9}, "parts": [{"op": "damage", "amount": 7, "kind": "true"}]}
@@ -161,3 +162,13 @@ func test_once_card_leaves_deck() -> void:
 	var me := b.human()
 	assert_true(not b.belt.ring().has("body_swap") or n0 > 1, "gone from the ring")
 	assert_eq(h.deck.count("body_swap"), n0 - 1, "gone from the deck")
+
+func test_diagonal_throw() -> void:
+	var cc := Catalog.load_dir("res://data")
+	var b := Battle.new(cc, 1, "walker", ["slime"], {"player_pos": [2, 2], "enemy_pos": [[5, 5]], "materials": []})
+	var foe: Actor = b.actors[1]
+	var hp := foe.hp
+	var card := Effects.card_def("throw_dagger", cc)
+	assert_true(Battle.in_reach(card, Vector2i(2, 2), Vector2i(5, 5)), "the dagger reaches along the diagonal")
+	Effects.apply(card, b.human(), Vector2i(5, 5), b.ctx)
+	assert_true(foe.hp < hp, "and flies diagonally into the slime")

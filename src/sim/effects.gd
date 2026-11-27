@@ -226,11 +226,10 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 			else:
 				_log(ctx, "no_target", "이동할 수 없는 칸")
 		"beam":
-			var d0 := Targeting.dir_to(user.pos, aim)
+			var d0 := Targeting.dir8_to(user.pos, aim)
 			if int(part.get("spread", 1)) >= 3:
-				# 단검 세례: straight ahead and the two diagonals beside it
-				var side := Vector2i(d0.y, d0.x)
-				for dd in [d0, d0 + side, d0 - side]:
+				# 단검 세례: straight ahead and the two directions 45 degrees either side
+				for dd in [d0, Targeting.turn45(d0, 1), Targeting.turn45(d0, -1)]:
 					_beam(part, user, aim, ctx, dd)
 			else:
 				_beam(part, user, aim, ctx)
@@ -250,7 +249,7 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 			_log(ctx, "teleport", "%s 그림자 밟기" % user.name, {"uid": user.uid, "to": spot, "from": from0, "cells": [from0, spot]})
 		"shadow_dash":
 			# 그림자 걸음: run straight through foes, cutting each and leaving [그림자] on them
-			var d3 := Targeting.dir_to(user.pos, aim)
+			var d3 := Targeting.dir8_to(user.pos, aim)
 			var last: Vector2i = user.pos
 			var crossed := [user.pos]
 			for i in range(1, int(part.get("dist", 4)) + 1):
@@ -413,7 +412,7 @@ static func shatter(ctx: BattleContext, at: Vector2i, source) -> void:
 
 ## Light and magic hitting crystal turn left or right at random.
 static func _deflect(ctx: BattleContext, d: Vector2i) -> Vector2i:
-	var turn := Vector2i(d.y, d.x) if ctx.rng.next_int(2) == 0 else Vector2i(-d.y, -d.x)
+	var turn := Vector2i(-d.y, d.x) if ctx.rng.next_int(2) == 0 else Vector2i(d.y, -d.x)
 	return turn
 
 static func _crystal_at(g: Grid, p: Vector2i) -> bool:
@@ -424,7 +423,7 @@ static func _crystal_at(g: Grid, p: Vector2i) -> bool:
 
 static func _beam(part: Dictionary, user, aim: Vector2i, ctx: BattleContext, dir_override := Vector2i.ZERO) -> void:
 	var g := ctx.grid
-	var d := Targeting.dir_to(user.pos, aim) if dir_override == Vector2i.ZERO else dir_override
+	var d := Targeting.dir8_to(user.pos, aim) if dir_override == Vector2i.ZERO else dir_override
 	var p: Vector2i = user.pos
 	var reflected := false
 	var deflects := 0
@@ -436,7 +435,7 @@ static func _beam(part: Dictionary, user, aim: Vector2i, ctx: BattleContext, dir
 		# [중력] bends light sideways toward its pull
 		var grav := Vector2(g.state_dir(p, "pull"))
 		var perp := Vector2(d.y, d.x)
-		var bend := grav.dot(perp)
+		var bend := grav.dot(perp) if d.x == 0 or d.y == 0 else 0.0
 		if absf(bend) >= 0.5:
 			var shifted := nxt + Vector2i(perp) * signi(int(round(bend)))
 			if g.in_bounds(shifted):
