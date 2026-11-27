@@ -569,7 +569,7 @@ func _ai_act(a: Actor) -> void:
 	var aim: Vector2i = choice["aim"]
 	var foe: Actor = choice["foe"]
 	var shape: String = tgt.get("shape", "cell")
-	if hazard(a.pos) and not a.rooted():
+	if hazard(a.pos) and not a.rooted() and a.temper != "reckless":
 		# standing in fire or a curse: get out before anything else
 		var out := ai_step_cell(a, aim, int(tgt.get("range", 1)))
 		if out != a.pos and not hazard(out):
@@ -598,6 +598,7 @@ func _ai_act(a: Actor) -> void:
 
 func _ai_step_toward(a: Actor, target: Vector2i, reach := 1) -> void:
 	var best := ai_step_cell(a, target, reach)
+	a.stuck = a.stuck + 1 if best == a.pos else 0
 	if best != a.pos:
 		a.facing = best - a.pos
 		grid.move_unit(a, best)
@@ -613,11 +614,20 @@ func hazard(p: Vector2i) -> bool:
 	return false
 
 ## The cell an enemy steps to when its target is out of reach (its own cell if it cannot move).
-## A real path search: it goes around bodies and walls instead of stalling behind them, and
-## around hazards unless the detour is very long. An enemy standing in a hazard steps out first.
+## A real path search around walls and bodies. How it treats fire and curses on the way depends
+## on its temper: reckless ones walk straight through, careful ones go around and wait when there
+## is no other way, stubborn ones take a short cut through harm when the way round is long. A
+## careful enemy shut in long enough (STUCK_LIMIT seconds) loses patience and breaks out.
+const HAZARD_COST := {"reckless": 1, "careful": 8, "stubborn": 4}
+const STUCK_LIMIT := 3
+
 func ai_step_cell(a: Actor, target: Vector2i, reach := 1) -> Vector2i:
 	if a.rooted():
 		return a.pos
+	var temper := a.temper
+	if temper == "careful" and a.stuck >= STUCK_LIMIT:
+		temper = "stubborn"
+	var hz := int(HAZARD_COST.get(temper, 8))
 	var free := func(p: Vector2i) -> bool:
 		return grid.passable(p) and not grid.mat_def(p).get("lethal", false) and (grid.unit_at(p) == null or grid.unit_at(p) == a)
 	# cheapest path (hazards cost extra) to any cell within reach of the target
@@ -634,7 +644,7 @@ func ai_step_cell(a: Actor, target: Vector2i, reach := 1) -> Vector2i:
 				bi = i
 		var c: Vector2i = open[bi]
 		open.remove_at(bi)
-		if cost[c] > 24:
+		if cost[c] > 30:
 			break
 		var d := dist(c, target)
 		if d <= reach and c != a.pos and cost[c] < best_cost:
@@ -643,20 +653,20 @@ func ai_step_cell(a: Actor, target: Vector2i, reach := 1) -> Vector2i:
 		for n in grid.neighbors4(c):
 			if not free.call(n):
 				continue
-			var nc: int = cost[c] + (8 if hazard(n) else 1)
+			var nc: int = cost[c] + (hz if hazard(n) else 1)
 			if not cost.has(n) or nc < cost[n]:
 				cost[n] = nc
 				first[n] = n if c == a.pos else first[c]
 				open.append(n)
 	if best != a.pos:
 		var step: Vector2i = first[best]
-		# a detour through fire is not worth it if waiting a moment is free
-		if not (hazard(step) and not hazard(a.pos)):
+		# a careful one would rather wait a moment than step into fire
+		if not (temper == "careful" and hazard(step) and not hazard(a.pos)):
 			return step
 	# no way in reach: at least get closer without stepping into harm
 	var fallback := a.pos
 	for n in grid.neighbors4(a.pos):
-		if free.call(n) and not hazard(n) and dist(n, target) < best_d:
+		if free.call(n) and (temper != "careful" or not hazard(n)) and dist(n, target) < best_d:
 			fallback = n
 			best_d = dist(n, target)
 	if fallback == a.pos and hazard(a.pos):
@@ -676,7 +686,7 @@ func ai_intent(a: Actor) -> Dictionary:
 	var tgt: Dictionary = card.get("target", {})
 	var shape: String = tgt.get("shape", "cell")
 	var at := maxi(a.next_at, now + 1)
-	if hazard(a.pos) and not a.rooted():
+	if hazard(a.pos) and not a.rooted() and a.temper != "reckless":
 		var out := ai_step_cell(a, choice["aim"], int(tgt.get("range", 1)))
 		if out != a.pos and not hazard(out):
 			return {"kind": "move", "to": out, "at": at}

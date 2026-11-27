@@ -36,6 +36,8 @@ var passives: Array = []      # e.g. "backstab" (도적: back attacks deal extra
 var next_bonus := 0           # 빈틈 노리기: extra damage on the next attack card
 var coat: Dictionary = {}     # 독 바르기: {status, turns, charges}
 var expires_at := -1
+var temper := "careful"       # how it treats fire and curses on its way: reckless | careful | stubborn
+var stuck := 0                # seconds spent unable to get closer; a careful enemy loses patience
 var guard_at := -1            # second covered by 받아치기 / 구르기
 var guard_kind := ""
 var guard_from := Vector2i(-99, -99)
@@ -57,6 +59,7 @@ static func from_def(def: Dictionary, new_uid: int) -> Actor:
 	a.deck = Array(def.get("deck", [])).duplicate()
 	a.pattern = Array(def.get("pattern", [])).duplicate()
 	a.passives = Array(def.get("passives", [])).duplicate()
+	a.temper = def.get("temper", "careful")
 	if def.has("facing"):
 		a.facing = Vector2i(def["facing"][0], def["facing"][1])
 	return a

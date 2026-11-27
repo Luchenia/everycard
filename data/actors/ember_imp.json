@@ -25,5 +25,6 @@
    "op": "state",
    "id": "heat"
   }
- ]
+ ],
+ "temper": "careful"
 }
