@@ -306,6 +306,7 @@ func _process(delta: float) -> void:
 	_flashes()
 	_step_ring(delta)
 	_layout_hand()
+	_step_held(delta)
 	if _replaying() and tips.visible and hovered_card == null:
 		_clear_tips()   # bodies are still on their way: no stale facts under the mouse
 	if flow.phase != "battle" and board.hover.x >= 0:
@@ -434,6 +435,11 @@ const RING_R := Vector2(420, 34)
 const HAND_STEP := 0.29          # radians between two hand cards
 var ring_tokens: Array = []      # ring order: {id, q (shown place, unwrapped), t (target place)}
 var ring_views: Array = []       # CardView per token
+var held_cv: CardView = null     # the picked card lifted out of the hand, following the mouse
+var held_slot := -1
+var held_vel := Vector2.ZERO
+var held_prev := Vector2.ZERO
+var press_px := Vector2(-1, -1)   # where the mouse went down on a hand card (drag it onto the board to play)
 var hand_n := 5.0                # eases to the number of cards in the hand
 var snap_index := -1             # old ring place of a card that just flew off to be played
 
@@ -955,6 +961,7 @@ func _on_card_picked(cv: CardView) -> void:
 		return
 	var i: int = cv.get_meta("slot")
 	var b := flow.battle
+	press_px = get_global_mouse_position()
 	if selected == i:
 		# a selected card that needs no aim plays when clicked again
 		var shape: String = cv.def().get("target", {}).get("shape", "cell")
@@ -976,12 +983,13 @@ func _fly(slot: int, target: Vector2i) -> void:
 	if src == null:
 		return
 	snap_index = ring_views.find(src)
+	var from: Control = held_cv if held_cv != null and held_slot == slot else src
 	var cv := CardView.new()
 	cv.setup(src.card_id, catalog, font, src.zoom)
 	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	cv.position = src.position
-	cv.rotation = src.rotation
-	cv.scale = src.scale
+	cv.position = from.position
+	cv.rotation = from.rotation
+	cv.scale = from.scale
 	cv.pivot_offset = cv.size / 2
 	cv.z_index = 20
 	add_child(cv)
@@ -1039,16 +1047,21 @@ func _on_board_input(ev: InputEvent) -> void:
 			board.walk_mode = "go" if drag_manual else "hold"
 			_clear_tips()
 		elif ev.button_index == MOUSE_BUTTON_LEFT and cell.x >= 0 and selected >= 0:
-			var played := selected
-			if board.self_aim and b.human() != null:
-				cell = b.human().pos   # a card on oneself: a click anywhere on the board uses it
-			if b.cmd_play(selected, cell):
-				_fly(played, cell)
-				selected = -1
-				_after()
-			else:
-				board.out_of_range_click(cell)
-				wiggle_until = real + 0.3
+			_play_at(cell)
+
+## Plays the picked card on a board cell (a click, or a card dragged there and let go).
+func _play_at(cell: Vector2i) -> void:
+	var b := flow.battle
+	var played := selected
+	if board.self_aim and b.human() != null:
+		cell = b.human().pos   # a card on oneself: a click anywhere on the board uses it
+	if b.cmd_play(selected, cell):
+		_fly(played, cell)
+		selected = -1
+		_after()
+	else:
+		board.out_of_range_click(cell)
+		wiggle_until = real + 0.3
 
 ## Click-to-move: walks there one cell (one second) at a time, and stops early when a new
 ## warning appears or the body is hit, so the player can rethink.
@@ -1142,7 +1155,62 @@ var roll_at := -9.0
 var roll_burst := 0
 var fast_flow := false      # the seconds now playing are only the ring turning: play them quickly
 
+## The picked card is lifted out of the hand: it pops up, then follows the mouse with a little lag,
+## leaning into the way it moves, and shrinks over the board so the cells under it stay readable.
+func _step_held(delta: float) -> void:
+	var want := selected >= 0 and flow.phase == "battle" and not _replaying()
+	var src: CardView = cards[selected] if want and selected < cards.size() else null
+	if src == null or (held_cv != null and held_slot != selected):
+		if held_cv != null:
+			held_cv.queue_free()
+			held_cv = null
+			held_slot = -1
+		if src == null:
+			return
+	var m := get_global_mouse_position()
+	if held_cv == null:
+		held_cv = CardView.new()
+		held_cv.setup(src.card_id, catalog, font, 1)
+		held_cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		held_cv.pivot_offset = held_cv.size / 2
+		held_cv.z_index = 60
+		held_cv.lit = true
+		held_cv.position = src.position
+		held_cv.scale = src.scale
+		add_child(held_cv)
+		held_slot = selected
+		held_prev = m
+		held_vel = Vector2.ZERO
+	src.modulate.a = 0.15   # its place in the hand stays, faintly
+	var hc := board.cell_at(board.get_local_mouse_position())
+	var over_board := hc.x >= 0
+	if press_px.x >= 0 and hc != board.hover:
+		# while the button is held the card keeps the mouse, so the board hears nothing: aim for it
+		board.hover = hc
+		board.preview = flow.battle.preview(selected, hc) if hc.x >= 0 else {}
+	var sc := 0.85 if over_board else 1.35
+	var goal := m - held_cv.size / 2 - Vector2(0, 10 if over_board else 40)
+	var k := 1.0 - exp(-delta * 18.0)
+	held_cv.position = held_cv.position.lerp(goal, k)
+	held_cv.scale = held_cv.scale.lerp(Vector2(sc, sc), 1.0 - exp(-delta * 12.0))
+	var v := (m - held_prev) / maxf(delta, 0.001)
+	held_prev = m
+	held_vel = held_vel.lerp(v, 1.0 - exp(-delta * 10.0))
+	held_cv.rotation = lerpf(held_cv.rotation, clampf(held_vel.x * 0.0007, -0.35, 0.35), 1.0 - exp(-delta * 14.0))
+	held_cv.modulate.a = 0.8 if over_board else 1.0
+
 func _input(ev: InputEvent) -> void:
+	# a hand card pressed, dragged onto the board and let go: played on that cell
+	if flow != null and flow.phase == "battle" and ev is InputEventMouseButton and not ev.pressed \
+			and ev.button_index == MOUSE_BUTTON_LEFT and press_px.x >= 0:
+		var moved: float = ev.position.distance_to(press_px)
+		press_px = Vector2(-1, -1)
+		if moved > 16.0 and selected >= 0 and not _replaying() and not _sliding():
+			var c := board.cell_at(board.get_local_mouse_position())
+			if c.x >= 0:
+				get_viewport().set_input_as_handled()
+				_play_at(c)
+				return
 	# the wheel turns the ring wherever the mouse is
 	if flow == null or flow.phase != "battle" or not (ev is InputEventMouseButton) or not ev.pressed or _sliding():
 		return
