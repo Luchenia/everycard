@@ -827,6 +827,146 @@
         24,
         44
       ]
+    },
+    "slime_run.png": {
+      "what": "slime one-cell move, exaggerated, in place (the code glides the body); played across the replayed second",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 17,
+      "loop": false,
+      "anchor": [
+        32,
+        44
+      ]
+    },
+    "slime_hurt.png": {
+      "what": "slime hit reaction, exaggerated; plays on world time at 24fps",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        24,
+        44
+      ]
+    },
+    "ember_imp_run.png": {
+      "what": "ember_imp one-cell move, exaggerated, in place (the code glides the body); played across the replayed second",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 17,
+      "loop": false,
+      "anchor": [
+        32,
+        44
+      ]
+    },
+    "ember_imp_hurt.png": {
+      "what": "ember_imp hit reaction, exaggerated; plays on world time at 24fps",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        24,
+        44
+      ]
+    },
+    "walker_run.png": {
+      "what": "walker one-cell move, exaggerated, in place (the code glides the body); played across the replayed second",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 17,
+      "loop": false,
+      "anchor": [
+        32,
+        44
+      ]
+    },
+    "walker_hurt.png": {
+      "what": "walker hit reaction, exaggerated; plays on world time at 24fps",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        24,
+        44
+      ]
+    },
+    "iron_golem_run.png": {
+      "what": "iron_golem one-cell move, exaggerated, in place (the code glides the body); played across the replayed second",
+      "frame": [
+        64,
+        64
+      ],
+      "count": 17,
+      "fps": 17,
+      "loop": false,
+      "anchor": [
+        40,
+        60
+      ]
+    },
+    "iron_golem_hurt.png": {
+      "what": "iron_golem hit reaction, exaggerated; plays on world time at 24fps",
+      "frame": [
+        64,
+        64
+      ],
+      "count": 17,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        32,
+        60
+      ]
+    },
+    "boss_tide_warden_run.png": {
+      "what": "boss_tide_warden one-cell move, exaggerated, in place (the code glides the body); played across the replayed second",
+      "frame": [
+        96,
+        96
+      ],
+      "count": 17,
+      "fps": 17,
+      "loop": false,
+      "anchor": [
+        60,
+        92
+      ]
+    },
+    "boss_tide_warden_hurt.png": {
+      "what": "boss_tide_warden hit reaction, exaggerated; plays on world time at 24fps",
+      "frame": [
+        96,
+        96
+      ],
+      "count": 17,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        48,
+        92
+      ]
     }
   },
   "ui": {
