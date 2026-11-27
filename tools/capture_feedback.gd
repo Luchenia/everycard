@@ -66,7 +66,7 @@ func _process(_d: float) -> bool:
 			if frame - t0 == 5:
 				_shot("12_hand_flip")
 			if frame - t0 == 40:
-				screen.hand_cursor.pick(screen.cards[2])
+				pass
 			if frame - t0 == 52:
 				_shot("15_hand_pick"); step = 6
 		6:

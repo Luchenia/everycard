@@ -7,7 +7,6 @@ extends Control
 
 const SEC_REAL := 0.5    # real seconds one game second takes when replayed
 const HUB := Vector2(640, 800)   # hand wheel hub on screen
-const WHEEL_STEP := 0.62         # radians between two wheel slots
 
 var catalog: Catalog
 var flow: RunFlow
@@ -26,7 +25,6 @@ var flow_from := 0       # first frame of the flow being replayed
 var warp := 0.0           # time-warp factor: eases up from bullet time when time starts flowing, back down at the end
 var cards: Array = []          # CardView per hand slot (null for empty / heavy tail)
 var hovered_card: CardView
-var spin := 0.0                # ring turn animation (radians, eases to 0)
 var wiggle_until := 0.0
 var real := 0.0
 var cell_hover_t := 0.0
@@ -124,9 +122,9 @@ func _step_replay(delta: float) -> void:
 	var left := float(fr.size() - 1 - shown_frame) - replay_t
 	var tail := lerpf(0.3, 1.0, clampf(left / 0.6, 0.0, 1.0))
 	warp = move_toward(warp, tail, delta * 4.0) if warp < tail else tail
-	if flow.calm():
-		warp = 1.0   # nothing to fight: walking needs no slow motion
-	var calm_k := 3.0 if flow.calm() else 1.0
+	if flow.calm() or fast_flow:
+		warp = 1.0   # nothing to fight, or only the ring turning: no slow motion
+	var calm_k := 3.0 if (flow.calm() or fast_flow) else 1.0
 	board.play_speed = speed * warp
 	replay_t += delta * speed * warp * calm_k / SEC_REAL
 	while replay_t >= 1.0 and shown_frame < fr.size() - 1:
@@ -134,6 +132,7 @@ func _step_replay(delta: float) -> void:
 		shown_frame += 1
 	if shown_frame >= fr.size() - 1:
 		replay_t = 0.0
+		fast_flow = false
 		board.replaying = false
 		flow.update()
 		_refresh()
@@ -230,7 +229,7 @@ func _process(delta: float) -> void:
 	_step_replay(delta)
 	_step_slide(delta)
 	_flashes()
-	spin = move_toward(spin, 0.0, delta * 1.6)
+	_step_ring(delta)
 	_layout_hand()
 	if _replaying() and tips.visible and hovered_card == null:
 		_clear_tips()   # bodies are still on their way: no stale facts under the mouse
@@ -326,168 +325,190 @@ func _build_hand() -> void:
 	for ch in hand_layer.get_children():
 		ch.queue_free()
 	cards = []
+	ring_views = []
 	hovered_card = null
 	_clear_tips()
 	var b := flow.battle
 	if b.belt == null:
 		return
+	_sync_ring()
+	cards.resize(b.belt.slots.size())
+	cards.fill(null)
+	var slot_of := []
 	for i in b.belt.slots.size():
 		var s = b.belt.slots[i]
-		if s == null or s.get("tail", false):
-			cards.append(null)
-			continue
+		if s != null and not s.get("tail", false):
+			slot_of.append(i)
+	for k in ring_tokens.size():
 		var cv := CardView.new()
-		cv.setup(s["card_id"], catalog, font)
-		cv.set_meta("slot", i)
-		cv.picked.connect(_on_card_picked)
-		cv.hovered.connect(_on_card_hover)
-		cv.inspected.connect(func(c):
-			_clear_tips()
-			_keyword_tips(c.def().get("desc", ""), true)
-			tips.position = Vector2(clampf(c.global_position.x + c.size.x * c.scale.x + 12, 8, 1280 - 250), 300))
+		cv.setup(ring_tokens[k]["id"], catalog, font)
+		if k < slot_of.size():
+			cv.set_meta("slot", slot_of[k])
+			cv.picked.connect(_on_card_picked)
+			cv.hovered.connect(_on_card_hover)
+			cv.inspected.connect(func(c):
+				_clear_tips()
+				_keyword_tips(c.def().get("desc", ""), true)
+				tips.position = Vector2(clampf(c.global_position.x + c.size.x * c.scale.x + 12, 8, 1280 - 250), 300))
+			cards[slot_of[k]] = cv
+		else:
+			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hand_layer.add_child(cv)
-		cards.append(cv)
+		ring_views.append(cv)
 	_layout_hand()
 
-## The hand: five cards held in a fan at the bottom. Turning the wheel flips one card out at
-## one end and a new one in at the other; the rest slide over by one place.
-const FAN_GAP := 118.0
-const FAN_Y := 668.0
+## The hand and the deck are one ring of cards standing on an ellipse, seen in 3D. The hand is
+## the front of the ring, facing the player; the rest of the deck stands around the back, turned
+## away (backs showing). Rolling turns the whole ring; a used card goes round to the back and the
+## next one comes round to the front. Every card glides to its new place, nothing jumps.
+const RING_C := Vector2(640, 640)
+const RING_R := Vector2(420, 46)
+const HAND_STEP := 0.29          # radians between two hand cards
+var ring_tokens: Array = []      # ring order: {id, q (shown place, unwrapped), t (target place)}
+var ring_views: Array = []       # CardView per token
+var hand_n := 5.0                # eases to the number of cards in the hand
+var snap_index := -1             # old ring place of a card that just flew off to be played
 
-func _fan_pos(f: float) -> Vector2:
-	var d := f - 2.0
-	return Vector2(640 + d * FAN_GAP, FAN_Y + d * d * 7.0)
+## Matches the new ring to the cards already shown, so each card glides from where it was.
+func _sync_ring() -> void:
+	var ids: Array = flow.battle.belt.ring()
+	var n := ids.size()
+	var old := ring_tokens
+	var on := maxi(1, old.size())
+	var taken := {}
+	var out := []
+	for i in n:
+		var best := -1
+		var bd := 1e9
+		for j in old.size():
+			if taken.has(j) or old[j]["id"] != ids[i]:
+				continue
+			var io := posmod(int(round(float(old[j]["t"]))), on)
+			var d := absf(_wrap(float(i - io), n))
+			if d < bd:
+				bd = d
+				best = j
+		if best < 0:
+			out.append({"id": ids[i], "q": float(i), "t": float(i)})
+			continue
+		taken[best] = true
+		var tk: Dictionary = old[best]
+		var io2 := posmod(int(round(float(tk["t"]))), on)
+		var nt := float(tk["t"]) + _wrap(float(i - io2), n)
+		var q := float(tk["q"])
+		if io2 == snap_index:
+			q = nt   # it flew to the board; it is already back on the ring
+		out.append({"id": ids[i], "q": q, "t": nt})
+	ring_tokens = out
+	snap_index = -1
 
-## Behind the hand: the whole deck as a ring of face-down cards seen in 3D (the hand is the ring's
-## window at the front). How full the ring is shows roughly how many cards are left, no number.
-## A flip turns the ring by one card: a card is dealt off the ring into one end of the hand and the
-## pushed-out card goes back onto the ring.
-const RING_C := Vector2(640, 742)
-const RING_R := Vector2(440, 56)
+static func _wrap(d: float, n: int) -> float:
+	if n <= 0:
+		return d
+	var h := n / 2.0
+	while d > h:
+		d -= n
+	while d <= -h:
+		d += n
+	return d
 
-func _ring_pt(ang: float) -> Vector2:
-	return RING_C + Vector2(cos(ang) * RING_R.x, -sin(ang) * RING_R.y - 34)
+## Angle on the ring for place q (0 = the hand's left card). The hand spreads evenly over the
+## front; the rest of the deck shares the back.
+func _ring_phi(q: float, n: int) -> float:
+	var h := clampf(hand_n, 1.0, float(maxi(1, n)))
+	var c := (h - 1.0) / 2.0
+	var a0 := PI / 2 + c * HAND_STEP              # hand's left card
+	var a1 := PI / 2 - c * HAND_STEP              # hand's right card
+	var qm := fposmod(q, float(maxi(1, n)))
+	if qm <= h - 1.0:
+		return a0 - qm * HAND_STEP
+	var back := float(n) - (h - 1.0)               # steps from the hand's right card round to its left
+	var k := (qm - (h - 1.0)) / maxf(0.001, back)
+	return a1 - k * (2.0 * PI - (a0 - a1))
 
-## Where the next card waits on the ring, at either side of the hand.
-func _pile_top(dir := 1) -> Vector2:
-	return _ring_pt(PI * (0.08 if dir > 0 else 0.92))
+func _ring_at(phi: float) -> Vector2:
+	return RING_C + Vector2(cos(phi) * RING_R.x, sin(phi) * RING_R.y)
 
-func _draw_back(at: Vector2, sz: Vector2, rot: float, shade: float) -> void:
-	var t := Art.tex("ui/card_back.png")
-	hand_layer.draw_set_transform(at, rot, Vector2.ONE)
-	var rr := Rect2(-sz / 2, sz)
-	if t != null:
-		hand_layer.draw_texture_rect(t, rr, false, Color(shade, shade, shade))
-	else:
-		hand_layer.draw_rect(rr.grow(2), Art.INK)
-		hand_layer.draw_rect(rr, Color("#4a3226") * Color(shade, shade, shade))
-	hand_layer.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+func _step_ring(delta: float) -> void:
+	var h := 0
+	if flow.battle.belt != null:
+		h = flow.battle.belt._entries().size()
+	hand_n = move_toward(hand_n, float(h), delta * 4.0)
+	var k := minf(1.0, delta * 9.0)
+	for tk in ring_tokens:
+		tk["q"] = float(tk["q"]) + (float(tk["t"]) - float(tk["q"])) * k
 
 func _draw_wheel() -> void:
 	if flow == null or flow.phase != "battle" or flow.battle.belt == null:
 		return
-	var n := maxi(0, flow.battle.belt.ring().size() - 5)
-	if n == 0:
-		return
-	# the rest of the deck spread evenly over the back arc of the ring, from right to left
-	var slide := spin / WHEEL_STEP
-	var span := PI * 0.84
-	var step := span / maxf(1.0, float(n - 1)) if n > 1 else 0.0
-	step = minf(step, PI / 9.0)
-	var start := PI / 2 - step * (n - 1) / 2.0
-	var cards_at := []
-	for i in n:
-		var ang := start + step * (float(i) + slide)
-		cards_at.append(ang)
-	# far (top of the ellipse, middle) first, near (the ends) last
-	cards_at.sort_custom(func(a, b): return absf(a - PI / 2) < absf(b - PI / 2))
-	var dim := 0.5 if selected >= 0 else 1.0
-	for ang in cards_at:
-		var near := absf(cos(ang))          # 0 at the far middle, 1 at the sides
-		var k := 0.5 + 0.35 * near
-		var p := _ring_pt(ang)
-		var sz := CardView.SIZE * k
-		var shade := (0.55 + 0.45 * near) * dim
-		# cards face the centre of the ring: a little turned at the sides, squeezed by perspective
-		hand_layer.draw_set_transform(p, -cos(ang) * 0.18, Vector2(1.0 - 0.25 * (1.0 - near), 1.0))
-		hand_layer.draw_rect(Rect2(-sz / 2 + Vector2(3, 5), sz), Color(0, 0, 0, 0.3 * dim))
-		hand_layer.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		_draw_back_xf(p, sz, -cos(ang) * 0.18, 1.0 - 0.25 * (1.0 - near), shade)
-
-func _draw_back_xf(at: Vector2, sz: Vector2, rot: float, sx: float, shade: float) -> void:
+	var n := ring_tokens.size()
+	var dim := 0.45 if selected >= 0 else 1.0
+	# the backs of cards turned away, far ones first
+	var order := range(n)
+	order.sort_custom(func(a, b): return sin(_ring_phi(ring_tokens[a]["q"], n)) < sin(_ring_phi(ring_tokens[b]["q"], n)))
 	var t := Art.tex("ui/card_back.png")
-	hand_layer.draw_set_transform(at, rot, Vector2(sx, 1.0))
-	var rr := Rect2(-sz / 2, sz)
-	if t != null:
-		hand_layer.draw_texture_rect(t, rr, false, Color(shade, shade, shade))
-	else:
-		hand_layer.draw_rect(rr, Color("#4a3226") * Color(shade, shade, shade))
-	hand_layer.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	for i in order:
+		var phi := _ring_phi(ring_tokens[i]["q"], n)
+		var depth := sin(phi)
+		if depth > 0.02:
+			continue
+		var p := _ring_at(phi)
+		var sc := 0.6 + 0.4 * (depth + 1.0) / 2.0
+		var w := maxf(0.06, absf(depth))
+		var sz := CardView.SIZE * sc
+		var shade := (0.45 + 0.4 * (depth + 1.0) / 2.0) * dim
+		hand_layer.draw_set_transform(p, 0.0, Vector2(w, 1.0))
+		var rr := Rect2(-sz / 2, sz)
+		hand_layer.draw_rect(Rect2(rr.position + Vector2(3, 4), rr.size), Color(0, 0, 0, 0.3 * dim))
+		if t != null:
+			hand_layer.draw_texture_rect(t, rr, false, Color(shade, shade, shade))
+		else:
+			hand_layer.draw_rect(rr, Color("#2a4a9a") * Color(shade, shade, shade))
+		hand_layer.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _layout_hand() -> void:
+	if flow.battle.belt == null:
+		return
 	hand_layer.queue_redraw()
 	var aiming := selected >= 0
-	var slide := spin / WHEEL_STEP     # -1..1 while a roll animates, eases to 0
 	var wig := sin(real * 60.0) * 0.03 if real < wiggle_until else 0.0
-	for ch in hand_layer.get_children():
-		var cv := ch as CardView
+	var n := ring_tokens.size()
+	for i in mini(n, ring_views.size()):
+		var cv: CardView = ring_views[i]
 		if cv == null:
 			continue
-		var i: int = cv.get_meta("slot")
-		var f := float(i) + slide
-		var anchor := _fan_pos(f)
-		cv.lit = i == selected
-		var big := cv == hovered_card and not aiming
+		var phi := _ring_phi(ring_tokens[i]["q"], n)
+		var depth := sin(phi)
+		var in_hand: bool = cv.has_meta("slot")
+		cv.visible = depth > 0.02
+		if not cv.visible:
+			continue
+		var p := _ring_at(phi)
+		var sc := 0.6 + 0.4 * (depth + 1.0) / 2.0
+		var w := maxf(0.06, absf(depth))
+		cv.lit = in_hand and int(cv.get_meta("slot")) == selected
+		var big := in_hand and cv == hovered_card and not aiming
 		var z := 2 if big else 1
 		if cv.zoom != z:
 			cv.set_zoom(z)
+		cv.pivot_offset = cv.size / 2
+		if big:
+			var x := clampf(p.x - cv.size.x / 2, 8, 1280 - cv.size.x - 8)
+			cv.position = Vector2(x, 796 - cv.size.y)
+			cv.rotation = 0.0
+			cv.scale = Vector2.ONE
+		else:
+			cv.position = p - cv.size / 2
+			cv.rotation = wig if cv.lit else 0.0
+			cv.scale = Vector2(sc * w, sc)
+			if cv.lit:
+				cv.position.y -= 34   # the picked card rises out of the hand
 		var alpha := 1.0
 		if aiming:
 			alpha = 0.62 if cv.lit else 0.24
-		cv.pivot_offset = cv.size / 2
-		# the card coming in turns over like a card taken into the hand
-		var entering := (slide < 0.0 and i == 0) or (slide > 0.0 and i == cards.size() - 1)
-		var sx := 1.0 - absf(slide) if entering else 1.0
-		if big:
-			var x := clampf(anchor.x - cv.size.x / 2, 8, 1280 - cv.size.x - 8)
-			cv.position = Vector2(x, 796 - cv.size.y - (14 if cv.lit else 0))
-			cv.rotation = wig if cv.lit else 0.0
-			cv.scale = Vector2.ONE
-		else:
-			cv.position = anchor - cv.size / 2
-			cv.rotation = (f - 2.0) * 0.07
-			cv.scale = Vector2(maxf(0.02, sx), 1.0)
-			if entering:
-				# dealt off the top of the pile, turning face up on the way
-				var k := absf(slide)
-				cv.position = cv.position.lerp(_pile_top(-1 if slide < 0.0 else 1) - cv.size / 2, k)
-				cv.rotation = lerpf(cv.rotation, 0.03, k)
-			if cv.lit:
-				# the picked card stays small (the board must stay visible) but rises out of the hand
-				cv.position.y -= 34
-				cv.rotation = wig
-		cv.modulate = Color(1, 1, 1, alpha)
-		cv.z_index = 5 if (big or cv.lit) else 0
-
-## The card pushed out by a roll leaves past the end of the hand.
-func _drop_out(slot: int, dir: int) -> void:
-	var src: CardView = cards[slot] if slot >= 0 and slot < cards.size() else null
-	if src == null:
-		return
-	var cv := CardView.new()
-	cv.setup(src.card_id, catalog, font, src.zoom)
-	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	cv.position = src.position
-	cv.rotation = src.rotation
-	cv.pivot_offset = cv.size / 2
-	add_child(cv)
-	var dest := _pile_top(dir) - cv.size / 2   # back onto the ring
-	var tw := create_tween().set_parallel(true)
-	tw.tween_property(cv, "position", dest, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tw.tween_property(cv, "rotation", 0.03, 0.3)
-	tw.tween_property(cv, "scale", Vector2(0.6, 0.6), 0.3)
-	tw.tween_property(cv, "modulate", Color(0.6, 0.6, 0.6, 0.0), 0.3).set_delay(0.12)
-	tw.chain().tween_callback(cv.queue_free)
+		var shade := 1.0 if in_hand else 0.55   # deck cards passing the front are not in hand
+		cv.modulate = Color(shade, shade, shade, alpha)
+		cv.z_index = 40 if (big or cv.lit) else int((depth + 1.0) * 10.0)
 
 # ---- hud ----------------------------------------------------------------------------------------
 
@@ -683,8 +704,7 @@ func _on_card_hover(cv: CardView, on: bool) -> void:
 		_clear_tips()
 		if selected < 0:
 			_keyword_tips(cv.def().get("desc", ""))
-			var sl := _fan_pos(float(cv.get_meta("slot")))
-			tips.position = Vector2(sl.x + CardView.SIZE.x + 12, 420)
+			tips.position = Vector2(cv.global_position.x + cv.size.x * cv.scale.x + 12, 420)
 			if tips.position.x > 1280 - 250:
 				tips.position.x = cv.global_position.x - 250
 	elif hovered_card == cv:
@@ -900,6 +920,7 @@ func _fly(slot: int, target: Vector2i) -> void:
 	var src: CardView = cards[slot] if slot < cards.size() else null
 	if src == null:
 		return
+	snap_index = ring_views.find(src)
 	var cv := CardView.new()
 	cv.setup(src.card_id, catalog, font, src.zoom)
 	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1057,24 +1078,38 @@ func _path(from: Vector2i, to: Vector2i) -> Array:
 		out.pop_back()   # clicked a body: walk up to it
 	return out
 
+## A quick flick of the wheel keeps turning the ring: notches that follow within a moment add
+## up to ROLL_BURST cards in one smooth turn (one card per notch, so a single notch never
+## over-turns by mistake).
+const ROLL_BURST := 4
+const ROLL_CHAIN := 0.35   # seconds after a roll in which the next notch joins it
+var roll_at := -9.0
+var roll_burst := 0
+var fast_flow := false      # the seconds now playing are only the ring turning: play them quickly
+
 func _input(ev: InputEvent) -> void:
 	# the wheel turns the ring wherever the mouse is
-	if flow == null or flow.phase != "battle" or not (ev is InputEventMouseButton) or not ev.pressed or _replaying():
+	if flow == null or flow.phase != "battle" or not (ev is InputEventMouseButton) or not ev.pressed or _sliding():
 		return
-	if ev.button_index == MOUSE_BUTTON_WHEEL_UP or ev.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-		_roll(-1 if ev.button_index == MOUSE_BUTTON_WHEEL_UP else 1)
-		get_viewport().set_input_as_handled()
+	if ev.button_index != MOUSE_BUTTON_WHEEL_UP and ev.button_index != MOUSE_BUTTON_WHEEL_DOWN:
+		return
+	get_viewport().set_input_as_handled()
+	var chained := real - roll_at < ROLL_CHAIN
+	if _replaying() and not (chained and fast_flow and roll_burst < ROLL_BURST):
+		return
+	if not chained:
+		roll_burst = 0
+	_roll(-1 if ev.button_index == MOUSE_BUTTON_WHEEL_UP else 1)
 
 func _roll(dir: int) -> void:
 	selected = -1
-	var out_slot := cards.size() - 1 if dir > 0 else 0
-	var leaving: CardView = cards[out_slot] if out_slot >= 0 and out_slot < cards.size() else null
 	if flow.battle.cmd_wheel(dir):
-		spin = -WHEEL_STEP * dir
-		hand_cursor.sweep(dir)
-		if leaving != null:
-			_drop_out(out_slot, dir)
-	_after()
+		roll_at = real
+		roll_burst += 1
+		fast_flow = true
+	if not _replaying():
+		flow.update()
+	_refresh()
 
 const SPEEDS := [1.0, 1.5, 2.0, 3.0, 4.0]
 const CARD_KEYS := [KEY_Q, KEY_W, KEY_E, KEY_R, KEY_T]
@@ -1095,7 +1130,6 @@ func _unhandled_input(ev: InputEvent) -> void:
 	if pk in CARD_KEYS:
 		var i: int = CARD_KEYS.find(pk)
 		if i < cards.size() and cards[i] != null:
-			hand_cursor.pick(cards[i])
 			_on_card_picked(cards[i])
 		return
 	if pk == KEY_A or pk == KEY_D:
@@ -1115,6 +1149,7 @@ func _unhandled_input(ev: InputEvent) -> void:
 	_after()
 
 func _after() -> void:
+	fast_flow = false
 	if not _replaying():
 		flow.update()
 	_refresh()
