@@ -240,6 +240,9 @@ func _process(delta: float) -> void:
 	_layout_hand()
 	if _replaying() and tips.visible and hovered_card == null:
 		_clear_tips()   # bodies are still on their way: no stale facts under the mouse
+	if flow.phase != "battle" and board.hover.x >= 0:
+		board.hover = Vector2i(-1, -1)   # a shop, reward or end screen covers the board: nothing under it answers the mouse
+		cell_hover_t = 0.0
 	if board.hover.x >= 0 and selected < 0 and hovered_card == null and not _replaying() and not dragging:
 		cell_hover_t += delta
 		if cell_hover_t > 0.25 and tips.get_child_count() == 0:
@@ -382,30 +385,61 @@ func _sync_ring() -> void:
 	var n := ids.size()
 	var old := ring_tokens
 	var on := maxi(1, old.size())
+	var match_of := {}   # new index -> old token index
 	var taken := {}
+	# the card just played went to the back of the ring: it is already there
+	if snap_index >= 0 and n > 0:
+		for j in old.size():
+			if posmod(int(round(float(old[j]["t"]))), on) == snap_index and old[j]["id"] == ids[n - 1]:
+				match_of[n - 1] = j
+				taken[j] = true
+				break
+	# Copies of the same card (four 베기) are matched as a group, keeping their order round the
+	# ring: matching each new place to its nearest old copy one by one let two copies swap, and
+	# a card then cut across the front instead of turning one step with the rest.
+	var groups := {}
+	for i in n:
+		if not match_of.has(i):
+			groups.get_or_add(ids[i], {"new": [], "old": []})["new"].append(i)
+	for j in old.size():
+		if not taken.has(j) and groups.has(old[j]["id"]):
+			groups[old[j]["id"]]["old"].append(j)
+	for id in groups:
+		var nw: Array = groups[id]["new"]
+		var ol: Array = groups[id]["old"]
+		ol.sort_custom(func(x, y): return posmod(int(round(float(old[x]["t"]))), on) < posmod(int(round(float(old[y]["t"]))), on))
+		var m := mini(nw.size(), ol.size())
+		if m == 0:
+			continue
+		# try every rotation of the old copies against the new places; keep the one that moves least
+		var best_r := 0
+		var best_k := 0
+		var best_cost := 1e18
+		for k in range(0, nw.size() - m + 1):
+			for r in ol.size():
+				var cost := 0.0
+				for i in m:
+					var io := posmod(int(round(float(old[ol[(i + r) % ol.size()]]["t"]))), on)
+					var d := absf(_wrap(float(nw[k + i] - io), n))
+					cost += d * d
+				if cost < best_cost - 0.001:
+					best_cost = cost
+					best_r = r
+					best_k = k
+		for i in m:
+			match_of[nw[best_k + i]] = ol[(i + best_r) % ol.size()]
 	var out := []
 	for i in n:
-		var best := -1
-		var bd := 1e9
-		for j in old.size():
-			if taken.has(j) or old[j]["id"] != ids[i]:
-				continue
-			var io := posmod(int(round(float(old[j]["t"]))), on)
-			var d := absf(_wrap(float(i - io), n))
-			if d < bd:
-				bd = d
-				best = j
-		if best < 0:
+		if not match_of.has(i):
 			out.append({"id": ids[i], "q": float(i), "t": float(i)})
 			continue
-		taken[best] = true
-		var tk: Dictionary = old[best]
+		var tk: Dictionary = old[match_of[i]]
 		var io2 := posmod(int(round(float(tk["t"]))), on)
 		var nt := float(tk["t"]) + _wrap(float(i - io2), n)
 		var q := float(tk["q"])
 		if io2 == snap_index:
 			q = nt   # it flew to the board; it is already back on the ring
-		out.append({"id": ids[i], "q": q, "t": nt})
+		out.append({"id": ids[i], "q": q, "t": nt, "moved": nt - float(tk["t"])})
 	ring_tokens = out
 	snap_index = -1
 
