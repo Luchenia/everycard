@@ -50,6 +50,29 @@ func run() -> void:
 	var kept := s.battle.human().def_id
 	s.choose_reward(0)
 	assert_eq(s.battle.human().def_id, kept, "next battle in the swapped body")
+	# a chest on the board: a card mid-fight, then the fight goes on
+	var ch := RunFlow.new(c, 15)
+	var spot := Vector2i(-1, -1)
+	for p in ch.battle.grid.all_cells():
+		if ch.battle.grid.get_material(p) == "chest":
+			spot = p
+	assert_true(spot.x >= 0, "a chest on the board")
+	ch.battle.grid.move_unit(ch.battle.human(), spot)
+	ch.update()
+	assert_eq(ch.phase, "reward", "the chest offers cards")
+	var m := ch.deck.size()
+	ch.choose_reward(0)
+	assert_eq(ch.phase, "battle", "and the fight goes on")
+	assert_eq(ch.index, 0, "in the same battle")
+	assert_eq(ch.deck.size(), m + 1, "with the new card")
+	assert_eq(ch.battle.grid.get_material(spot), "chest_open", "the chest stays open")
+	# no two of a card: rewards never offer one the deck has
+	for id in ch.rewards:
+		assert_true(not ch.deck.has(id), "reward not already in the deck")
+	var seen := {}
+	for id in RunFlow.new(c, 16).deck:
+		assert_true(not seen.has(id), "starting deck has no copies: " + id)
+		seen[id] = true
 	# boss last
 	var v := RunFlow.new(c, 14)
 	v.start_battle(RunFlow.FIGHTS.size() - 1)

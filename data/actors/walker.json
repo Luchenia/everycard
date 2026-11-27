@@ -7,19 +7,15 @@
  "base_ability": "step1",
  "deck": [
   "strike",
-  "strike",
-  "strike",
-  "strike",
-  "guard",
-  "guard",
   "guard",
   "step",
-  "step",
-  "oil_spill",
   "throw_dagger",
+  "oil_spill",
   "flint",
   "parry",
-  "roll"
+  "roll",
+  "shadow_tread",
+  "poison_blade"
  ],
  "signature": "strike",
  "trait": [
