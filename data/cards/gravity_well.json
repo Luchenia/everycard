@@ -7,7 +7,8 @@
  "target": {
   "shape": "circle",
   "range": 4,
-  "size": 1
+  "size": 1,
+  "reach": "circle"
  },
  "parts": [
   {

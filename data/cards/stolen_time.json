@@ -9,7 +9,8 @@
  "target": {
   "shape": "cell",
   "range": 4,
-  "size": 0
+  "size": 0,
+  "reach": "circle"
  },
  "parts": [
   {

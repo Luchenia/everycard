@@ -1,13 +1,14 @@
 {
  "id": "strike",
  "name": "베기",
- "time": 2,
+ "time": 1,
  "weight": 1,
  "rarity": "basic",
  "target": {
   "shape": "cell",
   "range": 1,
-  "size": 0
+  "size": 0,
+  "reach": "square"
  },
  "parts": [
   {

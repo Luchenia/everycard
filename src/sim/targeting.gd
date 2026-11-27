@@ -10,6 +10,38 @@ static func dir_to(origin: Vector2i, aim: Vector2i) -> Vector2i:
 		return Vector2i(signi(d.x), 0)
 	return Vector2i(0, signi(d.y))
 
+## Like dir_to, but an aim straight along a diagonal keeps that diagonal (thrown things fly 8 ways).
+static func dir8_to(origin: Vector2i, aim: Vector2i) -> Vector2i:
+	var d := aim - origin
+	if d != Vector2i.ZERO and absi(d.x) == absi(d.y):
+		return Vector2i(signi(d.x), signi(d.y))
+	return dir_to(origin, aim)
+
+const DIRS8 := [Vector2i(1, 0), Vector2i(1, 1), Vector2i(0, 1), Vector2i(-1, 1), Vector2i(-1, 0), Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1)]
+
+## One of the 8 directions turned by steps of 45 degrees.
+static func turn45(d: Vector2i, steps: int) -> Vector2i:
+	var i := DIRS8.find(d)
+	return d if i < 0 else DIRS8[posmod(i + steps, 8)]
+
+## Whether aim is within reach r of origin, measured the card's way:
+##  diamond: steps along the grid (no diagonals), the default and how walking counts;
+##  square:  every cell around, diagonals as near as sides (a blade swung all round);
+##  circle:  a round area (a throw or a spell that lands where it is aimed);
+##  line:    only straight along the 8 directions (a thrown dagger, a beam).
+static func reaches(reach: String, origin: Vector2i, aim: Vector2i, r: int) -> bool:
+	var dx := absi(aim.x - origin.x)
+	var dy := absi(aim.y - origin.y)
+	match reach:
+		"square":
+			return maxi(dx, dy) <= r
+		"circle":
+			return dx * dx + dy * dy <= r * r + r
+		"line":
+			return (dx == 0 or dy == 0 or dx == dy) and maxi(dx, dy) <= r
+		_:
+			return dx + dy <= r
+
 static func _ok(p: Vector2i) -> bool:
 	return p.x >= 0 and p.y >= 0 and p.x < Grid.W and p.y < Grid.H
 
@@ -21,7 +53,7 @@ static func cells(shape: String, origin: Vector2i, aim: Vector2i, size: int) -> 
 		"cell":
 			out.append(aim)
 		"line":
-			var d := dir_to(origin, aim)
+			var d := dir8_to(origin, aim)
 			for i in range(1, max(size, 1) + 1):
 				out.append(origin + d * i)
 		"circle":

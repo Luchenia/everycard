@@ -177,6 +177,11 @@ func _on_deck_add(actor, card_id: String) -> void:
 	if belt != null and actor == belt_owner:
 		belt.draw_pile.push_front(card_id)
 
+## Whether a card used from `from` reaches `aim` (its range, measured by its "reach" shape).
+static func in_reach(card: Dictionary, from: Vector2i, aim: Vector2i) -> bool:
+	var tgt: Dictionary = card.get("target", {})
+	return Targeting.reaches(tgt.get("reach", "diamond"), from, aim, int(tgt.get("range", 1)))
+
 static func dist(a: Vector2i, b: Vector2i) -> int:
 	return absi(a.x - b.x) + absi(a.y - b.y)
 
@@ -265,7 +270,7 @@ func can_play(slot: int, aim: Vector2i) -> bool:
 		return false
 	var shape: String = card.get("target", {}).get("shape", "cell")
 	if shape != "self" and shape != "all" and shape != "around":
-		if not grid.in_bounds(aim) or dist(h.pos, aim) > int(card.get("target", {}).get("range", 1)):
+		if not grid.in_bounds(aim) or not in_reach(card, h.pos, aim):
 			return false
 	return true
 
@@ -536,7 +541,7 @@ func _track_telegraphs() -> void:
 				continue
 			t["foe_uid"] = f.uid
 		var card := Effects.card_def(t["card_id"], catalog)
-		if dist(a.pos, f.pos) > int(card.get("target", {}).get("range", 1)):
+		if not in_reach(card, a.pos, f.pos):
 			continue   # out of range: keep the last aim
 		t["aim"] = f.pos
 		t["cells"] = _attack_cells(card, a, f.pos, f)
@@ -572,14 +577,14 @@ func _ai_act(a: Actor) -> void:
 	var shape: String = tgt.get("shape", "cell")
 	if _wants_out(a):
 		# standing in fire or a curse: get out before anything else
-		var out := ai_step_cell(a, aim, int(tgt.get("range", 1)))
+		var out := ai_step_cell(a, aim, int(tgt.get("range", 1)), card)
 		if out != a.pos and not hazard(out, a):
 			a.facing = out - a.pos
 			grid.move_unit(a, out)
 			a.next_at = now + maxi(1, action_secs(int(cfg["move_time"]), a))
 			return
-	if shape != "self" and shape != "all" and shape != "around" and dist(a.pos, aim) > int(tgt.get("range", 1)):
-		_ai_step_toward(a, aim, int(tgt.get("range", 1)))
+	if shape != "self" and shape != "all" and shape != "around" and not in_reach(card, a.pos, aim):
+		_ai_step_toward(a, aim, int(tgt.get("range", 1)), card)
 		a.next_at = now + maxi(1, action_secs(int(cfg["move_time"]), a))
 		return
 	a.pattern_index += 1
@@ -614,8 +619,8 @@ func _hates(p: Vector2i, a: Actor) -> bool:
 			return true
 	return false
 
-func _ai_step_toward(a: Actor, target: Vector2i, reach := 1) -> void:
-	var best := ai_step_cell(a, target, reach)
+func _ai_step_toward(a: Actor, target: Vector2i, reach := 1, card := {}) -> void:
+	var best := ai_step_cell(a, target, reach, card)
 	a.stuck = a.stuck + 1 if best == a.pos else 0
 	if best != a.pos:
 		a.facing = best - a.pos
@@ -695,7 +700,7 @@ func _splits() -> void:
 const HAZARD_COST := {"reckless": 1, "careful": 8, "stubborn": 4}
 const STUCK_LIMIT := 3
 
-func ai_step_cell(a: Actor, target: Vector2i, reach := 1) -> Vector2i:
+func ai_step_cell(a: Actor, target: Vector2i, reach := 1, card := {}) -> Vector2i:
 	if a.rooted():
 		return a.pos
 	var temper := a.temper
@@ -720,8 +725,8 @@ func ai_step_cell(a: Actor, target: Vector2i, reach := 1) -> Vector2i:
 		open.remove_at(bi)
 		if cost[c] > 30:
 			break
-		var d := dist(c, target)
-		if d <= reach and c != a.pos and cost[c] < best_cost:
+		var ok := in_reach(card, c, target) if not card.is_empty() else dist(c, target) <= reach
+		if ok and c != a.pos and cost[c] < best_cost:
 			best_cost = cost[c]
 			best = c
 		for n in grid.neighbors4(c):
@@ -761,11 +766,11 @@ func ai_intent(a: Actor) -> Dictionary:
 	var shape: String = tgt.get("shape", "cell")
 	var at := maxi(a.next_at, now + 1)
 	if _wants_out(a):
-		var out := ai_step_cell(a, choice["aim"], int(tgt.get("range", 1)))
+		var out := ai_step_cell(a, choice["aim"], int(tgt.get("range", 1)), card)
 		if out != a.pos and not hazard(out, a):
 			return {"kind": "move", "to": out, "at": at}
-	if shape != "self" and shape != "all" and shape != "around" and dist(a.pos, choice["aim"]) > int(tgt.get("range", 1)):
-		var to := ai_step_cell(a, choice["aim"], int(tgt.get("range", 1)))
+	if shape != "self" and shape != "all" and shape != "around" and not in_reach(card, a.pos, choice["aim"]):
+		var to := ai_step_cell(a, choice["aim"], int(tgt.get("range", 1)), card)
 		if to != a.pos:
 			return {"kind": "move", "to": to, "at": at}
 		return {}
