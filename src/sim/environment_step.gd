@@ -5,6 +5,9 @@ extends RefCounted
 
 const CHAIN_CAP := 8
 const MAX_SLIDE := 9
+const REACTION_NAME := {"gas_explodes": "가스 폭발", "blaze_burns": "업화", "crystal_shatters": "메아리에 수정 깨짐",
+	"collapse_crushes": "붕괴", "water_shocks": "물에 감전", "curse_hurts": "저주"}
+const STATUS_NAME := {"burning": "화상", "poisoned": "중독"}
 const STATUS_DOT := {"burning": [3, "fire"], "poisoned": [2, "toxic"]}
 
 ## tick_statuses: statuses (and their damage over time) advance once per round, so Battle passes
@@ -31,7 +34,7 @@ static func _tick_statuses(grid: Grid, log: Array) -> void:
 		for s in STATUS_DOT:
 			if u.has_status(s):
 				var d: int = u.take_damage(STATUS_DOT[s][0], STATUS_DOT[s][1])
-				log.append({"t": "status_damage", "msg": "%s %s %d" % [u.name, s, d], "data": {"uid": u.uid, "status": s, "amount": d}})
+				log.append({"t": "status_damage", "msg": "%s → %s  %d" % [STATUS_NAME.get(s, s), u.name, d], "data": {"uid": u.uid, "status": s, "amount": d}})
 		for s in u.statuses.keys():
 			u.statuses[s] -= 1
 			if u.statuses[s] <= 0:
@@ -137,7 +140,7 @@ static func _apply_actions(grid: Grid, p: Vector2i, r: Dictionary, log: Array) -
 			var u2 = grid.unit_at(p)
 			if u2 != null:
 				var d: int = u2.take_damage(int(act["damage_units"]), act.get("kind", "physical"))
-				log.append({"t": "damage", "msg": "%s %d" % [u2.name, d], "data": {"uid": u2.uid, "amount": d, "source": r["id"]}})
+				log.append({"t": "damage", "msg": "칸 반응(%s) → %s  %d" % [REACTION_NAME.get(r["id"], r["id"]), u2.name, d], "data": {"uid": u2.uid, "amount": d, "source": r["id"]}})
 
 static func _enter_effects(grid: Grid, log: Array) -> void:
 	for u in grid.units:
@@ -193,10 +196,12 @@ static func push_unit(grid: Grid, u, dir: Vector2i, dist: int, log: Array) -> vo
 				grid.set_material(nxt, "none")
 				grid.shatter_queue.append(nxt)
 			var d: int = u.take_damage(dmg, "physical")
-			log.append({"t": "collision", "msg": "%s 충돌 %d" % [u.name, d], "data": {"uid": u.uid, "amount": d}})
+			var hitwhat: String = grid.unit_at(nxt).name if grid.unit_at(nxt) != null else "벽"
+			log.append({"t": "collision", "msg": "밀려 부딪힘(%s) → %s  %d" % [hitwhat, u.name, d], "data": {"uid": u.uid, "amount": d}})
 			var other = grid.unit_at(nxt)
 			if other != null:
-				other.take_damage(max(1, dmg / 2), "physical")
+				var od: int = other.take_damage(max(1, dmg / 2), "physical")
+				log.append({"t": "collision", "msg": "%s가 부딪혀 옴 → %s  %d" % [u.name, other.name, od], "data": {"uid": other.uid, "amount": od}})
 			return
 		if grid.mat_def(nxt).get("lethal", false):
 			if u.is_boss:

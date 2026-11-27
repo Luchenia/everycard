@@ -399,7 +399,43 @@ func advance(secs: int, on_done: Callable = Callable()) -> void:
 		_frame()
 
 ## Snapshot of where every unit is and its hp at the current second (view replay).
+const HURT_LOGS := ["damage", "status_damage", "collision", "void", "dislike"]
+var _audit_log_i := 0
+var _audit_hp := {}
+
+## Damage log check: any hp lost since the last frame that no log line explains is logged as
+## "unknown" so a hidden source shows up in the on-screen log.
+func _audit() -> void:
+	var told := {}
+	for i in range(_audit_log_i, log.size()):
+		var e: Dictionary = log[i]
+		if not e.has("at"):
+			e["at"] = now   # world-step lines (reactions, burns, pushes) are stamped with their second
+		if e["t"] in HURT_LOGS or e["t"] == "split":
+			var u := int(e["data"].get("uid", e["data"].get("from", -1)))
+			if e["t"] == "split":
+				var kid := _actor(int(e["data"].get("uid", -1)))
+				u = int(e["data"].get("from", -1))
+				told[u] = int(told.get(u, 0)) + (kid.hp if kid != null else 0)
+				continue
+			told[u] = int(told.get(u, 0)) + int(e["data"].get("amount", 0))
+	for a in actors:
+		if _audit_hp.has(a.uid):
+			var lost: int = int(_audit_hp[a.uid]) - a.hp
+			var miss: int = lost - int(told.get(a.uid, 0))
+			if lost > 0 and miss > 0 and not (a.hp == 0 and e_void(a)):
+				_log("unknown", "원인 모름 → %s  %d" % [a.name, miss], {"uid": a.uid, "amount": miss})
+		_audit_hp[a.uid] = a.hp
+	_audit_log_i = log.size()
+
+func e_void(a: Actor) -> bool:
+	for i in range(_audit_log_i, log.size()):
+		if log[i]["t"] == "void" and int(log[i]["data"].get("uid", -1)) == a.uid:
+			return true
+	return false
+
 func _frame() -> void:
+	_audit()
 	var pos := {}
 	var hp := {}
 	for a in actors:

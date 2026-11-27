@@ -25,6 +25,7 @@ class BattleContext extends RefCounted:
 	var timers: Array = []   # 시한폭탄: {at, part, user, aim, cells}
 	var bonus := 0           # 빈틈 노리기 bonus for the card being applied
 	var coat: Dictionary = {}  # 독 바르기 coating for the card being applied
+	var source := ""           # name of the card being applied, for the damage log
 
 ## Card definition by id, including generated "foe:<actor>" (cardified enemy) and "summon:<actor>" cards.
 static func card_def(id: String, catalog: Catalog) -> Dictionary:
@@ -74,7 +75,10 @@ static func apply(card: Dictionary, user, aim: Vector2i, ctx: BattleContext, cel
 			user.coat["charges"] = int(user.coat.get("charges", 1)) - 1
 			if user.coat["charges"] <= 0:
 				user.coat = {}
+	var prev_source := ctx.source
+	ctx.source = card.get("name", "")
 	_apply_parts(card, user, aim, ctx, cells_override)
+	ctx.source = prev_source
 	ctx.bonus = 0
 	ctx.coat = {}
 
@@ -88,7 +92,11 @@ static func hit(ctx: BattleContext, user, u, amount: int, kind: String, label :=
 			amt += Actor.BACKSTAB_BONUS
 			back = true
 	var d: int = u.take_damage(amt, kind)
-	_log(ctx, "damage", "%s %s %d" % [u.name, label, d], {"uid": u.uid, "amount": d, "back": back})
+	var what := label if label != "피해" or ctx.source == "" else ctx.source
+	var who: String = user.name if user != null else "?"
+	if user == u:
+		who += "(자기)"
+	_log(ctx, "damage", "%s → %s  %s %d%s" % [who, u.name, what, d, "  (뒤)" if back else ""], {"uid": u.uid, "amount": d, "back": back})
 	if back:
 		_log(ctx, "backstab", "급소 찌르기", {"uid": u.uid, "cells": [u.pos]})
 	if not ctx.coat.is_empty() and d > 0 and u.alive():
@@ -405,7 +413,7 @@ static func shatter(ctx: BattleContext, at: Vector2i, source) -> void:
 			if u == null or u == source or not u.alive():
 				continue
 			var d: int = u.take_damage(Actor.SHARD_DAMAGE, "physical")
-			_log(ctx, "damage", "%s 파편 %d" % [u.name, d], {"uid": u.uid, "amount": d})
+			_log(ctx, "damage", "수정 파편 → %s  %d" % [u.name, d], {"uid": u.uid, "amount": d})
 			if u.shattered:
 				u.shattered = false
 				shatter(ctx, u.pos, u)
