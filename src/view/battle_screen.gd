@@ -861,7 +861,7 @@ func _title(t: String, y: float) -> void:
 
 func _reward_overlay() -> void:
 	_veil()
-	_title("승리", 200)
+	_title("보물 상자" if flow.from_chest else "승리", 200)
 	_button("넘기기", Vector2(590, 560), func(): _pick_reward(-1))
 	for i in flow.rewards.size():
 		var cv := CardView.new()

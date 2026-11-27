@@ -40,6 +40,8 @@ var rewards: Array = []
 var shop_stock: Dictionary = {}
 var exit_dir := Vector2i.ZERO   # kept for the screen: a run of battles never walks out through a door
 var _cleared := false
+var from_chest := false          # the reward on screen came from a chest (the battle goes on after)
+var _last_pos := Vector2i(-1, -1)
 
 func _init(cat: Catalog, s: int) -> void:
 	catalog = cat
@@ -85,6 +87,15 @@ func start_battle(i: int) -> void:
 			continue
 		mats.append([p.x, p.y, pool[lr.next_int(pool.size())]])
 		reserved[p] = true
+	# a treasure chest somewhere in the middle of the board (not in the boss fight): walk onto it
+	# for a card, if the fight lets you
+	if not f.get("boss", false):
+		for k in 20:
+			var p := Vector2i(w / 2 - 2 + lr.next_int(5), 1 + lr.next_int(h - 2))
+			if not reserved.has(p):
+				mats.append([p.x, p.y, "chest"])
+				reserved[p] = true
+				break
 	var states := []
 	if THEME_STATE.has(f["theme"]):
 		for k in 7:
@@ -100,6 +111,8 @@ func start_battle(i: int) -> void:
 		me.hp = mini(hp, me.max_hp)
 	battle._rebuild_belt()
 	exit_dir = Vector2i.ZERO
+	_last_pos = player
+	from_chest = false
 	phase = "battle"
 
 ## Call after every command; moves the run forward (battle won, death).
@@ -120,7 +133,18 @@ func update() -> void:
 			phase = "victory"
 			return
 		rewards = _pick_rewards(_reward_pool(), 3)
+		from_chest = false
 		phase = "reward"
+		return
+	# stepping onto the chest opens it: a card choice right there, then the fight goes on
+	if me.pos != _last_pos:
+		_last_pos = me.pos
+		if battle.grid.get_material(me.pos) == "chest":
+			battle.grid.set_material(me.pos, "chest_open")
+			rewards = _pick_rewards(_reward_pool(), 3)
+			if not rewards.is_empty():
+				from_chest = true
+				phase = "reward"
 
 ## Takes reward i (-1 skips it) and starts the next battle.
 func choose_reward(i: int) -> void:
@@ -129,6 +153,10 @@ func choose_reward(i: int) -> void:
 	if i >= 0 and i < rewards.size():
 		_gain(rewards[i])
 	rewards = []
+	if from_chest:
+		from_chest = false
+		phase = "battle"
+		return
 	start_battle(index + 1)
 
 func _gain(id: String) -> void:
@@ -184,6 +212,8 @@ func _reward_pool() -> Array:
 	for id in catalog.player_cards:
 		if not catalog.cards.has(id):
 			continue
+		if deck.has(id):
+			continue   # every card in the deck is a different one: the ring brings each round anyway
 		if allowed.is_empty() or catalog.cards[id].get("pool", "common") in allowed:
 			pool.append(id)
 	pool.sort()
