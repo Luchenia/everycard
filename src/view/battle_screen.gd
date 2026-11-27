@@ -283,6 +283,8 @@ func _flashes() -> void:
 					if u:
 						from = u.pos
 				board.burst([] if is_beam else e["data"].get("cells", []), col, from)
+				if col == FLASH["water"] or col == FLASH["fire"]:
+					board.splash(e["data"].get("cells", []), "water" if col == FLASH["water"] else "fire")
 				if c.get("parts", []).any(func(pt): return pt.get("op", "") == "damage"):
 					board.attack(int(e["data"].get("user", -1)), e["data"].get("cells", []))
 			"trap", "interrupt", "delay_actor", "clone", "vanish":

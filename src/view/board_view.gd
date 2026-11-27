@@ -78,7 +78,8 @@ var fizzle: Dictionary = {}      # {cell, t0}: an out-of-range click
 var bursts: Array = []           # {cells, col, t0, beam_from}: a card or a blow landing
 var lunges: Dictionary = {}      # uid -> {t0, dir}: attacker leaning into its blow
 var beams: Array = []            # {from, path, bends, t0}
-var oneshots: Array = []         # {fx, ground (local), t0, flip}: slash / hit bursts
+var oneshots: Array = []         # {fx, ground (local), t0, flip, under, sc, a, life}: slashes, hits, dust
+var _moves: Dictionary = {}       # uid -> {fast, dir, next}: a body on the move, for its dust
 var cell_events: Dictionary = {} # cell -> {kind, t0}: fire lighting up / going out, ice breaking
 var _prev_mat: Dictionary = {}
 
@@ -179,6 +180,7 @@ func _process(delta: float) -> void:
 	if battle != null:
 		_update_liquids()
 		_track_hits()
+		_move_dust(delta)
 		_track_cells()
 	queue_redraw()
 	if top:
@@ -224,6 +226,59 @@ func shatter(p: Vector2i) -> void:
 	var st := Art.fx("crystal_shatter")
 	var life: float = (st["n"] / st["fps"]) if not st.is_empty() else 0.8
 	oneshots.append({"fx": "crystal_shatter", "ground": cell_rect(p).get_center(), "t0": real, "flip": false, "life": life})
+	puff("crystal_shards", cell_rect(p).get_center() - Vector2(0, 6 * S), false, 0.25)   # slow tumbling shards on top
+
+func _oneshots(tl: Control, off: Vector2, under: bool) -> void:
+	for q in oneshots:
+		if bool(q.get("under", false)) != under:
+			continue
+		var k: float = real - float(q["t0"])
+		if k < 0.0:
+			continue
+		var st := Art.fx(q["fx"])
+		if not st.is_empty() and k * st["fps"] < st["n"]:
+			_sprite(tl, st, q["ground"] + off, Art.frame_at(st, k), Color(1, 1, 1, float(q.get("a", 1.0))), q["flip"], float(q.get("sc", 1.0)))
+
+## A one-shot effect sprite on world time (so it hangs in held time). Ground is board-local.
+func puff(fx: String, ground: Vector2, flip := false, delay := 0.0, under := false, sc := 1.0, a := 1.0) -> void:
+	var st := Art.fx(fx)
+	if st.is_empty():
+		return
+	oneshots.append({"fx": fx, "ground": ground, "t0": real + delay, "flip": flip, "under": under, "sc": sc, "a": a,
+		"life": delay + float(st["n"]) / float(st["fps"])})
+
+## Water or fire landing on bodies: droplets / embers fly off each one that is hit.
+func splash(cells: Array, kind: String) -> void:
+	for p in cells:
+		if battle.grid.unit_at(p) != null:
+			puff("droplets" if kind == "water" else "embers", feet(Vector2(p)) - Vector2(0, 8 * S), randf() < 0.5, 0.05)
+
+## Dust and speed as bodies move: a puff when a step starts, a trail and speed lines for a roll
+## or a dash (more than a cell a second), a dust ring where a fast body lands.
+func _move_dust(delta: float) -> void:
+	if battle == null:
+		return
+	for u in battle.actors:
+		var going: bool = replaying and moving.has(u.uid)
+		var was: Dictionary = _moves.get(u.uid, {})
+		var cp := _pos_of(u)
+		var f := feet(cp)
+		if going and was.is_empty():
+			var to := Vector2(moving[u.uid])
+			var dir := to - cp
+			var act: Dictionary = acts.get(u.uid, {})
+			var fast: bool = dir.length() > 1.5 or act.get("kind", "") == "roll"
+			_moves[u.uid] = {"fast": fast, "dir": dir.normalized(), "next": real}
+			puff("roll_dust", f + Vector2(0, -2 * S), dir.x > 0, 0.0, true, 0.45 if not fast else 0.8, 0.9)
+			if fast:
+				puff("speed_lines", f - Vector2(0, 9 * S) - dir.normalized() * 6 * S, dir.x < 0, 0.0, false, 1.0, 0.8)
+		elif going and bool(was["fast"]) and real >= float(was["next"]):
+			was["next"] = real + 0.09
+			puff("roll_dust", f + Vector2(0, -2 * S), float(was["dir"].x) > 0, 0.0, true, 0.75, 0.8)
+		elif not going and not was.is_empty():
+			if bool(was["fast"]):
+				puff("land_ring", f, false, 0.0, true, 1.0, 0.9)
+			_moves.erase(u.uid)
 
 ## A beam's real path (bounces off mirrors, turns at crystal gems): glow plus core, fading out.
 func beam(from: Vector2i, path: Array, bends: Array, kind := "energy") -> void:
@@ -251,7 +306,7 @@ func attack(uid: int, cells: Array) -> void:
 		oneshots.append({"fx": "slash", "ground": feet(Vector2(a.pos)) - Vector2(0, 6 * S), "t0": real, "flip": dir.x < 0})
 	for p in cells:
 		if battle.grid.unit_at(p) != null:
-			oneshots.append({"fx": "hit", "ground": feet(Vector2(p)) - Vector2(0, 8 * S), "t0": real + 0.08, "flip": false})
+			puff("hit_spark", feet(Vector2(p)) - Vector2(0, 9 * S), randf() < 0.5, 0.06)
 
 func _track_cells() -> void:
 	var g := battle.grid
@@ -443,6 +498,7 @@ func reset_tracking() -> void:
 		bursts.clear()
 		beams.clear()
 		oneshots.clear()
+		_moves.clear()
 		cell_events.clear()
 		_prev_mat.clear()
 		fizzle = {}
@@ -513,6 +569,8 @@ func _draw_top() -> void:
 	# afterimages of attackers sit under everything standing, so they never hide a unit
 	for t in battle.telegraphs:
 		_ghost(tl, t, off)
+	# ground effects (dust, landing rings) sit under the bodies
+	_oneshots(tl, off, true)
 	for it in items:
 		if it.has("fx"):
 			_fx(tl, it["fx"], it["p"], off)
@@ -524,13 +582,7 @@ func _draw_top() -> void:
 			_unit(tl, it["unit"], off)
 	# one-shot effects: slashes, hit bursts, fire going out, ice breaking
 	oneshots = oneshots.filter(func(q): return real - float(q["t0"]) < float(q.get("life", 0.8)))
-	for q in oneshots:
-		var k: float = real - float(q["t0"])
-		if k < 0.0:
-			continue
-		var st := Art.fx(q["fx"])
-		if not st.is_empty() and k * st["fps"] < st["n"]:
-			_sprite(tl, st, q["ground"] + off, Art.frame_at(st, k), Color.WHITE, q["flip"])
+	_oneshots(tl, off, false)
 	for p in cell_events.keys():
 		var ev: Dictionary = cell_events[p]
 		var k2: float = real - float(ev["t0"])
