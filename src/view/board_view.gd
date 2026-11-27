@@ -542,15 +542,16 @@ func _draw_top() -> void:
 		var fr := cell_rect(cell, 2 * S)
 		fr.position += off
 		var fc := Color("#58c46a") if u.controller == "human" else (Color("#9a7ad8") if u.controller == "echo" else Color("#ff6a5a"))
-		tl.draw_rect(fr, Color(fc, 0.12))
+		fc.a = lerpf(0.2, 1.0, _calm()) if BT2 else 1.0   # team rings fade while time flows, like the other marks
+		tl.draw_rect(fr, Color(fc, 0.12 * fc.a))
 		# a ring on the floor around the feet
 		var fp := cell_rect(cell).get_center() + off + Vector2(0, C * 0.25)
 		var ring := PackedVector2Array()
 		for i in 25:
 			var an := TAU * i / 24.0
 			ring.append(fp + Vector2(cos(an) * C * 0.42, sin(an) * C * 0.17))
-		tl.draw_polyline(ring, Color(Art.INK, 0.6), 3 * S)
-		tl.draw_polyline(ring, Color(fc, 0.85), S)
+		tl.draw_polyline(ring, Color(Art.INK, 0.6 * fc.a), 3 * S)
+		tl.draw_polyline(ring, Color(fc, 0.85 * fc.a), S)
 	# y-sorted effects and units
 	var items := []
 	for p in g.all_cells():

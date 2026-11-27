@@ -219,13 +219,22 @@ func _step_replay(delta: float) -> void:
 		# a walk over several seconds glides at a steady pace: ease only where it starts and stops
 		var went: bool = prev.has("pos") and Vector2(prev["pos"].get(uid, a["pos"][uid])) != p0
 		var goes: bool = next.has("pos") and Vector2(next["pos"].get(uid, b["pos"].get(uid, a["pos"][uid]))) != p1
-		var e := k
+		# enemies do not all set off on the same instant: each starts a beat apart (presentation only)
+		var kk := k
+		var au: Actor = flow.battle._actor(int(uid))
+		if au != null and au.controller == "ai" and not went:
+			var lag := fmod(float(uid) * 0.618, 1.0) * 0.18
+			kk = clampf((k - lag) / (1.0 - lag), 0.0, 1.0)
+		var e := kk
 		if went and not goes:
-			e = 1.0 - (1.0 - k) * (1.0 - k)
+			e = 1.0 - (1.0 - kk) * (1.0 - kk)
 		elif goes and not went:
-			e = k * k
+			e = kk * kk
 		elif not went and not goes:
-			e = k * k * (3.0 - 2.0 * k)
+			e = kk * kk * (3.0 - 2.0 * kk)
+		if p1 != p0:
+			# feet on the floor: the body surges with each footfall instead of sliding at one speed
+			e = clampf(e + sin(e * TAU * 2.0) * 0.035, 0.0, 1.0)
 		board.shown_pos[uid] = p0.lerp(p1, e)
 		board.walk_link[uid] = Vector2i(int(went), int(goes))
 		if p1 != p0:
