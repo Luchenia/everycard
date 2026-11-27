@@ -324,23 +324,22 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 			user.shield_until = ctx.now + int(part.get("secs", 6))
 			_log(ctx, "shield", "%s 보호막 %d" % [user.name, user.shield], {"uid": user.uid, "amount": user.shield})
 		"dash":
-			# runs toward the aim one cell at a time (diagonals allowed), stopping before anything in the way
-			var steps := 0
-			while user.pos != aim and steps < 9:
-				var d := Vector2i(signi(aim.x - user.pos.x), signi(aim.y - user.pos.y))
-				var nxt: Vector2i = user.pos + d
-				if not g.passable(nxt) or g.unit_at(nxt) != null:
-					break
-				g.move_unit(user, nxt)
-				steps += 1
-				if g.mat_def(nxt).get("lethal", false) and not user.is_boss:
-					user.hp = 0
-					_log(ctx, "void", "%s 공허로 추락" % user.name, {"uid": user.uid})
-					break
-			if steps == 0:
+			# runs toward the aim (diagonals allowed), leaping over bodies on the way; walls and
+			# other structures stop it, and it lands on the last free cell it reached
+			var path := dash_path(g, user, aim)
+			var from_d: Vector2i = user.pos
+			var land := from_d
+			for p in path:
+				if g.unit_at(p) == null:
+					land = p
+			if land == from_d:
 				_log(ctx, "no_target", "막혀서 돌진 못 함")
 			else:
-				_log(ctx, "dash", "%s 돌진 %d칸" % [user.name, steps], {"uid": user.uid, "to": user.pos})
+				g.move_unit(user, land)
+				if g.mat_def(land).get("lethal", false) and not user.is_boss:
+					user.hp = 0
+					_log(ctx, "void", "%s 공허로 추락" % user.name, {"uid": user.uid})
+				_log(ctx, "dash", "%s 돌진 %d칸" % [user.name, maxi(absi(land.x - from_d.x), absi(land.y - from_d.y))], {"uid": user.uid, "to": land, "from": from_d})
 		"discount":
 			user.discount += int(part.get("amount", 0))
 			_log(ctx, "discount", "%s 다음 행동 %d초 단축" % [user.name, user.discount], {"uid": user.uid})
@@ -420,6 +419,21 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 			g.place_unit(a, spot)
 			ctx.actors.append(a)
 			_log(ctx, "summon", "%s 소환" % a.name, {"uid": a.uid})
+
+## The cells a dash runs over toward aim: one step at a time (diagonals allowed), through bodies,
+## up to the first wall or other structure.
+static func dash_path(g: Grid, user, aim: Vector2i) -> Array:
+	var out := []
+	var p: Vector2i = user.pos
+	for k in 9:
+		if p == aim:
+			break
+		var nxt := p + Vector2i(signi(aim.x - p.x), signi(aim.y - p.y))
+		if not g.in_bounds(nxt) or not g.passable(nxt):
+			break
+		out.append(nxt)
+		p = nxt
+	return out
 
 ## A crystal (a cell, or a crystallized unit) breaks: shards hit every unit around it.
 static func shatter(ctx: BattleContext, at: Vector2i, source) -> void:

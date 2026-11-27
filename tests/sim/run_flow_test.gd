@@ -51,11 +51,15 @@ func run() -> void:
 	s.choose_reward(0)
 	assert_eq(s.battle.human().def_id, kept, "next battle in the swapped body")
 	# a chest on the board: a card mid-fight, then the fight goes on
-	var ch := RunFlow.new(c, 15)
+	var ch: RunFlow = null
 	var spot := Vector2i(-1, -1)
-	for p in ch.battle.grid.all_cells():
-		if ch.battle.grid.get_material(p) == "chest":
-			spot = p
+	for sd in range(15, 60):
+		ch = RunFlow.new(c, sd)
+		for p in ch.battle.grid.all_cells():
+			if ch.battle.grid.get_material(p) == "chest":
+				spot = p
+		if spot.x >= 0:
+			break
 	assert_true(spot.x >= 0, "a chest on the board")
 	ch.battle.grid.move_unit(ch.battle.human(), spot)
 	ch.update()
@@ -65,7 +69,15 @@ func run() -> void:
 	assert_eq(ch.phase, "battle", "and the fight goes on")
 	assert_eq(ch.index, 0, "in the same battle")
 	assert_eq(ch.deck.size(), m + 1, "with the new card")
+	assert_true(ch.battle.belt.ring().has(ch.deck[ch.deck.size() - 1]), "the card joins the ring")
+	assert_eq(ch.battle.belt.ring().size(), ch.deck.size(), "every card once on the ring")
 	assert_eq(ch.battle.grid.get_material(spot), "chest_open", "the chest stays open")
+	var with_chest := 0
+	for sd in range(1, 41):
+		var rf := RunFlow.new(c, sd)
+		if rf.battle.grid.all_cells().any(func(p): return rf.battle.grid.get_material(p) == "chest"):
+			with_chest += 1
+	assert_true(with_chest > 5 and with_chest < 35, "a chest in some battles, not all (%d of 40)" % with_chest)
 	# no two of a card: rewards never offer one the deck has
 	for id in ch.rewards:
 		assert_true(not ch.deck.has(id), "reward not already in the deck")

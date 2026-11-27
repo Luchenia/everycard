@@ -14,6 +14,7 @@ func _lay(p: Array, foes: Array) -> Dictionary:
 func run() -> void:
 	c = Catalog.load_dir("res://data")
 	test_diagonal_throw()
+	test_dash_rules()
 	c.config = {"round_time": 10, "grid_w": 9, "grid_h": 7, "env_every": 2, "move_time": 1, "wheel_time": 1, "draws_per_round": 2}
 	c.actors["idle"] = {"id": "idle", "hp": 30, "mass": 1, "deck": [], "pattern": []}
 	c.cards["slow_hit"] = {"id": "slow_hit", "time": 3, "weight": 1, "telegraph": true, "target": {"shape": "cell", "range": 9}, "parts": [{"op": "damage", "amount": 7, "kind": "true"}]}
@@ -172,3 +173,17 @@ func test_diagonal_throw() -> void:
 	assert_true(Battle.in_reach(card, Vector2i(2, 2), Vector2i(5, 5)), "the dagger reaches along the diagonal")
 	Effects.apply(card, b.human(), Vector2i(5, 5), b.ctx)
 	assert_true(foe.hp < hp, "and flies diagonally into the slime")
+
+func test_dash_rules() -> void:
+	var cc := Catalog.load_dir("res://data")
+	# a slime in the way: the dash leaps it
+	var b := Battle.new(cc, 1, "walker", ["slime"], {"player_pos": [2, 3], "enemy_pos": [[3, 3]], "materials": [[2, 1, "wall"]]})
+	var card := Effects.card_def("step", cc)
+	Effects.apply(card, b.human(), Vector2i(4, 3), b.ctx)
+	assert_eq(b.human().pos, Vector2i(4, 3), "dash leaps over a body")
+	# a wall in the way: the cell behind it is not offered
+	b = Battle.new(cc, 1, "walker", ["slime"], {"player_pos": [2, 3], "enemy_pos": [[8, 6]], "materials": [[3, 3, "wall"]]})
+	b.belt.slots[0] = {"card_id": "step", "life": 99}
+	assert_true(not b.can_play(0, Vector2i(4, 3)), "no dash through a wall")
+	assert_true(b.can_play(0, Vector2i(2, 5)), "an open cell is fine")
+	assert_true(not b.can_play(0, Vector2i(3, 3)), "nor onto the wall")
