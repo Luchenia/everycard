@@ -89,12 +89,60 @@ func _ready() -> void:
 	tips.add_theme_constant_override("separation", 4)
 	tips.z_index = 10
 	add_child(tips)
+	_make_log_panel()
 	overlay = Control.new()
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(overlay)
 	add_child(hand_cursor)
 	_new_run()
+
+# ---- temporary damage log (to find where unexplained damage comes from) ------------------------
+
+const LOG_SHOWN := ["play", "telegraph", "telegraph_hit", "damage", "status_damage", "collision", "void", "dislike",
+	"like", "split", "death", "unknown", "shatter", "parry", "dodge", "trap", "timer_fire"]
+const LOG_LINES := 40
+var log_box: RichTextLabel
+
+func _make_log_panel() -> void:
+	var panel := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.05, 0.045, 0.07, 0.82)
+	sb.border_color = Color("#3a3548")
+	sb.set_border_width_all(1)
+	sb.set_content_margin_all(6)
+	panel.add_theme_stylebox_override("panel", sb)
+	panel.position = Vector2(1054, 168)
+	panel.size = Vector2(222, 440)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	log_box = RichTextLabel.new()
+	log_box.bbcode_enabled = true
+	log_box.scroll_following = true
+	log_box.fit_content = false
+	log_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	log_box.add_theme_font_size_override("normal_font_size", 11)
+	log_box.add_theme_constant_override("line_separation", 2)
+	panel.add_child(log_box)
+	add_child(panel)
+
+func _log_line(e: Dictionary) -> void:
+	if log_box == null or not e["t"] in LOG_SHOWN:
+		return
+	var col := "#b8b2c8"
+	var me := flow.battle.human()
+	var uid := int(e.get("data", {}).get("uid", -1))
+	match e["t"]:
+		"unknown": col = "#ff6af0"
+		"damage", "status_damage", "collision", "void", "dislike":
+			col = "#ff8a7a" if me != null and uid == me.uid else "#ffd27a"
+		"like", "split": col = "#9cf08a"
+		"play": col = "#9cc8f0"
+		"telegraph", "telegraph_hit": col = "#d9a35a"
+		"death": col = "#8a8498"
+	var msg := str(e.get("msg", "")).replace("[", "(").replace("]", ")")
+	log_box.append_text("[color=#5a5468]%d초[/color] [color=%s]%s[/color]\n" % [int(e.get("at", 0)), col, msg])
+	if log_box.get_paragraph_count() > LOG_LINES + 10:
+		log_box.remove_paragraph(0)
 
 func _new_run() -> void:
 	flow = RunFlow.new(catalog, seed_value)
@@ -177,6 +225,7 @@ func _flashes() -> void:
 		if int(e.get("at", 0)) > t_now:
 			break
 		log_i += 1
+		_log_line(e)
 		match e["t"]:
 			"play":
 				if int(e["data"].get("secs", 0)) >= 2:
