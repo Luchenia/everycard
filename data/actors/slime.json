@@ -38,5 +38,6 @@
   "cold": 2,
   "ice": 2
  },
- "splits": true
+ "splits": true,
+ "move": "hop"
 }

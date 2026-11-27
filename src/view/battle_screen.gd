@@ -100,7 +100,7 @@ func _ready() -> void:
 # ---- temporary damage log (to find where unexplained damage comes from) ------------------------
 
 const LOG_SHOWN := ["play", "telegraph", "telegraph_hit", "damage", "status_damage", "collision", "void", "dislike",
-	"like", "split", "death", "unknown", "shatter", "parry", "dodge", "trap", "timer_fire"]
+	"like", "split", "charge", "death", "unknown", "shatter", "parry", "dodge", "trap", "timer_fire"]
 const LOG_LINES := 40
 var log_box: RichTextLabel
 
@@ -262,6 +262,9 @@ func _flashes() -> void:
 			"split":
 				board.burst(e["data"].get("cells", []), Color("#8fe07a"))
 				board.shake(0.15)
+			"charge":
+				board.burst(e["data"].get("cells", []), Color("#ffcf6a"))
+				board.shake(0.3)
 			"backstab":
 				board.burst(e["data"].get("cells", []), Color("#ff5a7a"))
 			"timer_fire":

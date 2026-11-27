@@ -620,10 +620,19 @@ func _ai_act(a: Actor) -> void:
 			a.next_at = now + maxi(1, action_secs(int(cfg["move_time"]), a))
 			return
 	if shape != "self" and shape != "all" and shape != "around" and not in_reach(card, a.pos, aim):
-		_ai_step_toward(a, aim, int(tgt.get("range", 1)), card)
-		a.next_at = now + maxi(1, action_secs(int(cfg["move_time"]), a))
+		var plan := move_plan(a, foe, aim, card)
+		a.stuck = a.stuck + 1 if plan["to"] == a.pos else 0
+		if plan["to"] != a.pos:
+			a.facing = Targeting.dir_to(a.pos, plan["to"])
+			grid.move_unit(a, plan["to"])
+			if plan["cells"] > 1:
+				_log("hop", "%s 도약" % a.name, {"uid": a.uid, "cells": [plan["to"]]})
+		a.next_at = now + int(plan["secs"])
 		return
-	a.pattern_index += 1
+	if choice.get("trick", false):
+		a.trick_ready[choice["card_id"]] = now + int(choice["cd"])
+	else:
+		a.pattern_index += 1
 	if aim != a.pos:
 		a.facing = Targeting.dir_to(a.pos, aim)
 	var secs := maxi(1, action_secs(int(card.get("time", 1)), a))
@@ -637,6 +646,47 @@ func _ai_act(a: Actor) -> void:
 		_log("play", "%s: %s" % [a.name, card.get("name", choice["card_id"])], {"card": choice["card_id"], "aim": aim})
 		Effects.apply(card, a, aim, ctx)
 		a.next_at = now + secs
+
+## Where a monster's next move takes it, by its way of moving (no change to the world):
+##  chase:     the shortest safe way to where it can strike;
+##  hop:       a leap of up to two cells along that way (slimes), a beat slower;
+##  kite:      keeps off your row and column and backs off when you get next to it (imps);
+##  intercept: heads for where you are going, not where you are (the boss).
+## Returns {to, secs, cells}.
+func move_plan(a: Actor, foe: Actor, aim: Vector2i, card: Dictionary) -> Dictionary:
+	var reach := int(card.get("target", {}).get("range", 1))
+	var base := a.move_secs if a.move_secs > 0 else int(cfg["move_time"])
+	var secs := maxi(1, action_secs(base, a))
+	var to := a.pos
+	match a.move_style:
+		"kite":
+			if dist(a.pos, foe.pos) <= 1 and not a.rooted():
+				var best_d := dist(a.pos, foe.pos)
+				for n in grid.neighbors4(a.pos):
+					if grid.passable(n) and grid.unit_at(n) == null and not hazard(n, a) and dist(n, foe.pos) > best_d:
+						best_d = dist(n, foe.pos)
+						to = n
+				if to != a.pos:
+					return {"to": to, "secs": secs, "cells": 1}
+			to = ai_step_cell(a, aim, reach, card, true)
+		"intercept":
+			var ahead: Vector2i = foe.pos + foe.facing * 2
+			if grid.in_bounds(ahead) and grid.passable(ahead) and dist(a.pos, ahead) < dist(a.pos, foe.pos) + 2:
+				to = ai_step_cell(a, ahead, 1)
+			if to == a.pos:
+				to = ai_step_cell(a, aim, reach, card)
+		"hop":
+			to = ai_step_cell(a, aim, reach, card)
+			if to != a.pos and not in_reach(card, to, aim):
+				var keep := a.pos
+				a.pos = to
+				var to2 := ai_step_cell(a, aim, reach, card)
+				a.pos = keep
+				if to2 != to and to2 != a.pos and grid.unit_at(to2) == null:
+					return {"to": to2, "secs": secs + 1, "cells": 2}
+		_:
+			to = ai_step_cell(a, aim, reach, card)
+	return {"to": to, "secs": secs, "cells": 1}
 
 ## Even a reckless one leaves a cell it hates; the others leave any harm.
 func _wants_out(a: Actor) -> bool:
@@ -736,7 +786,7 @@ func _splits() -> void:
 const HAZARD_COST := {"reckless": 1, "careful": 8, "stubborn": 4}
 const STUCK_LIMIT := 3
 
-func ai_step_cell(a: Actor, target: Vector2i, reach := 1, card := {}) -> Vector2i:
+func ai_step_cell(a: Actor, target: Vector2i, reach := 1, card := {}, off_line := false) -> Vector2i:
 	if a.rooted():
 		return a.pos
 	var temper := a.temper
@@ -762,8 +812,10 @@ func ai_step_cell(a: Actor, target: Vector2i, reach := 1, card := {}) -> Vector2
 		if cost[c] > 30:
 			break
 		var ok := in_reach(card, c, target) if not card.is_empty() else dist(c, target) <= reach
-		if ok and c != a.pos and cost[c] < best_cost:
-			best_cost = cost[c]
+		# off_line: a spot off the target's row and column counts as nearer (it will not walk your line)
+		var cc: int = cost[c] + (3 if off_line and (c.x == target.x or c.y == target.y) else 0)
+		if ok and c != a.pos and cc < best_cost:
+			best_cost = cc
 			best = c
 		for n in grid.neighbors4(c):
 			if not free.call(n):
@@ -806,9 +858,9 @@ func ai_intent(a: Actor) -> Dictionary:
 		if out != a.pos and not hazard(out, a):
 			return {"kind": "move", "to": out, "at": at}
 	if shape != "self" and shape != "all" and shape != "around" and not in_reach(card, a.pos, choice["aim"]):
-		var to := ai_step_cell(a, choice["aim"], int(tgt.get("range", 1)), card)
-		if to != a.pos:
-			return {"kind": "move", "to": to, "at": at}
+		var plan := move_plan(a, choice["foe"], choice["aim"], card)
+		if plan["to"] != a.pos:
+			return {"kind": "move", "to": plan["to"], "at": at}
 		return {}
 	# in reach: the blow it will start at `at`, where it would land if nobody moves
 	var has_damage: bool = card.get("parts", []).any(func(p): return p.get("op", "") == "damage")

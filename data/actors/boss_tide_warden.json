@@ -40,5 +40,15 @@
  "dislikes": {
   "heat": 2,
   "blaze": 3
- }
+ },
+ "move": "intercept",
+ "tricks": [
+  {
+   "card": "enemy_tide",
+   "when": "aligned",
+   "min": 1,
+   "max": 5,
+   "cd": 7
+  }
+ ]
 }

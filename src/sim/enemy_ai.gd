@@ -25,8 +25,40 @@ static func choose(actor: Actor, battle) -> Dictionary:
 	var foe := nearest_foe(actor, battle)
 	if foe == null:
 		return {}
+	var trick := _trick(actor, foe, battle)
+	if not trick.is_empty():
+		return trick
 	var card_id: String = seq[actor.pattern_index % seq.size()]
 	var card := Effects.card_def(card_id, battle.catalog)
 	var shape: String = card.get("target", {}).get("shape", "cell")
 	var aim: Vector2i = actor.pos if shape == "self" else foe.pos
 	return {"card_id": card_id, "aim": aim, "foe": foe}
+
+## A monster's own move for the moment (its "tricks"): the golem rushes down a clear straight
+## lane, the boss sends its wave along one. Each has a cooldown, so it stays a surprise.
+static func _trick(actor: Actor, foe: Actor, battle) -> Dictionary:
+	for t in actor.tricks:
+		var id: String = t["card"]
+		if battle.now < int(actor.trick_ready.get(id, 0)):
+			continue
+		match t.get("when", ""):
+			"aligned":
+				var d: Vector2i = foe.pos - actor.pos
+				if d.x != 0 and d.y != 0:
+					continue
+				var n := absi(d.x) + absi(d.y)
+				if n < int(t.get("min", 1)) or n > int(t.get("max", 6)):
+					continue
+				var step := Vector2i(signi(d.x), signi(d.y))
+				var clear := true
+				for i in range(1, n):
+					var p: Vector2i = actor.pos + step * i
+					if not battle.grid.passable(p) or battle.grid.unit_at(p) != null:
+						clear = false
+						break
+				if not clear:
+					continue
+				var card := Effects.card_def(id, battle.catalog)
+				var aim: Vector2i = actor.pos + step if int(card.get("target", {}).get("range", 1)) <= 1 else foe.pos
+				return {"card_id": id, "aim": aim, "foe": foe, "trick": true, "cd": int(t.get("cd", 6))}
+	return {}
