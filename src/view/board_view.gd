@@ -577,6 +577,7 @@ func _draw_marks() -> void:
 		tl.draw_rect(hc.grow(-S), Color(Art.GOLD, 0.12 + 0.10 * k5))
 		_corners(tl, hc.grow((-1.0 + k5) * S), Color(Art.GOLD, 0.95), 5 * S)
 	# enemy warnings: always above effects and units
+	_badge_spots = []
 	for t in battle.telegraphs:
 		_telegraph(tl, t, off)
 	if not replaying:
@@ -1219,8 +1220,20 @@ func _telegraph(tl: Control, t: Dictionary, off: Vector2) -> void:
 	var ast := Art.unit(Art.unit_id(a))
 	_badge(tl, feet(_pos_of(a)) + off - Vector2(0, (float(ast.get("ay", 22)) + 10) * S), txt, col, hot, pulse)
 
+var _badge_spots: Array = []   # where this frame's countdown badges went, so two never sit on each other
+
 func _badge(tl: Control, at: Vector2, txt: String, col: Color, hot: bool, pulse: float) -> void:
 	var r := 5.5 * S * (1.0 + (0.12 * pulse if hot else 0.0))
+	for k in 6:
+		var clash := false
+		for q in _badge_spots:
+			if at.distance_to(q) < 13.0 * S:
+				clash = true
+				break
+		if not clash:
+			break
+		at.x += 13.0 * S
+	_badge_spots.append(at)
 	tl.draw_circle(at, r + S, Art.INK)
 	tl.draw_circle(at, r, col)
 	tl.draw_string(font, at + Vector2(-5 if txt.length() == 1 else -9, 6), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Art.INK)

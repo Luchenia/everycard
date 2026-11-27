@@ -39,8 +39,8 @@ func test_dash_runs_two_cells_and_stops_at_blocker() -> void:
 	assert_true(b.cmd_play(0, Vector2i(3, 3)), "dash 2 cells")
 	assert_eq(h.pos, Vector2i(3, 3), "ran two cells")
 	b.grid.set_material(Vector2i(4, 2), "wall")
-	assert_true(b.cmd_play(0, Vector2i(4, 2)), "dash diagonally")
-	assert_eq(h.pos, Vector2i(3, 3), "wall in the way: did not move")
+	assert_true(not b.cmd_play(0, Vector2i(4, 2)), "a wall is not a place to dash to")
+	assert_eq(h.pos, Vector2i(3, 3), "did not move")
 	assert_true(b.cmd_play(0, Vector2i(5, 3)), "dash right")
 	assert_eq(h.pos, Vector2i(5, 3), "ran right")
 

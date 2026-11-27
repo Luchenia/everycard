@@ -87,7 +87,7 @@ func _ready() -> void:
 	tips = VBoxContainer.new()
 	tips.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tips.add_theme_constant_override("separation", 4)
-	tips.z_index = 10
+	tips.z_index = 100   # explanations sit above the hand's cards, never behind them
 	add_child(tips)
 	_make_log_panel()
 	overlay = Control.new()
@@ -1151,9 +1151,8 @@ func _path(from: Vector2i, to: Vector2i) -> Array:
 	return out
 
 ## A quick flick of the wheel keeps turning the ring: notches that follow within a moment add
-## up to ROLL_BURST cards in one smooth turn (one card per notch, so a single notch never
+## up in one smooth turn, as many as the wheel gives (one card per notch, so a single notch never
 ## over-turns by mistake).
-const ROLL_BURST := 4
 const ROLL_CHAIN := 0.35   # seconds after a roll in which the next notch joins it
 var roll_at := -9.0
 var roll_burst := 0
@@ -1222,7 +1221,7 @@ func _input(ev: InputEvent) -> void:
 		return
 	get_viewport().set_input_as_handled()
 	var chained := real - roll_at < ROLL_CHAIN
-	if _replaying() and not (chained and fast_flow and roll_burst < ROLL_BURST):
+	if _replaying() and not (chained and fast_flow):
 		return
 	if not chained:
 		roll_burst = 0

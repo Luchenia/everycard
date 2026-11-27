@@ -272,6 +272,11 @@ func can_play(slot: int, aim: Vector2i) -> bool:
 	if shape != "self" and shape != "all" and shape != "around":
 		if not grid.in_bounds(aim) or not in_reach(card, h.pos, aim):
 			return false
+		if card.get("parts", []).any(func(pt): return pt.get("op", "") == "dash"):
+			# a dash only offers cells it can really land on: free, and not behind a wall
+			var path := Effects.dash_path(grid, h, aim)
+			if path.is_empty() or path.back() != aim or grid.unit_at(aim) != null:
+				return false
 	return true
 
 ## Plays a card: its time passes (wind-up), the effect lands at the end, then `exhaust` seconds
@@ -590,6 +595,14 @@ func _track_telegraphs() -> void:
 func _attack_cells(card: Dictionary, a: Actor, aim: Vector2i, foe: Actor) -> Array:
 	var tgt: Dictionary = card.get("target", {})
 	var cells: Array = Targeting.cells(tgt.get("shape", "cell"), a.pos, aim, int(tgt.get("size", 0)))
+	if card.get("parts", []).any(func(pt): return pt.get("op", "") == "charge"):
+		# a charge's lane ends at the first wall: nothing behind it is in danger
+		var lane := []
+		for p in cells:
+			if not grid.passable(p):
+				break
+			lane.append(p)
+		cells = lane
 	var n_safe := int(card.get("safe", 0))
 	if n_safe > 0:
 		# safe-zone attack: everything except a few cells, one of them within reach of the target

@@ -22,6 +22,7 @@ const THEME_POOL := {
 	"crystal": ["crystal", "crystal", "crystal", "metal"],
 }
 const THEME_STATE := {"frost": "cold", "ember": "heat", "marsh": "damp", "crystal": "mana"}
+const CHEST_CHANCE := 45   # percent of battles with a chest on the board
 const PRICE := {"basic": 30, "common": 40, "rare": 70, "legendary": 120}
 const HEAL_PRICE := 25
 const HEAL_AMOUNT := 15
@@ -87,9 +88,9 @@ func start_battle(i: int) -> void:
 			continue
 		mats.append([p.x, p.y, pool[lr.next_int(pool.size())]])
 		reserved[p] = true
-	# a treasure chest somewhere in the middle of the board (not in the boss fight): walk onto it
-	# for a card, if the fight lets you
-	if not f.get("boss", false):
+	# now and then a treasure chest in the middle of the board (never in the boss fight): walk
+	# onto it for a card, if the fight lets you
+	if not f.get("boss", false) and lr.next_int(100) < CHEST_CHANCE:
 		for k in 20:
 			var p := Vector2i(w / 2 - 2 + lr.next_int(5), 1 + lr.next_int(h - 2))
 			if not reserved.has(p):
@@ -164,7 +165,7 @@ func _gain(id: String) -> void:
 	var me := battle.human()
 	if me != null:
 		me.deck.append(id)
-		battle._rebuild_belt()
+		battle._on_deck_add(me, id)   # into the ring just behind the hand; the hand itself stays as it is
 
 # ---- shop ---------------------------------------------------------------------------------------
 
