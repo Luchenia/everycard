@@ -316,10 +316,15 @@ func cmd_play(slot: int, aim: Vector2i) -> bool:
 
 ## Mouse-wheel roll: the end card on that side is discarded and a new card enters on the other
 ## side. Costs wheel_time per weight of the discarded card.
+## The ring turns one way only: the hand's left card goes to the back of the ring and the next
+## card comes in on the right. A played card also goes to the back, so it comes round again only
+## after every other card has (the wheel either way turns it this way).
 func cmd_wheel(dir: int) -> bool:
 	var h := human()
 	if not _can_act() or belt == null or dir == 0:
 		return false
+	if belt.mode == "relaxed":
+		dir = -1
 	var end_id := belt.end_card(dir)
 	var w := maxi(1, int(Effects.card_def(end_id, catalog).get("weight", 1))) if end_id != "" else 1
 	var secs := action_secs(w * int(cfg["wheel_time"]), h)
