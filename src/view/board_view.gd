@@ -519,6 +519,8 @@ func _draw_top() -> void:
 	var g := battle.grid
 	var off := _shake_off()
 	var tl := top
+	# haste: one big dial over each connected group, not a rune per cell
+	_haste_fields(tl, off)
 	# cell auras (inside their cells)
 	for p in g.all_cells():
 		_aura(tl, p, off)
@@ -743,6 +745,35 @@ func _corners(tl: Control, r: Rect2, col: Color, L: float) -> void:
 		tl.draw_rect(Rect2(o + Vector2(0 if d.x > 0 else -L, 0 if d.y > 0 else -w), Vector2(L, w)), col)
 		tl.draw_rect(Rect2(o + Vector2(0 if d.x > 0 else -w, 0 if d.y > 0 else -L), Vector2(w, L)), col)
 
+## [가속] cells joined into groups; each group gets one dial stretched over its bounding box.
+func _haste_fields(tl: Control, off: Vector2) -> void:
+	var st := Art.fx("haste_field")
+	if st.is_empty():
+		return
+	var g := battle.grid
+	var seen := {}
+	for p in g.all_cells():
+		if seen.has(p) or g.time_scale(p) <= 1.05:
+			continue
+		var lo := p
+		var hi := p
+		var todo: Array[Vector2i] = [p]
+		seen[p] = true
+		while not todo.is_empty():
+			var q: Vector2i = todo.pop_back()
+			lo = Vector2i(mini(lo.x, q.x), mini(lo.y, q.y))
+			hi = Vector2i(maxi(hi.x, q.x), maxi(hi.y, q.y))
+			for d in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+				var nq: Vector2i = q + d
+				if g.in_bounds(nq) and not seen.has(nq) and g.time_scale(nq) > 1.05:
+					seen[nq] = true
+					todo.append(nq)
+		var box := cell_rect(lo).merge(cell_rect(hi))
+		var wpx := box.size.x / (32.0 * S)
+		var hpx := box.size.y / (32.0 * S)
+		var sc := minf(wpx, hpx)
+		_sprite(tl, st, box.get_center() + off, Art.frame_at(st, real, lo.x + lo.y), Color(1, 1, 1, 0.7), false, sc, Vector2(wpx / sc, hpx / sc))
+
 ## Variable states shown inside the cell they belong to: time, charge, wind, crush.
 func _aura(tl: Control, p: Vector2i, off: Vector2) -> void:
 	var g := battle.grid
@@ -756,7 +787,7 @@ func _aura(tl: Control, p: Vector2i, off: Vector2) -> void:
 	elif ts < 0.95:
 		tl.draw_rect(r.grow(-S), Color(0.45, 0.35, 0.7, 0.10 + (1.0 - ts) * 0.12))
 		_hand(tl, c, real * 0.6 * ts, Color(0.75, 0.65, 1.0, 0.55))
-	elif ts > 1.05:
+	elif ts > 1.05 and Art.fx("haste_field").is_empty():
 		var hs := Art.fx("haste")
 		if hs.is_empty():
 			_hand(tl, c, real * 4.0 * ts, Color(1.0, 0.85, 0.4, 0.7))

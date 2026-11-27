@@ -398,6 +398,20 @@
         16,
         18
       ]
+    },
+    "haste_field.png": {
+      "what": "[가속] field: one gold clock dial on the floor stretched over a whole connected group of haste cells, loops (PixelLab, 2026-11-28)",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 25,
+      "fps": 12,
+      "loop": true,
+      "anchor": [
+        24,
+        24
+      ]
     }
   },
   "units": {
