@@ -57,6 +57,7 @@ var _wall: PackedInt32Array = PackedInt32Array()
 var _floor_for: Battle
 var popups: Array = []           # {p: Vector2 local, text, col, t0}
 var flashes: Dictionary = {}     # uid -> real time of last hit
+var flash_rt: Dictionary = {}     # uid -> wall-clock time of last hit: the white flash always shows, however fast or slow the world runs
 var _last_hp: Dictionary = {}
 var shake_until := 0.0
 var fizzle: Dictionary = {}      # {cell, t0}: an out-of-range click
@@ -369,6 +370,7 @@ func _track_hits() -> void:
 			popups.append({"p": feet(_pos_of(u)) - Vector2(0, 30 * S), "text": "%d" % (int(_last_hp[u.uid]) - hp),
 				"col": Color("#ff5a4a"), "t0": real})
 			flashes[u.uid] = real
+			flash_rt[u.uid] = rt
 		elif _last_hp.has(u.uid) and hp > int(_last_hp[u.uid]):
 			popups.append({"p": feet(_pos_of(u)) - Vector2(0, 30 * S), "text": "+%d" % (hp - int(_last_hp[u.uid])),
 				"col": Color("#7ee08a"), "t0": real})
@@ -982,8 +984,10 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 	if u.splits and u.split_done:
 		sq *= 0.8   # a split half is a smaller body
 	_sprite_sq(tl, st, ground, idx, tint, flip, sq)
-	if hit_k < 0.09 and not flashed:
-		_sprite_sq(tl, st, ground, idx, Color(5, 5, 5, 1), flip, sq)   # white flash
+	# white flash on a hit, on wall-clock time: solid white, a gap, then a second blink
+	var fk := (rt - float(flash_rt[u.uid])) if flash_rt.has(u.uid) else 9.0
+	if not flashed and (fk < 0.11 or (fk > 0.17 and fk < 0.24)):
+		_sprite_sq(tl, st, ground, idx, Color(30, 30, 30, 1), flip, sq)
 	if u.has_status("shocked"):
 		var sh := Art.fx("shock")
 		_sprite(tl, sh, f - Vector2(0, body_st["h"] * 0.45 * S), _fr(sh, clock * 3.0, u.uid))
