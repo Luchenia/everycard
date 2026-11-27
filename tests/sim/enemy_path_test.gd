@@ -44,6 +44,7 @@ func run() -> void:
 	test_tempers()
 	test_likes_dislikes()
 	test_split()
+	test_move_styles()
 
 func ring_of_fire() -> Array:
 	var ring := []
@@ -128,3 +129,39 @@ func test_split() -> void:
 	s.hp = 1
 	b._after_action()
 	assert_eq(b.actors.size(), n + 1, "a half does not split again")
+
+func test_move_styles() -> void:
+	# slime hops two cells at a time
+	var b := battle({"player_pos": [1, 3], "enemy_pos": [[7, 3]], "materials": []})
+	var s: Actor = b.actors[1]
+	var card := Effects.card_def("enemy_bite", c)
+	var plan := b.move_plan(s, b.human(), b.human().pos, card)
+	assert_eq(Battle.dist(s.pos, plan["to"]), 2, "slime hops two cells")
+	# imp keeps off your row and column
+	b = Battle.new(c, 1, "walker", ["ember_imp"], {"player_pos": [1, 3], "enemy_pos": [[8, 3]], "materials": []})
+	var imp: Actor = b.actors[1]
+	var walked := imp.pos
+	for k in 6:
+		var pl := b.move_plan(imp, b.human(), b.human().pos, Effects.card_def("enemy_ember", c))
+		if pl["to"] == imp.pos:
+			break
+		b.grid.move_unit(imp, pl["to"])
+	assert_true(imp.pos.y != 3 or Battle.dist(imp.pos, b.human().pos) > 3, "imp comes in off your line")
+	# and backs off when you are next to it
+	b.grid.move_unit(b.human(), imp.pos + Vector2i.LEFT if b.grid.unit_at(imp.pos + Vector2i.LEFT) == null else imp.pos + Vector2i.UP)
+	var away := b.move_plan(imp, b.human(), b.human().pos, Effects.card_def("enemy_ember", c))
+	assert_true(Battle.dist(away["to"], b.human().pos) > 1, "imp backs off")
+	# golem rushes down a clear lane
+	b = Battle.new(c, 1, "walker", ["iron_golem"], {"player_pos": [1, 3], "enemy_pos": [[6, 3]], "materials": []})
+	var g: Actor = b.actors[1]
+	var ch := EnemyAI.choose(g, b)
+	assert_eq(ch.get("card_id", ""), "enemy_charge", "golem charges when you stand in its lane")
+	var hp := b.human().hp
+	Effects.apply(Effects.card_def("enemy_charge", c), g, ch["aim"], b.ctx)
+	assert_true(b.human().hp < hp, "the charge hits")
+	assert_true(Battle.dist(g.pos, b.human().pos) <= 2, "and the golem ends up in your face")
+	# out of the lane it walks, slowly
+	b = Battle.new(c, 1, "walker", ["iron_golem"], {"player_pos": [1, 1], "enemy_pos": [[6, 4]], "materials": []})
+	g = b.actors[1]
+	assert_true(EnemyAI.choose(g, b).get("card_id", "") != "enemy_charge", "no lane, no charge")
+	assert_eq(b.move_plan(g, b.human(), b.human().pos, Effects.card_def("enemy_slam", c))["secs"], 2, "golem steps take 2 seconds")

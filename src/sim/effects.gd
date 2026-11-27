@@ -241,6 +241,26 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 					_beam(part, user, aim, ctx, dd)
 			else:
 				_beam(part, user, aim, ctx)
+		"charge":
+			# 돌진: rush straight down the lane until something stops it; whatever stops it takes the blow
+			var dc := Targeting.dir_to(user.pos, aim)
+			var from_c: Vector2i = user.pos
+			for i in int(part.get("dist", 6)):
+				var nx: Vector2i = user.pos + dc
+				if not g.in_bounds(nx):
+					break
+				var blocker = g.unit_at(nx)
+				if blocker != null and blocker.alive():
+					hit(ctx, user, blocker, int(part.get("damage", 8)), "physical")
+					EnvironmentStep.push_unit(g, blocker, dc, int(part.get("push", 1)), ctx.log)
+					break
+				if not g.passable(nx) or g.mat_def(nx).get("lethal", false):
+					if g.get_material(nx) == "crystal":
+						g.set_material(nx, "none")
+						shatter(ctx, nx, null)
+					break
+				g.move_unit(user, nx)
+			_log(ctx, "charge", "%s 돌진" % user.name, {"uid": user.uid, "from": from_c, "to": user.pos, "cells": [user.pos]})
 		"behind":
 			# 그림자 밟기: step into the cell at the target's back
 			var t2 = g.unit_at(aim)

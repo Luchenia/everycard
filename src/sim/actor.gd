@@ -40,6 +40,10 @@ var temper := "careful"       # how it treats fire and curses on its way: reckle
 var stuck := 0                # seconds spent unable to get closer; a careful enemy loses patience
 var likes: Dictionary = {}    # material or state id -> hp healed each world step standing on it
 var dislikes: Dictionary = {} # material or state id -> hp lost each world step; also avoided like fire
+var move_style := "chase"     # chase | hop (2 cells a leap) | kite (keeps off your lines, backs off) | intercept (heads where you are going)
+var move_secs := 0            # seconds a step takes (0: the battle's move_time)
+var tricks: Array = []        # [{card, when, min, max, cd}]: cards it reaches for when the moment is right
+var trick_ready := {}         # card id -> second it can be used again
 var splits := false           # 분열: at half hp it splits into two smaller ones (once)
 var split_done := false
 var guard_at := -1            # second covered by 받아치기 / 구르기
@@ -67,6 +71,9 @@ static func from_def(def: Dictionary, new_uid: int) -> Actor:
 	a.likes = def.get("likes", {}).duplicate()
 	a.dislikes = def.get("dislikes", {}).duplicate()
 	a.splits = bool(def.get("splits", false))
+	a.move_style = def.get("move", "chase")
+	a.move_secs = int(def.get("move_secs", 0))
+	a.tricks = Array(def.get("tricks", [])).duplicate(true)
 	if def.has("facing"):
 		a.facing = Vector2i(def["facing"][0], def["facing"][1])
 	return a

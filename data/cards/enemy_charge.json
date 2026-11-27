@@ -1,0 +1,23 @@
+{
+ "id": "enemy_charge",
+ "name": "돌진",
+ "time": 2,
+ "weight": 1,
+ "rarity": "basic",
+ "telegraph": true,
+ "target": {
+  "shape": "line",
+  "range": 6,
+  "size": 6,
+  "reach": "line"
+ },
+ "parts": [
+  {
+   "op": "charge",
+   "dist": 6,
+   "damage": 9,
+   "push": 1
+  }
+ ],
+ "desc": "일직선으로 끝까지 돌진해, 막아선 것에게 9의 피해를 입히고 밀쳐냅니다."
+}

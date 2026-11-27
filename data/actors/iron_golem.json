@@ -32,5 +32,16 @@
   "charged": 3,
   "water": 2,
   "damp": 1
- }
+ },
+ "move": "chase",
+ "move_secs": 2,
+ "tricks": [
+  {
+   "card": "enemy_charge",
+   "when": "aligned",
+   "min": 2,
+   "max": 6,
+   "cd": 6
+  }
+ ]
 }
