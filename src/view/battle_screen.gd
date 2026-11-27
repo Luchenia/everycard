@@ -121,6 +121,10 @@ func _step_replay(delta: float) -> void:
 	# ramp out of bullet time, and settle back into it over the last moments of the flow
 	var left := float(fr.size() - 1 - shown_frame) - replay_t
 	var tail := lerpf(0.3, 1.0, clampf(left / 0.6, 0.0, 1.0))
+	if BoardView.BT2:
+		# study: a longer, eased brake into held time, so the last moment visibly slows to a crawl
+		var q := clampf(left / 0.9, 0.0, 1.0)
+		tail = lerpf(0.12, 1.0, q * q * (3.0 - 2.0 * q))
 	warp = move_toward(warp, tail, delta * 4.0) if warp < tail else tail
 	if flow.calm() or fast_flow:
 		warp = 1.0   # nothing to fight, or only the ring turning: no slow motion
@@ -1126,6 +1130,9 @@ func _unhandled_input(ev: InputEvent) -> void:
 		return
 	# physical keys, so a Korean input mode (ㅂㅈㄷㄱㅅ) still works
 	var pk: int = ev.physical_keycode
+	if pk == KEY_B:
+		BoardView.BT2 = not BoardView.BT2   # study: compare the new held-time look with the old one
+		return
 	if pk >= KEY_1 and pk <= KEY_5:
 		# game speed: only how fast passing seconds play back, never the rules
 		speed = SPEEDS[pk - KEY_1]

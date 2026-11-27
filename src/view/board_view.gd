@@ -26,6 +26,14 @@ var moving: Dictionary = {}      # uid -> Vector2i: where a gliding unit is head
 var casts: Array = []            # {uid, cells, t0, t1}: the player's card being performed
 var _speed := 0.14
 const HELD := 0.2                # how fast the world still drifts while the player thinks
+static var BT2 := true           # bullet-time study: B toggles the new look against the old one
+const HELD2 := 0.06              # study: held time is much slower ...
+var rt := 0.0                    # study: true real time (UI pulses), while `real` becomes world time
+var _wspeed := 1.0
+var pulse_t0 := -9.0             # study: real time the world last snapped into held time
+var _was_replaying := false
+var trails: Array = []           # study: {uid, pos, t} afterimages left by moving units
+var _bf := {}
 var play_speed := 1.0            # game speed (1-5 keys): effects run faster with the replay
 var self_aim := false            # a picked card with no target (방어 ...): the hero lights up instead of an arc
 var forecast := 0                # seconds the picked action will take: warnings landing in them stand out
@@ -36,6 +44,7 @@ var origin := Vector2(C, C * 2)  # top-left of cell (0,0) inside this control
 var clock := 0.0                 # effect time: crawls while paused (bullet time), runs during replay
 var real := 0.0
 var liquid: ColorRect
+var desat: ColorRect
 var top: Control
 var _state_img: Image
 var _state_tex: ImageTexture
@@ -62,6 +71,12 @@ func _ready() -> void:
 	mat.shader = load("res://src/view/liquid.gdshader")
 	liquid.material = mat
 	add_child(liquid)
+	desat = ColorRect.new()
+	desat.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var dm := ShaderMaterial.new()
+	dm.shader = load("res://src/view/held_tint.gdshader")
+	desat.material = dm
+	add_child(desat)
 	top = Control.new()
 	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top.draw.connect(_draw_top)
@@ -75,16 +90,46 @@ func fit() -> void:
 		liquid.position = origin
 		liquid.size = Vector2(Grid.W, Grid.H) * C
 		top.size = size
+		desat.position = origin
+		desat.size = Vector2(Grid.W, Grid.H) * C
 		(liquid.material as ShaderMaterial).set_shader_parameter("grid", Vector2(Grid.W, Grid.H))
 	_state_img = Image.create(Grid.W, Grid.H, false, Image.FORMAT_RGBA8)
 	_state_tex = ImageTexture.create_from_image(_state_img)
 
 func _process(delta: float) -> void:
-	real += delta
+	rt += delta
+	var held := HELD2 if BT2 else HELD
 	# effects crawl while the player thinks (bullet time) and ramp back up when time flows
-	var target := play_speed if replaying else (0.0 if battle != null and battle.borrowing() else HELD)
-	_speed = move_toward(_speed, target, delta * 4.0)
+	var target := play_speed if replaying else (0.0 if battle != null and battle.borrowing() else held)
+	if BT2 and not replaying:
+		_speed = lerpf(_speed, target, 1.0 - exp(-delta * 5.0))   # ease out: things visibly decelerate
+	else:
+		_speed = move_toward(_speed, target, delta * 4.0)
 	clock += delta * _speed
+	# world time: hits, slashes, flashes and bursts also crawl in held time (study only)
+	_wspeed = _speed if BT2 else 1.0
+	real += delta * _wspeed
+	if BT2 and _was_replaying and not replaying:
+		pulse_t0 = rt
+	if BT2 and replaying and not _was_replaying:
+		pulse_t0 = -rt   # negative: colour floods back in
+	_was_replaying = replaying
+	if BT2 and battle != null and replaying:
+		for u in battle.actors:
+			if shown_pos.has(u.uid):
+				var cp := _pos_of(u)
+				var fr := absf(cp.x - round(cp.x)) + absf(cp.y - round(cp.y))
+				if fr > 0.05:
+					trails.append({"uid": u.uid, "pos": cp, "t": real})
+	trails = trails.filter(func(q): return real - float(q["t"]) < 0.35)
+	if desat:
+		var m := desat.material as ShaderMaterial
+		m.set_shader_parameter("amount", _calm() if BT2 else 0.0)
+		var h := battle.human() if battle != null else null
+		if h != null:
+			m.set_shader_parameter("center", (feet(_pos_of(h)) - Vector2(0, 8 * S) - origin) / (Vector2(Grid.W, Grid.H) * C))
+		m.set_shader_parameter("aspect", float(Grid.W) / float(Grid.H))
+		m.set_shader_parameter("wave", (rt - pulse_t0) if pulse_t0 >= 0.0 else 9.0)
 	if battle != null:
 		_update_liquids()
 		_track_hits()
@@ -92,6 +137,24 @@ func _process(delta: float) -> void:
 	queue_redraw()
 	if top:
 		top.queue_redraw()
+
+func _calm() -> float:
+	var held := HELD2 if BT2 else HELD
+	return 1.0 - clampf((_speed - held) / maxf(0.01, play_speed - held), 0.0, 1.0)
+
+## Frame index for a strip at time t; also remembers how far it is toward the next frame,
+## so _sprite can cross-fade the two in held time instead of flipping at 1-5 fps.
+func _fr(st: Dictionary, t: float, offset := 0) -> int:
+	var f := t * float(st["fps"]) + offset
+	var i := int(floor(f))
+	var n := int(st["n"])
+	var nx := i + 1
+	if st["loop"]:
+		i = posmod(i, n); nx = posmod(nx, n)
+	else:
+		i = clampi(i, 0, n - 1); nx = clampi(nx, 0, n - 1)
+	_bf = {"tex": st["tex"], "i": i, "n": nx, "a": f - floor(f)}
+	return i
 
 func cell_at(local: Vector2) -> Vector2i:
 	var q := (local - origin) / C
@@ -491,8 +554,10 @@ func _draw_top() -> void:
 		tl.draw_string_outline(font, pp - Vector2(10, 0), q["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 6, Color(0, 0, 0, col.a))
 		tl.draw_string(font, pp - Vector2(10, 0), q["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 	# bullet time: a cool veil and slowly drifting motes while the player decides
-	var calm := 1.0 - clampf((_speed - HELD) / maxf(0.01, play_speed - HELD), 0.0, 1.0)
-	if calm > 0.01:
+	var calm := _calm()
+	if BT2:
+		_held_look(tl, calm)
+	elif calm > 0.01:
 		# a slow breathing vignette closes in while time is held
 		var breath := 0.5 + 0.5 * sin(real * 1.4)
 		var room := Rect2(origin, Vector2(Grid.W, Grid.H) * C)
@@ -504,7 +569,7 @@ func _draw_top() -> void:
 			tl.draw_rect(Rect2(Vector2(r.position.x, r.end.y - 5 * S), Vector2(r.size.x, 5 * S)), Color(0.02, 0.03, 0.08, a))
 			tl.draw_rect(Rect2(r.position + Vector2(0, 5 * S), Vector2(5 * S, r.size.y - 10 * S)), Color(0.02, 0.03, 0.08, a))
 			tl.draw_rect(Rect2(Vector2(r.end.x - 5 * S, r.position.y + 5 * S), Vector2(5 * S, r.size.y - 10 * S)), Color(0.02, 0.03, 0.08, a))
-	if not replaying:
+	if not replaying and not BT2:
 		var borrowing := battle.borrowing()
 		tl.draw_rect(Rect2(origin, Vector2(Grid.W, Grid.H) * C), Color(0.6, 0.3, 1.0, 0.13) if borrowing else Color(0.35, 0.55, 1.0, 0.06))
 		for k2 in 18:
@@ -546,7 +611,7 @@ func _aura(tl: Control, p: Vector2i, off: Vector2) -> void:
 	var surf := {"water": "water_splash", "ice": "ice_glint", "swamp": "swamp_bubbles"}
 	if surf.has(m) and (m != "water" or (p.x * 7 + p.y * 3) % 3 == 0):
 		var ss := Art.fx(surf[m])
-		_sprite(tl, ss, c, Art.frame_at(ss, clock * 1.5, p.x * 5 + p.y * 9))
+		_sprite(tl, ss, c, _fr(ss, clock * 1.5, p.x * 5 + p.y * 9))
 	if m == "trap_rabbit":
 		# a sprung-open jaw trap: iron ring with teeth
 		var tc := c + Vector2(0, 3 * S)
@@ -633,6 +698,15 @@ func _sprite(tl: Control, st: Dictionary, ground: Vector2, i: int, mod := Color.
 	var src := Art.frame_src(st, i)
 	var sz := src.size * S * sc
 	var at := ground - Vector2(st["ax"], st["ay"]) * S * sc
+	if BT2 and not _bf.is_empty() and _bf["tex"] == st["tex"] and int(_bf["i"]) == i:
+		var a: float = _bf["a"]
+		_bf = {}
+		_sprite(tl, st, ground, i, mod, flip, sc, sq)
+		if _speed < 0.5 and a > 0.03:
+			var nx := (i + 1) % int(st["n"]) if st["loop"] else mini(i + 1, int(st["n"]) - 1)
+			if nx != i:
+				_sprite(tl, st, ground, nx, Color(mod, mod.a * a), flip, sc, sq)
+		return
 	if flip or sq != Vector2.ONE:
 		# mirror / squash around the anchor with a transform: a negative-size rect is not drawn mirrored in place
 		tl.draw_set_transform(ground, 0.0, Vector2(-sq.x if flip else sq.x, sq.y))
@@ -655,11 +729,11 @@ func _fx(tl: Control, kind: String, p: Vector2i, off: Vector2) -> void:
 		if battle.grid.unit_at(p) != null:
 			ground -= Vector2(0, 14 * S)
 		_crystal_glow(tl, ground, alpha)
-		_sprite(tl, st, ground, Art.frame_at(st, clock, p.x * 7 + p.y * 5), Color(1, 1, 1, alpha))
+		_sprite(tl, st, ground, _fr(st, clock, p.x * 7 + p.y * 5), Color(1, 1, 1, alpha))
 		return
 	if kind != "fire":
 		tl.draw_rect(Rect2(ground + Vector2(-7 * S, 1 * S), Vector2(14 * S, 3 * S)), Color(0, 0, 0, 0.3 * alpha))
-	_sprite(tl, st, ground, Art.frame_at(st, clock, p.x * 7 + p.y * 5), Color(1, 1, 1, alpha))
+	_sprite(tl, st, ground, _fr(st, clock, p.x * 7 + p.y * 5), Color(1, 1, 1, alpha))
 
 ## Doorways cut into the outer wall next to door cells. A sealed one is barred by violet
 ## crystal that shatters when the room is cleared.
@@ -802,7 +876,7 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 	var look_left := _faces_left(u)
 	var flip: bool = look_left == bool(st["faces_right"])
 	var ground := f + push + Vector2(0, hop)
-	var idx := Art.frame_at(st, clock * 1.0, u.uid * 3)
+	var idx := _fr(st, clock * 1.0, u.uid * 3)
 	var tint := Color(0.35, 0.2, 0.55, 0.7) if u.controller == "echo" else Color.WHITE
 	# alive while time is held: idle loop (or slow breathing), an attacker visibly winding up for
 	# its blow, then the strike, a flinch when hit, and the hero's step while walking
@@ -811,7 +885,7 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 	var idle := Art.strip("units", sid + "_idle.png")
 	if not idle.is_empty():
 		st = idle
-		idx = Art.frame_at(idle, clock, u.uid * 7)
+		idx = _fr(idle, clock, u.uid * 7)
 	else:
 		sq = Vector2(1.0, 1.0 + 0.025 * sin(clock * 2.2 + u.uid))
 	var lk := (real - float(lunges[u.uid]["t0"])) if lunges.has(u.uid) else 9.0
@@ -857,13 +931,13 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 		_sprite_sq(tl, st, ground, idx, Color(5, 5, 5, 1), flip, sq)   # white flash
 	if u.has_status("shocked"):
 		var sh := Art.fx("shock")
-		_sprite(tl, sh, f - Vector2(0, st["h"] * 0.45 * S), Art.frame_at(sh, clock * 3.0, u.uid))
+		_sprite(tl, sh, f - Vector2(0, st["h"] * 0.45 * S), _fr(sh, clock * 3.0, u.uid))
 	if u.has_status("crystal"):
 		if battle.grid.get_material(u.pos) != "crystal":
 			var cr := Art.fx("crystal")
 			var cg := f - Vector2(0, 14 * S)
 			_crystal_glow(tl, cg, 1.0)
-			_sprite(tl, cr, cg, Art.frame_at(cr, clock, u.uid))
+			_sprite(tl, cr, cg, _fr(cr, clock, u.uid))
 	if u.has_status("frozen"):
 		tl.draw_rect(Rect2(f - Vector2(st["w"] * 0.4 * S, st["h"] * 0.85 * S), Vector2(st["w"] * 0.8 * S, st["h"] * 0.85 * S)), Color(0.7, 0.9, 1.0, 0.35))
 
@@ -1256,3 +1330,52 @@ func _dotted_arc(tl: Control, a: Vector2, b: Vector2, h: float, upto: float, col
 		var q := _arc_pt(a, b, h, k)
 		tl.draw_rect(Rect2(q.snapped(Vector2(S, S)) - Vector2(1.5 * S, 1.5 * S), Vector2(3 * S, 3 * S)), Art.INK)
 		tl.draw_rect(Rect2(q.snapped(Vector2(S, S)) - Vector2(S, S), Vector2(2 * S, 2 * S)), col)
+
+
+## Study: the held-time look. Dust and embers hang in the air and drift continuously (never
+## frame-flipped), stretching into streaks when time runs; a ring snaps out from the hero the
+## moment time stops.
+func _held_look(tl: Control, calm: float) -> void:
+	var room := Rect2(origin, Vector2(Grid.W, Grid.H) * C)
+	var v := clampf(_speed, 0.0, 3.0)
+	for k in 46:
+		var h1 := fmod(float(k) * 0.6180339 * 977.0, 1.0)
+		var h2 := fmod(float(k) * 0.7548776 * 613.0, 1.0)
+		var sp := 6.0 + 10.0 * h2
+		var dir := Vector2(0.9, -0.45 + 0.3 * h1).normalized()
+		var pos := Vector2(h1 * room.size.x, h2 * room.size.y) + dir * clock * sp * 9.0
+		pos = Vector2(fposmod(pos.x, room.size.x), fposmod(pos.y, room.size.y))
+		var p0 := room.position + pos
+		var ember := k % 3 == 0
+		var col := Color(1.0, 0.72, 0.4, 0.75) if ember else Color(0.85, 0.9, 1.0, 0.45)
+		var tail := dir * minf(v * sp * 2.2, 40.0)
+		if tail.length() > S:
+			tl.draw_line(p0 - tail, p0, Color(col, col.a * 0.35), S)
+		tl.draw_rect(Rect2(p0.snapped(Vector2(S, S)), Vector2(S, S) * (2 if ember and k % 2 == 0 else 1)), col)
+	# afterimages of moving units: they hang where they were when time stops
+	for q in trails:
+		var a := 1.0 - (real - float(q["t"])) / 0.35
+		var u: Actor = null
+		for x in battle.actors:
+			if x.uid == int(q["uid"]):
+				u = x
+		if u == null:
+			continue
+		var st := Art.unit(Art.unit_id(u))
+		if st.is_empty():
+			continue
+		var flip: bool = _faces_left(u) == bool(st["faces_right"])
+		var idle := Art.strip("units", Art.unit_id(u) + "_idle.png")
+		if not idle.is_empty():
+			st = idle
+		_sprite(tl, st, feet(q["pos"]), 0, Color(0.55, 0.8, 1.0, 0.28 * a), flip)
+	# the snap into held time: a thin ring racing out from the hero, once
+	if pulse_t0 >= 0.0:
+		var k2 := (rt - pulse_t0) / 0.55
+		if k2 < 1.0:
+			var h := battle.human()
+			if h != null:
+				var c := feet(_pos_of(h)) - Vector2(0, 8 * S)
+				var r := lerpf(6.0, room.size.x * 0.9, 1.0 - pow(1.0 - k2, 3.0))
+				tl.draw_arc(c, r, 0, TAU, 96, Color(0.8, 0.9, 1.0, 0.55 * (1.0 - k2)), 2 * S)
+				tl.draw_arc(c, r * 0.94, 0, TAU, 96, Color(0.5, 0.7, 1.0, 0.25 * (1.0 - k2)), S)
