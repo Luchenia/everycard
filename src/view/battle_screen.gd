@@ -244,6 +244,10 @@ func _flashes() -> void:
 				if kind_by_card.has(cid) and e["data"].has("uid"):
 					board.acts[int(e["data"]["uid"])] = {"kind": kind_by_card[cid], "t0": int(e["at"]),
 						"t1": int(e["at"]) + maxi(1, int(e["data"].get("secs", 1)))}
+				elif e["data"].has("uid") and Effects.card_def(cid, catalog).get("parts", []).any(func(pt): return pt.get("op", "") == "damage"):
+					# a blow: the body starts winding up the moment the card is played, and lets go when it lands
+					board.acts[int(e["data"]["uid"])] = {"kind": "act", "t0": int(e["at"]),
+						"t1": int(e["at"]) + maxi(1, int(e["data"].get("secs", 1)))}
 				if int(e["data"].get("secs", 0)) >= 2:
 					board.casts.append({"uid": int(e["data"].get("uid", -1)), "cells": e["data"].get("cells", []),
 						"t0": int(e["at"]), "t1": int(e["at"]) + int(e["data"]["secs"])})

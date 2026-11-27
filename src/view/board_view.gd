@@ -967,9 +967,11 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 	elif not act_strip.is_empty():
 		# 구르기 / 방어 / 받아치기: the card's own motion across its seconds
 		st = act_strip
-		var kf := act_k * float(act_strip["n"] - 1)
+		# a blow being wound up plays only the strip's wind-up half (up to its peak); the release comes when it lands
+		var last := (int(act_strip["peak"]) - 1) if act.get("kind", "") == "act" and int(act_strip["peak"]) > 0 else int(act_strip["n"]) - 1
+		var kf := act_k * float(last)
 		idx = int(kf)
-		_bf = {"tex": act_strip["tex"], "i": idx, "n": mini(idx + 1, act_strip["n"] - 1), "a": kf - floor(kf)}
+		_bf = {"tex": act_strip["tex"], "i": idx, "n": mini(idx + 1, last), "a": kf - floor(kf)}
 		if replaying and frac > 0.01:
 			ground.y -= hop
 	elif not hit_s.is_empty() and hit_k < hit_s["n"] / 24.0:
