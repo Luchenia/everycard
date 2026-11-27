@@ -39,6 +39,9 @@ var speed_shown_at := -9.0
 var hand_cursor: HandCursor     # when the window got focus: the click that focuses it never walks
 var log_i := 0           # battle log entries already shown as flashes
 var board_base := Vector2.ZERO  # where the board sits; slides move it off and back
+var view: Control                 # clipping window around the board (the camera frame)
+var cam_zoom := 1.0
+var cam_focus := Vector2.ZERO     # board-local point the camera pushes in on
 var slide_dir := Vector2i.ZERO  # walking through a door: the camera slides toward the next room
 var slide_t := 0.0              # 0..1 out, then 1..2 in
 var banner := ""                # room name shown for a moment on entering
@@ -64,7 +67,12 @@ func _ready() -> void:
 	add_child(bg)
 	board = BoardView.new()
 	board.font = font
-	add_child(board)
+	# the camera: the board sits inside a clipping window and can push in on the action while time flows
+	view = Control.new()
+	view.clip_contents = true
+	view.mouse_filter = Control.MOUSE_FILTER_PASS
+	add_child(view)
+	view.add_child(board)
 	board.gui_input.connect(_on_board_input)
 	timeline = TimelineBar.new()
 	timeline.font = font
@@ -330,6 +338,7 @@ func _process(delta: float) -> void:
 	_step_ring(delta)
 	_layout_hand()
 	_step_held(delta)
+	_step_camera(delta)
 	if _replaying() and tips.visible and hovered_card == null:
 		_clear_tips()   # bodies are still on their way: no stale facts under the mouse
 	if flow.phase != "battle" and board.hover.x >= 0:
@@ -364,7 +373,7 @@ func _step_slide(delta: float) -> void:
 	if slide_t >= 2.0:
 		slide_dir = Vector2i.ZERO
 		slide_t = 0.0
-	board.position = board_base + _slide_off()
+	view.position = board_base + _slide_off()
 
 func _slide_off() -> Vector2:
 	if slide_dir == Vector2i.ZERO:
@@ -397,7 +406,8 @@ func _refresh() -> void:
 	board.battle = b
 	board.fit()
 	board_base = Vector2(round((1280 - board.size.x) / 2), 44)
-	board.position = board_base + _slide_off()
+	view.position = board_base + _slide_off()
+	view.size = board.size
 	board.preview = {}
 	board.aiming = selected >= 0
 	timeline.battle = b
@@ -692,7 +702,7 @@ func _draw_hud() -> void:
 		hud.draw_string(font, dc + Vector2(-16, 26), "%d" % b.belt.ring().size(), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.5))
 	var h := b.human()
 	if h != null and h.discount > 0:
-		var p := board.position + board.feet(Vector2(h.pos)) - Vector2(-26, 90)
+		var p := board.get_global_transform() * board.feet(Vector2(h.pos)) - Vector2(-26, 90)
 		hud.draw_string_outline(font, p, "-%d초" % h.discount, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 5, Art.INK)
 		hud.draw_string(font, p, "-%d초" % h.discount, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#bfe8ff"))
 
@@ -1026,7 +1036,7 @@ func _fly(slot: int, target: Vector2i) -> void:
 	cv.pivot_offset = cv.size / 2
 	cv.z_index = 20
 	add_child(cv)
-	var dest := board.position + board.cell_rect(target).get_center() - cv.size / 2
+	var dest := board.get_global_transform() * board.cell_rect(target).get_center() - cv.size / 2
 	var tw := create_tween().set_parallel(true)
 	tw.tween_property(cv, "position", dest, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_property(cv, "scale", Vector2(0.25, 0.25), 0.22)
@@ -1195,6 +1205,42 @@ const ROLL_CHAIN := 0.35   # seconds after a roll in which the next notch joins 
 var roll_at := -9.0
 var roll_burst := 0
 var fast_flow := false      # the seconds now playing are only the ring turning: play them quickly
+
+## Camera: while time flows it pushes in a little on where things happen (the hero and whoever is
+## moving or striking), like a film shot; when time is held it eases back out to the whole board,
+## so planning always sees everything.
+func _step_camera(delta: float) -> void:
+	var b := flow.battle
+	var flowing := _replaying() and not flow.calm()
+	var want_z := 1.0
+	var focus := board.size / 2
+	if flowing and b.human() != null:
+		var pts: Array = [board.feet(board._pos_of(b.human()))]
+		for uid in board.moving.keys():
+			var a: Actor = b._actor(uid)
+			if a != null:
+				pts.append(board.feet(board._pos_of(a)))
+		for uid in board.lunges.keys():
+			var a2: Actor = b._actor(uid)
+			if a2 != null and board.real - float(board.lunges[uid]["t0"]) < 0.6:
+				pts.append(board.feet(board._pos_of(a2)))
+		focus = Vector2.ZERO
+		for q in pts:
+			focus += q
+		focus /= pts.size()
+		var spread := 0.0
+		for q in pts:
+			spread = maxf(spread, focus.distance_to(q))
+		want_z = clampf(1.14 - spread / board.size.x * 0.5, 1.04, 1.14)
+	cam_zoom = lerpf(cam_zoom, want_z, 1.0 - exp(-delta * (1.6 if want_z > cam_zoom else 2.4)))
+	if cam_focus == Vector2.ZERO:
+		cam_focus = focus
+	cam_focus = cam_focus.lerp(focus, 1.0 - exp(-delta * 2.5))
+	board.scale = Vector2(cam_zoom, cam_zoom)
+	var pos := -cam_focus * (cam_zoom - 1.0)
+	pos.x = clampf(pos.x, board.size.x - board.size.x * cam_zoom, 0.0)
+	pos.y = clampf(pos.y, board.size.y - board.size.y * cam_zoom, 0.0)
+	board.position = pos
 
 ## The picked card is lifted out of the hand: it pops up, then follows the mouse with a little lag,
 ## leaning into the way it moves, and shrinks over the board so the cells under it stay readable.
