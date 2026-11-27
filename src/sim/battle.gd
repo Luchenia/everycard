@@ -847,8 +847,24 @@ func ai_step_cell(a: Actor, target: Vector2i, reach := 1, card := {}, off_line :
 				return n
 	return fallback
 
+var _intent_cache := {}
+var _intent_key := ""
+
 ## What an idle enemy will do next, for the view: {kind: "move", to, at} or {kind: "attack", at}.
+## The path search behind it is costly and the view asks every frame, so answers are kept until
+## anything in the battle happens (a new second, a log line, anyone moving).
 func ai_intent(a: Actor) -> Dictionary:
+	var key := "%d|%d|%d" % [now, log.size(), frames.size()]
+	for u in grid.units:
+		key += "|%d,%d,%d" % [u.pos.x, u.pos.y, u.hp]
+	if key != _intent_key:
+		_intent_key = key
+		_intent_cache = {}
+	if not _intent_cache.has(a.uid):
+		_intent_cache[a.uid] = _ai_intent(a)
+	return _intent_cache[a.uid]
+
+func _ai_intent(a: Actor) -> Dictionary:
 	if a.controller != "ai" or not a.alive() or not grid.units.has(a) or _busy(a):
 		return {}
 	var choice := EnemyAI.choose(a, self)
