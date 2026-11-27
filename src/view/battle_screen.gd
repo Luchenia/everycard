@@ -361,8 +361,8 @@ func _build_hand() -> void:
 ## the front of the ring, facing the player; the rest of the deck stands around the back, turned
 ## away (backs showing). Rolling turns the whole ring; a used card goes round to the back and the
 ## next one comes round to the front. Every card glides to its new place, nothing jumps.
-const RING_C := Vector2(640, 640)
-const RING_R := Vector2(420, 46)
+const RING_C := Vector2(640, 694)
+const RING_R := Vector2(420, 34)
 const HAND_STEP := 0.29          # radians between two hand cards
 var ring_tokens: Array = []      # ring order: {id, q (shown place, unwrapped), t (target place)}
 var ring_views: Array = []       # CardView per token
