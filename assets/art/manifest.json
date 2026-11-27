@@ -784,6 +784,10 @@
       "anchor": [
         16,
         44
+      ],
+      "cycle": [
+        5,
+        10
       ]
     },
     "hero_roll.png": {
@@ -840,6 +844,10 @@
       "anchor": [
         32,
         44
+      ],
+      "cycle": [
+        2,
+        14
       ]
     },
     "slime_hurt.png": {
@@ -868,6 +876,10 @@
       "anchor": [
         32,
         44
+      ],
+      "cycle": [
+        3,
+        14
       ]
     },
     "ember_imp_hurt.png": {
@@ -896,6 +908,10 @@
       "anchor": [
         32,
         44
+      ],
+      "cycle": [
+        7,
+        14
       ]
     },
     "walker_hurt.png": {
@@ -924,6 +940,10 @@
       "anchor": [
         40,
         60
+      ],
+      "cycle": [
+        3,
+        14
       ]
     },
     "iron_golem_hurt.png": {

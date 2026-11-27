@@ -45,7 +45,7 @@ static func strip(group: String, file: String) -> Dictionary:
 		var fr: Array = spec.get("frame", [t.get_height(), t.get_height()])
 		var an: Array = spec.get("anchor", [fr[0] / 2, fr[1] - 2])
 		out = {"tex": t, "w": int(fr[0]), "h": int(fr[1]), "n": int(spec.get("count", maxi(1, t.get_width() / int(fr[0])))),
-			"fps": float(spec.get("fps", 12)), "loop": bool(spec.get("loop", true)), "ax": float(an[0]), "ay": float(an[1]), "peak": int(spec.get("peak", -1))}
+			"fps": float(spec.get("fps", 12)), "loop": bool(spec.get("loop", true)), "ax": float(an[0]), "ay": float(an[1]), "peak": int(spec.get("peak", -1)), "cycle": spec.get("cycle", [])}
 	_cache["strip:" + key] = out
 	return out
 

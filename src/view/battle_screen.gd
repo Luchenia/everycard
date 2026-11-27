@@ -181,6 +181,8 @@ func _step_replay(delta: float) -> void:
 		warp = 1.0   # nothing to fight, or only the ring turning: no slow motion
 	var calm_k := 3.0 if (flow.calm() or (fast_flow and not BoardView.BT2)) else (1.6 if fast_flow else 1.0)
 	board.play_speed = speed * warp
+	if board.rt < board.hitstop_until:
+		return   # hit-stop: the replay holds on the blow
 	replay_t += delta * speed * warp * calm_k / SEC_REAL
 	while replay_t >= 1.0 and shown_frame < fr.size() - 1:
 		replay_t -= 1.0
@@ -199,6 +201,7 @@ func _step_replay(delta: float) -> void:
 	var next: Dictionary = fr[shown_frame + 2] if shown_frame + 2 < fr.size() else {}
 	board.shown_pos = {}
 	board.moving = {}
+	board.walk_link = {}
 	board.replay_k = k
 	for uid in a["pos"]:
 		var p0 := Vector2(a["pos"][uid])
@@ -214,6 +217,7 @@ func _step_replay(delta: float) -> void:
 		elif not went and not goes:
 			e = k * k * (3.0 - 2.0 * k)
 		board.shown_pos[uid] = p0.lerp(p1, e)
+		board.walk_link[uid] = Vector2i(int(went), int(goes))
 		if p1 != p0:
 			board.moving[uid] = Vector2i(p1)
 	board.shown_hp = a["hp"] if k < 0.5 else b["hp"]

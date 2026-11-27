@@ -23,6 +23,9 @@ var shown_now := -1
 var replaying := false
 var replay_k := 0.0              # 0..1 inside the replayed second
 var moving: Dictionary = {}      # uid -> Vector2i: where a gliding unit is heading
+var walk_link: Dictionary = {}   # uid -> Vector2i(walked the second before, walks the second after): a walk over several cells loops its stride instead of restarting
+var _last_look: Dictionary = {}  # uid -> {st, i, flip, sq}: last drawn frame, to blend into the next motion
+var _xfade: Dictionary = {}      # uid -> {look, t0}: the previous motion fading out over the new one
 var casts: Array = []            # {uid, cells, t0, t1}: the player's card being performed
 var _speed := 0.14
 const HELD := 0.2                # how fast the world still drifts while the player thinks
@@ -31,6 +34,7 @@ var uclock := 0.0                # study: body time (idle loops); stops dead in 
 var _uspeed := 1.0
 static var BT2 := true           # bullet-time study: B toggles the new look against the old one
 const HELD2 := 0.06              # study: held time is much slower ...
+const XFADE := 0.12   # seconds (wall clock) one motion takes to melt into the next
 var rt := 0.0                    # study: true real time (UI pulses), while `real` becomes world time
 var _wspeed := 1.0
 var pulse_t0 := -9.0             # study: real time the world last snapped into held time
@@ -57,6 +61,7 @@ var _wall: PackedInt32Array = PackedInt32Array()
 var _floor_for: Battle
 var popups: Array = []           # {p: Vector2 local, text, col, t0}
 var flashes: Dictionary = {}     # uid -> real time of last hit
+var hitstop_until := 0.0        # wall clock: a heavy hit freezes everything for a beat
 var flash_rt: Dictionary = {}     # uid -> wall-clock time of last hit: the white flash always shows, however fast or slow the world runs
 var _last_hp: Dictionary = {}
 var shake_until := 0.0
@@ -117,6 +122,8 @@ func _process(delta: float) -> void:
 	_uspeed = lerpf(_uspeed, utarget, 1.0 - exp(-delta * 4.0)) if utarget < _uspeed else utarget
 	if _uspeed < 0.004:
 		_uspeed = 0.0
+	if rt < hitstop_until:
+		_uspeed = 0.0   # hit-stop: the whole world catches on the blow for a beat
 	uclock += delta * _uspeed
 	# world time: hits, slashes, flashes and bursts also crawl (or stop) in held time (study only)
 	_wspeed = _uspeed if BT2 else 1.0
@@ -371,6 +378,8 @@ func _track_hits() -> void:
 				"col": Color("#ff5a4a"), "t0": real})
 			flashes[u.uid] = real
 			flash_rt[u.uid] = rt
+			if replaying:
+				hitstop_until = maxf(hitstop_until, rt + clampf(0.03 + 0.012 * float(int(_last_hp[u.uid]) - hp), 0.05, 0.14))
 		elif _last_hp.has(u.uid) and hp > int(_last_hp[u.uid]):
 			popups.append({"p": feet(_pos_of(u)) - Vector2(0, 30 * S), "text": "+%d" % (hp - int(_last_hp[u.uid])),
 				"col": Color("#7ee08a"), "t0": real})
@@ -967,7 +976,7 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 	elif replaying and frac > 0.01 and not Art.strip("units", sid + "_run.png").is_empty():
 		var rs := Art.strip("units", sid + "_run.png")
 		st = rs
-		var rf := replay_k * float(rs["n"] - 1)
+		var rf := _walk_frame(rs, u.uid)
 		idx = int(rf)
 		_bf = {"tex": rs["tex"], "i": idx, "n": mini(idx + 1, rs["n"] - 1), "a": rf - floor(rf)}
 		ground.y -= hop   # the dash strip carries its own bounce
@@ -984,6 +993,20 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 	if u.splits and u.split_done:
 		sq *= 0.8   # a split half is a smaller body
 	_sprite_sq(tl, st, ground, idx, tint, flip, sq)
+	# one motion melts into the next: the last frame of the old one fades out over the new one
+	var last: Dictionary = _last_look.get(u.uid, {})
+	if not last.is_empty() and last["st"]["tex"] != st["tex"]:
+		_xfade[u.uid] = {"look": last, "t0": rt}
+	var xf: Dictionary = _xfade.get(u.uid, {})
+	if not xf.is_empty():
+		var xk := (rt - float(xf["t0"])) / XFADE
+		if xk >= 1.0:
+			_xfade.erase(u.uid)
+		else:
+			var lo: Dictionary = xf["look"]
+			_bf = {}
+			_sprite_sq(tl, lo["st"], ground, lo["i"], Color(tint, tint.a * (1.0 - xk) * 0.85), lo["flip"], lo["sq"])
+	_last_look[u.uid] = {"st": st, "i": idx, "flip": flip, "sq": sq}
 	# white flash on a hit, on wall-clock time: solid white, a gap, then a second blink
 	var fk := (rt - float(flash_rt[u.uid])) if flash_rt.has(u.uid) else 9.0
 	if not flashed and (fk < 0.11 or (fk > 0.17 and fk < 0.24)):
@@ -999,6 +1022,22 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 			_sprite(tl, cr, cg, _fr(cr, clock, u.uid))
 	if u.has_status("frozen"):
 		tl.draw_rect(Rect2(f - Vector2(body_st["w"] * 0.4 * S, body_st["h"] * 0.85 * S), Vector2(body_st["w"] * 0.8 * S, body_st["h"] * 0.85 * S)), Color(0.7, 0.9, 1.0, 0.35))
+
+## Frame (fractional) of a move strip for this replayed second. A walk over several cells starts
+## once, loops the strip's stride (manifest "cycle") while it keeps going, and settles once at the end.
+func _walk_frame(rs: Dictionary, uid: int) -> float:
+	var n := float(rs["n"] - 1)
+	var cy: Array = rs.get("cycle", [])
+	var link: Vector2i = walk_link.get(uid, Vector2i.ZERO)
+	if cy.size() < 2 or link == Vector2i.ZERO:
+		return replay_k * n
+	var a := float(cy[0])
+	var b := float(cy[1])
+	if link.x == 0:   # first cell of a longer walk: set off, then into the stride
+		return replay_k * b
+	if link.y == 1:   # in the middle: the stride, looping
+		return a + replay_k * (b - a)
+	return a + replay_k * (n - a)   # last cell: from the stride into the stop
 
 ## How far an enemy is into the wind-up of its announced blow: {k: 0..1, dir} or {}.
 func _windup(u: Actor) -> Dictionary:
