@@ -94,8 +94,9 @@ func fit() -> void:
 		liquid.position = origin
 		liquid.size = Vector2(Grid.W, Grid.H) * C
 		top.size = size
-		desat.position = origin
-		desat.size = Vector2(Grid.W, Grid.H) * C
+		# the whole room, walls included, so held time reads as black-and-white, not as a tint
+		desat.position = Vector2.ZERO
+		desat.size = size
 		(liquid.material as ShaderMaterial).set_shader_parameter("grid", Vector2(Grid.W, Grid.H))
 	_state_img = Image.create(Grid.W, Grid.H, false, Image.FORMAT_RGBA8)
 	_state_tex = ImageTexture.create_from_image(_state_img)
@@ -141,8 +142,8 @@ func _process(delta: float) -> void:
 		m.set_shader_parameter("amount", _calm() if BT2 else 0.0)
 		var h := battle.human() if battle != null else null
 		if h != null:
-			m.set_shader_parameter("center", (feet(_pos_of(h)) - Vector2(0, 8 * S) - origin) / (Vector2(Grid.W, Grid.H) * C))
-		m.set_shader_parameter("aspect", float(Grid.W) / float(Grid.H))
+			m.set_shader_parameter("center", (feet(_pos_of(h)) - Vector2(0, 8 * S)) / size)
+		m.set_shader_parameter("aspect", size.x / size.y)
 		m.set_shader_parameter("wave", (rt - pulse_t0) if pulse_t0 >= 0.0 else 9.0)
 	if battle != null:
 		_update_liquids()

@@ -20,7 +20,7 @@ void fragment() {
 	// a slight darkening toward the room's edges
 	float edge = smoothstep(0.55, 1.05, r);
 	// a light black-and-white: most of the colour goes, a little stays, barely any darkening
-	vec3 o = mix(c, grey, m * 0.7);
+	vec3 o = mix(c, grey, m * 0.85);
 	o *= 1.0 - m * (0.04 + edge * 0.12);
 	COLOR = vec4(o, 1.0);
 }
