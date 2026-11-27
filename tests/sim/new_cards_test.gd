@@ -15,11 +15,15 @@ func run() -> void:
 	c.actors["idle"] = {"id": "idle", "hp": 30, "mass": 1, "deck": [], "pattern": []}
 	c.cards["hit7"] = {"id": "hit7", "time": 1, "weight": 1, "telegraph": true, "target": {"shape": "cell", "range": 9}, "parts": [{"op": "damage", "amount": 7, "kind": "true"}]}
 	c.actors["hitter"] = {"id": "hitter", "hp": 30, "mass": 1, "deck": ["hit7"], "pattern": ["hit7"]}
+	c.cards["borrow10"] = {"id": "borrow10", "time": 0, "weight": 1, "target": {"shape": "self", "range": 0}, "parts": [{"op": "borrow", "secs": 10}]}
+	c.cards["hit7_4s"] = {"id": "hit7_4s", "time": 4, "weight": 1, "telegraph": true, "target": {"shape": "cell", "range": 9}, "parts": [{"op": "damage", "amount": 7, "kind": "true"}]}
+	c.actors["slow_hitter"] = {"id": "slow_hitter", "hp": 30, "mass": 1, "deck": ["hit7_4s"], "pattern": ["hit7_4s"]}
 	test_shield_absorbs_then_expires()
 	test_dash_runs_two_cells_and_stops_at_blocker()
 	test_discount_cuts_next_action()
 	test_borrowed_time_freezes_world_then_exhausts()
 	test_wait_ends_borrow_early()
+	test_bullet_time_slows_the_world()
 	test_crystal_roots_and_shatters()
 	test_oil_on_fire_flares()
 
@@ -65,7 +69,7 @@ func test_discount_cuts_next_action() -> void:
 	assert_eq(b.human().discount, 0, "discount used up")
 
 func test_borrowed_time_freezes_world_then_exhausts() -> void:
-	var b := _battle("bullet_time")
+	var b := _battle("borrow10")
 	var h := b.human()
 	assert_true(b.cmd_play(0, h.pos), "bullet time plays")
 	assert_eq(b.borrow_left, 10, "10 seconds borrowed")
@@ -80,7 +84,7 @@ func test_borrowed_time_freezes_world_then_exhausts() -> void:
 	assert_eq(b.now, t0 + 15, "repaid 10 x 1.5 = 15 seconds of exhaustion")
 
 func test_wait_ends_borrow_early() -> void:
-	var b := _battle("bullet_time")
+	var b := _battle("borrow10")
 	b.cmd_play(0, b.human().pos)
 	var t0 := b.now
 	b.cmd_move(Vector2i.UP)
@@ -88,6 +92,33 @@ func test_wait_ends_borrow_early() -> void:
 	assert_true(b.cmd_wait(1), "wait ends borrowing")
 	assert_eq(b.borrow_left, 0, "no borrowed time left")
 	assert_eq(b.now, t0 + 3, "2 used -> 3 seconds exhausted")
+
+## 불릿타임: the world runs three times slower for 4 world seconds. A 4-second attack warning
+## keeps reading 4 seconds but counts down 0.3 s for each second the player spends.
+func test_bullet_time_slows_the_world() -> void:
+	var b := _battle("bullet_time", "slow_hitter")
+	var h := b.human()
+	b.cmd_wait(1)   # the foe starts its 4-second wind-up
+	assert_eq(b.telegraphs.size(), 1, "attack warned")
+	var fire_at := int(b.telegraphs[0]["fire_at"])
+	assert_true(b.cmd_play(0, h.pos), "bullet time plays")
+	assert_true(b.slowed(), "the world is slowed")
+	assert_eq(b.shown_secs(1), 0.3, "a 1-second action shows 0.3 s")
+	var t0 := b.tick
+	b.cmd_wait(1)
+	assert_eq(b.tick - t0, 3, "one player second = 0.3 world seconds")
+	assert_eq(int(b.telegraphs[0]["fire_at"]), fire_at, "the warning keeps its time")
+	var waited := 1
+	while not b.telegraphs.is_empty() and waited < 30:
+		b.cmd_wait(1)
+		waited += 1
+	assert_true(waited >= 9, "about 3x more player seconds before the blow (%d)" % waited)
+	for i in 20:
+		b.cmd_wait(1)
+	assert_true(not b.slowed(), "the slow wears off")
+	t0 = b.tick
+	b.cmd_wait(1)
+	assert_eq(b.tick - t0, Battle.TPS, "back to full speed")
 
 func test_crystal_roots_and_shatters() -> void:
 	var lay := {"player_pos": [1, 3], "enemy_pos": [[3, 3]], "materials": []}

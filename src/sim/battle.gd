@@ -17,7 +17,12 @@ var ctx: Effects.BattleContext
 var actors: Array = []
 var belt: HandBelt
 var belt_owner: Actor
-var now := 0                 # battle clock in seconds
+const TPS := 10              # clock ticks per world second: the world moves in 0.1 s steps
+var tick := 0                # battle clock in ticks (TPS per world second)
+var now: float:              # the battle clock in world seconds (read only)
+	get: return float(tick) / TPS
+var slow_until := -1         # 불릿타임: the world runs slow until this tick
+var slow_rate := 1.0         # world seconds per player second while slowed (1/3: three times slower)
 var phase := "player"        # player | won | lost
 var stays_open := false      # a room you can walk around in: no foes left does not end it
 var telegraphs: Array = []   # {actor_uid, card_id, aim, cells, fire_at, track, foe_uid}
@@ -55,7 +60,7 @@ func _init(cat: Catalog, seed_value: int, player_def: String, enemy_defs: Array,
 	for i in enemy_defs.size():
 		var e := Actor.from_def(catalog.actors[enemy_defs[i]], uid)
 		uid += 1
-		e.next_at = 1 + i   # enemies start staggered, one second apart
+		e.next_at = (1 + i) * TPS   # enemies start staggered, one second apart
 		var ep: Array = lay["enemy_pos"][i] if i < lay["enemy_pos"].size() else [Grid.W - 2, i]
 		_spawn(e, Vector2i(ep[0], ep[1]))
 	ctx.next_uid = 100
@@ -101,6 +106,13 @@ func _rebuild_belt() -> void:
 		belt.per_round = int(cfg["draws_per_round"])
 
 func _on_meta(part: Dictionary, user) -> void:
+	if part.get("op", "") == "slow":
+		# 불릿타임: the world runs `factor` times slower for `secs` world seconds (timers keep their
+		# value and count down in 0.1 s steps; the player's actions cost a third of the world time)
+		slow_rate = 1.0 / maxf(1.0, float(part.get("factor", 3)))
+		slow_until = maxi(slow_until, tick) + int(part.get("secs", 4)) * TPS
+		_log("slow", "%s 불릿타임: 세상이 %d배 느려짐" % [user.name, int(part.get("factor", 3))], {"secs": int(part.get("secs", 4)), "uid": user.uid})
+		return
 	if part.get("op", "") == "borrow":
 		if user == human():
 			borrow_left += int(part.get("secs", 10))
@@ -112,7 +124,8 @@ func _on_meta(part: Dictionary, user) -> void:
 		"guard":
 			# 받아치기 / 구르기 cards: the second the card lands is the guarded second
 			user.guard_kind = part.get("kind", "parry")
-			user.guard_at = now
+			user.guard_at = tick
+			user.guard_until = tick + _step_ticks()
 			user.guard_from = user.pos
 			if user.guard_kind == "parry":
 				_log("brace", "%s 받아치기 자세" % user.name, {"uid": user.uid})
@@ -121,27 +134,27 @@ func _on_meta(part: Dictionary, user) -> void:
 			telegraphs = telegraphs.filter(func(t): return int(t["actor_uid"]) != int(part["uid"]))
 			var v := _actor(int(part["uid"]))
 			if n0 != telegraphs.size() and v != null:
-				v.next_at = maxi(v.next_at, now + 1)
+				v.next_at = maxi(v.next_at, tick + TPS)
 				_log("interrupt", "%s의 공격을 끊음" % v.name, {"uid": v.uid, "cells": [v.pos]})
 		"delay_actor":
 			var v2 := _actor(int(part["uid"]))
 			if v2 != null:
 				var s2 := int(part.get("secs", 2))
-				v2.next_at += s2
+				v2.next_at += s2 * TPS
 				for t in telegraphs:
 					if int(t["actor_uid"]) == v2.uid:
-						t["fire_at"] = int(t["fire_at"]) + s2
+						t["fire_at"] = int(t["fire_at"]) + s2 * TPS
 				_log("delay_actor", "%s 행동 %d초 늦춤" % [v2.name, s2], {"uid": v2.uid, "cells": [v2.pos]})
 		"clone":
 			_spawn_clone(user, part["aim"], int(part.get("secs", 8)))
 		"time_budget":
 			# buys time: every other team's next action and pending telegraph is pushed back
-			var d := int(part.get("delta", 0))
+			var d := int(part.get("delta", 0)) * TPS
 			for a in actors:
 				if a.team != user.team:
-					a.next_at = maxi(now + 1, a.next_at + d)
+					a.next_at = maxi(tick + TPS, a.next_at + d)
 			for t in telegraphs:
-				t["fire_at"] = maxi(now + 1, int(t["fire_at"]) + d)
+				t["fire_at"] = maxi(tick + TPS, int(t["fire_at"]) + d)
 		"belt":
 			match part.get("action", "freeze"):
 				"freeze": belt.hold()
@@ -167,7 +180,7 @@ func _spawn_clone(user: Actor, at: Vector2i, secs: int) -> void:
 	c.team = user.team
 	c.controller = "echo"
 	c.facing = user.facing
-	c.expires_at = now + secs
+	c.expires_at = tick + secs * TPS
 	grid.place_unit(c, spot)
 	actors.append(c)
 	_log("clone", "그림자 분신", {"uid": c.uid, "cells": [spot]})
@@ -201,8 +214,10 @@ func action_secs(base: int, actor: Actor) -> int:
 func round_time() -> int:
 	return int(cfg["round_time"])
 
-func next_draw_at() -> int:
-	return (now / round_time() + 1) * round_time()
+## World second at which the hand next refills.
+func next_draw_at() -> float:
+	var rt := round_time() * TPS
+	return float((tick / rt + 1) * rt) / TPS
 
 func _can_act() -> bool:
 	return not _check_end() and human() != null
@@ -298,7 +313,7 @@ func cmd_play(slot: int, aim: Vector2i) -> bool:
 	var tg0: Dictionary = card.get("target", {})
 	var shown_secs := maxi(0, secs - (mini(h.discount, secs) if secs > 0 else 0))
 	_log("play", "%s: %s (%d초)" % [h.name, card.get("name", id), secs], {"card": id, "aim": aim, "uid": h.uid,
-		"secs": 0 if borrow_left > 0 else shown_secs, "cells": Targeting.cells(tg0.get("shape", "cell"), h.pos, aim, int(tg0.get("size", 0)))})
+		"secs": 0 if borrow_left > 0 else shown_secs, "wsecs": 0.0 if borrow_left > 0 else shown_secs(maxi(1, shown_secs)), "cells": Targeting.cells(tg0.get("shape", "cell"), h.pos, aim, int(tg0.get("size", 0)))})
 	_spend(secs, func():
 		var tg: Dictionary = card.get("target", {})
 		_log("land", "%s 발동" % card.get("name", id), {"card": id, "user": h.uid,
@@ -394,19 +409,50 @@ func advance(secs: int, on_done: Callable = Callable()) -> void:
 		_frame()   # instant actions still get a frame, so the view glides instead of jumping
 		return
 	for i in secs:
-		if phase != "player":
-			return
-		now += 1
-		ctx.now = now
-		if i == secs - 1 and on_done.is_valid():
-			if human() != null and human() == actor:
-				on_done.call()
-				_after_action()
+		# one player second: TPS ticks of world time, fewer while the world is slowed
+		var n := _step_ticks()
+		for k in n:
 			if phase != "player":
-				_frame()
 				return
-		_world_second()
+			tick += 1
+			ctx.now = tick
+			if i == secs - 1 and k == n - 1 and on_done.is_valid():
+				if human() != null and human() == actor:
+					on_done.call()
+					_after_action()
+				if phase != "player":
+					_frame()
+					return
+			_world_tick()
 		_frame()
+
+## World ticks one player second takes now (TPS normally, a third of that in 불릿타임).
+func _step_ticks() -> int:
+	if slowed():
+		return maxi(1, int(round(TPS * slow_rate)))
+	return TPS
+
+func slowed() -> bool:
+	return tick < slow_until
+
+## World seconds one player second takes right now (1.0, or about 0.3 in 불릿타임).
+func world_rate() -> float:
+	return float(_step_ticks()) / TPS
+
+## Seconds from now until battle tick `t` (negative once it has passed).
+func secs_until(t: int) -> float:
+	return float(t - tick) / TPS
+
+## A time for the screen: whole seconds as "4", anything else to a tenth ("3.7"), rounded up.
+static func fmt_secs(x: float) -> String:
+	var tenth := ceilf(x * 10.0 - 0.001) / 10.0
+	if absf(tenth - roundf(tenth)) < 0.001:
+		return "%d" % int(roundf(tenth))
+	return "%.1f" % tenth
+
+## World seconds a player action of `secs` takes right now (what the card cost shows).
+func shown_secs(secs: int) -> float:
+	return float(secs * _step_ticks()) / TPS
 
 ## Snapshot of where every unit is and its hp at the current second (view replay).
 const HURT_LOGS := ["damage", "status_damage", "collision", "void", "dislike"]
@@ -420,7 +466,7 @@ func _audit() -> void:
 	for i in range(_audit_log_i, log.size()):
 		var e: Dictionary = log[i]
 		if not e.has("at"):
-			e["at"] = now   # world-step lines (reactions, burns, pushes) are stamped with their second
+			e["at"] = tick   # world-step lines (reactions, burns, pushes) are stamped with their second
 		if e["t"] in HURT_LOGS or e["t"] == "split":
 			var u := int(e["data"].get("uid", e["data"].get("from", -1)))
 			if e["t"] == "split":
@@ -448,15 +494,19 @@ func _frame() -> void:
 	_audit()
 	var pos := {}
 	var hp := {}
+	var glide := {}
 	for a in actors:
 		if grid.units.has(a):
 			pos[a.uid] = a.pos
+			# a step still under way (or just finished): where from, where to, and over which world seconds
+			if not a.glide.is_empty() and int(a.glide[3]) >= tick - TPS and a.glide[1] == a.pos:
+				glide[a.uid] = [a.glide[0], a.glide[1], float(a.glide[2]) / TPS, float(a.glide[3]) / TPS]
 		hp[a.uid] = a.hp
-	frames.append({"t": now, "pos": pos, "hp": hp})
+	frames.append({"t": now, "pos": pos, "hp": hp, "glide": glide})
 
 ## Crystals broken outside an effect (shoved units, collisions) still throw their shards.
 func _throw_shards() -> void:
-	ctx.now = now
+	ctx.now = tick
 	for guard in 8:
 		var any := false
 		while not grid.shatter_queue.is_empty():
@@ -482,22 +532,24 @@ func _throw_shards() -> void:
 		if not any:
 			break
 
-func _world_second() -> void:
+## One world tick (0.1 s): shields and timers run out, every env_every seconds the environment
+## steps, due telegraphs land, enemies whose time has come act, and each round the hand refills.
+func _world_tick() -> void:
 	for a in actors:
-		if a.shield > 0 and now >= a.shield_until:
+		if a.shield > 0 and tick >= a.shield_until:
 			a.shield = 0
-		if a.expires_at >= 0 and now >= a.expires_at and grid.units.has(a):
+		if a.expires_at >= 0 and tick >= a.expires_at and grid.units.has(a):
 			a.hp = 0
 			_log("vanish", "%s 사라짐" % a.name, {"uid": a.uid, "cells": [a.pos]})
-	ctx.now = now
-	var due := ctx.timers.filter(func(t): return int(t["at"]) <= now)
+	ctx.now = tick
+	var due := ctx.timers.filter(func(t): return int(t["at"]) <= tick)
 	if not due.is_empty():
-		ctx.timers = ctx.timers.filter(func(t): return int(t["at"]) > now)
+		ctx.timers = ctx.timers.filter(func(t): return int(t["at"]) > tick)
 		for t in due:
 			_log("timer_fire", "시한폭탄 폭발", {"cells": t["cells"], "cell": t["aim"]})
 			Effects.apply_part(t["part"], t["user"], t["aim"], t["cells"], ctx)
 		_after_action()
-	if now % int(cfg["env_every"]) == 0:
+	if tick % (int(cfg["env_every"]) * TPS) == 0:
 		EnvironmentStep.run(grid, catalog, rng, log, true, float(cfg["env_every"]))
 		_likes_dislikes()
 		Effects.tick_pending(ctx, true)
@@ -510,21 +562,21 @@ func _world_second() -> void:
 	for a in actors.duplicate():
 		if phase != "player":
 			return
-		if a.controller != "ai" or not a.alive() or not grid.units.has(a) or now < a.next_at:
+		if a.controller != "ai" or not a.alive() or not grid.units.has(a) or tick < a.next_at:
 			continue
 		if _busy(a):
 			continue
 		if _ts(a.pos) <= 0.0:
-			a.next_at = now + 1
+			a.next_at = tick + TPS
 			continue
 		_ai_act(a)
 		_after_action()
 	_track_telegraphs()
-	if now % round_time() == 0 and phase == "player":
+	if tick % (round_time() * TPS) == 0 and phase == "player":
 		var h := human()
 		if h != null and belt != null:
 			belt.end_turn(_ts(h.pos))
-		_log("round", "%d초: 카드 보충" % now, {})
+		_log("round", "%d초: 카드 보충" % (tick / TPS), {})
 
 func _busy(a: Actor) -> bool:
 	for t in telegraphs:
@@ -538,34 +590,34 @@ func _resolve_telegraphs() -> void:
 		var a: Actor = _actor(t["actor_uid"])
 		if a == null or not a.alive() or a.controller != "ai" or not grid.units.has(a):
 			continue
-		if int(t["fire_at"]) > now:
+		if int(t["fire_at"]) > tick:
 			keep.append(t)
 			continue
 		if _ts(a.pos) <= 0.0:
 			# the attacker is frozen in time: the attack waits
-			t["fire_at"] = now + 1
+			t["fire_at"] = tick + TPS
 			keep.append(t)
 			continue
 		var cells: Array = t["cells"]
 		var h := human()
-		if h != null and h.guard_at == now and h.guard_kind != "" and (cells.has(h.pos) or cells.has(h.guard_from)):
+		if h != null and tick >= h.guard_at and tick < h.guard_until and h.guard_kind != "" and (cells.has(h.pos) or cells.has(h.guard_from)):
 			cells = cells.filter(func(p): return p != h.pos)
 			if h.guard_kind == "parry":
 				_log("parry", "받아치기!", {"uid": h.uid, "cells": [h.pos, a.pos]})
-				ctx.now = now
+				ctx.now = tick
 				Effects.hit(ctx, h, a, Actor.PARRY_DAMAGE, "physical", "받아치기")
 				a.add_status("stunned", 1)
-				a.next_at = maxi(a.next_at, now + 2)
+				a.next_at = maxi(a.next_at, tick + 2 * TPS)
 			else:
 				_log("dodge", "회피!", {"uid": h.uid, "cells": [h.pos]})
 				h.discount += 1
 			h.guard_kind = ""
 		_log("telegraph_hit", "%s: %s" % [a.name, Effects.card_def(t["card_id"], catalog).get("name", "")], {"cells": cells, "user": a.uid})
 		if cells.is_empty():
-			a.next_at = maxi(a.next_at, now + 1)
+			a.next_at = maxi(a.next_at, tick + TPS)
 			continue
 		Effects.apply(Effects.card_def(t["card_id"], catalog), a, t["aim"], ctx, cells)
-		a.next_at = maxi(a.next_at, now + 1)
+		a.next_at = maxi(a.next_at, tick + TPS)
 		_after_action()
 		if phase != "player":
 			break
@@ -574,7 +626,7 @@ func _resolve_telegraphs() -> void:
 ## Tracking attacks follow their target until one second before they fire, then lock.
 func _track_telegraphs() -> void:
 	for t in telegraphs:
-		if not t.get("track", false) or int(t["fire_at"]) - now < 1:
+		if not t.get("track", false) or int(t["fire_at"]) - tick < TPS:
 			continue
 		var a: Actor = _actor(t["actor_uid"])
 		if a == null:
@@ -622,7 +674,7 @@ func _attack_cells(card: Dictionary, a: Actor, aim: Vector2i, foe: Actor) -> Arr
 func _ai_act(a: Actor) -> void:
 	var choice := EnemyAI.choose(a, self)
 	if choice.is_empty():
-		a.next_at = now + 1
+		a.next_at = tick + TPS
 		return
 	var card := Effects.card_def(choice["card_id"], catalog)
 	var tgt: Dictionary = card.get("target", {})
@@ -634,21 +686,23 @@ func _ai_act(a: Actor) -> void:
 		var out := ai_step_cell(a, aim, int(tgt.get("range", 1)), card)
 		if out != a.pos and not hazard(out, a):
 			a.facing = out - a.pos
+			a.glide = [a.pos, out, tick, tick + maxi(1, action_secs(int(cfg["move_time"]), a)) * TPS]
 			grid.move_unit(a, out)
-			a.next_at = now + maxi(1, action_secs(int(cfg["move_time"]), a))
+			a.next_at = tick + maxi(1, action_secs(int(cfg["move_time"]), a)) * TPS
 			return
 	if shape != "self" and shape != "all" and shape != "around" and not in_reach(card, a.pos, aim):
 		var plan := move_plan(a, foe, aim, card)
 		a.stuck = a.stuck + 1 if plan["to"] == a.pos else 0
 		if plan["to"] != a.pos:
 			a.facing = Targeting.dir_to(a.pos, plan["to"])
+			a.glide = [a.pos, plan["to"], tick, tick + int(plan["secs"]) * TPS]
 			grid.move_unit(a, plan["to"])
 			if plan["cells"] > 1:
 				_log("hop", "%s 도약" % a.name, {"uid": a.uid, "cells": [plan["to"]]})
-		a.next_at = now + int(plan["secs"])
+		a.next_at = tick + int(plan["secs"]) * TPS
 		return
 	if choice.get("trick", false):
-		a.trick_ready[choice["card_id"]] = now + int(choice["cd"])
+		a.trick_ready[choice["card_id"]] = tick + int(choice["cd"]) * TPS
 	else:
 		a.pattern_index += 1
 	if aim != a.pos:
@@ -656,14 +710,14 @@ func _ai_act(a: Actor) -> void:
 	var secs := maxi(1, action_secs(int(card.get("time", 1)), a))
 	if card.get("telegraph", false):
 		var cells := _attack_cells(card, a, aim, foe)
-		telegraphs.append({"actor_uid": a.uid, "card_id": choice["card_id"], "aim": aim, "cells": cells, "set_at": now,
-			"fire_at": now + secs, "track": card.get("track", false), "foe_uid": foe.uid})
-		a.next_at = now + secs + 1
+		telegraphs.append({"actor_uid": a.uid, "card_id": choice["card_id"], "aim": aim, "cells": cells, "set_at": tick,
+			"fire_at": tick + secs * TPS, "track": card.get("track", false), "foe_uid": foe.uid})
+		a.next_at = tick + (secs + 1) * TPS
 		_log("telegraph", "%s: %s 예고 (%d초 뒤)" % [a.name, card.get("name", choice["card_id"]), secs], {"cells": cells})
 	else:
 		_log("play", "%s: %s" % [a.name, card.get("name", choice["card_id"])], {"card": choice["card_id"], "aim": aim})
 		Effects.apply(card, a, aim, ctx)
-		a.next_at = now + secs
+		a.next_at = tick + secs * TPS
 
 ## Where a monster's next move takes it, by its way of moving (no change to the world):
 ##  chase:     the shortest safe way to where it can strike;
@@ -791,7 +845,7 @@ func _splits() -> void:
 		c.hp = a.hp / 2
 		a.hp -= c.hp
 		c.facing = a.facing
-		c.next_at = now + 1
+		c.next_at = tick + TPS
 		grid.place_unit(c, spot)
 		actors.append(c)
 		_log("split", "%s 분열" % a.name, {"uid": c.uid, "from": a.uid, "cells": [a.pos, spot]})
@@ -867,7 +921,7 @@ var _intent_key := ""
 ## The path search behind it is costly and the view asks every frame, so answers are kept until
 ## anything in the battle happens (a new second, a log line, anyone moving).
 func ai_intent(a: Actor) -> Dictionary:
-	var key := "%d|%d|%d" % [now, log.size(), frames.size()]
+	var key := "%d|%d|%d" % [tick, log.size(), frames.size()]
 	for u in grid.units:
 		key += "|%d,%d,%d" % [u.pos.x, u.pos.y, u.hp]
 	if key != _intent_key:
@@ -886,7 +940,7 @@ func _ai_intent(a: Actor) -> Dictionary:
 	var card := Effects.card_def(choice["card_id"], catalog)
 	var tgt: Dictionary = card.get("target", {})
 	var shape: String = tgt.get("shape", "cell")
-	var at := maxi(a.next_at, now + 1)
+	var at := maxi(a.next_at, tick + 1)
 	if _wants_out(a):
 		var out := ai_step_cell(a, choice["aim"], int(tgt.get("range", 1)), card)
 		if out != a.pos and not hazard(out, a):
@@ -902,7 +956,7 @@ func _ai_intent(a: Actor) -> Dictionary:
 		return {}
 	var cells: Array = Targeting.cells(shape, a.pos, choice["aim"], int(tgt.get("size", 0))) if int(card.get("safe", 0)) == 0 else []
 	var secs := maxi(1, action_secs(int(card.get("time", 1)), a)) if card.get("telegraph", false) else 0
-	return {"kind": "attack", "at": at, "fire_at": at + secs, "cells": cells, "card_id": choice["card_id"],
+	return {"kind": "attack", "at": at, "fire_at": at + secs * TPS, "cells": cells, "card_id": choice["card_id"],
 		"actor_uid": a.uid, "aim": choice["aim"], "pending": true}
 
 func _actor(uid: int) -> Actor:
@@ -924,7 +978,7 @@ func _after_action() -> void:
 	if human() != belt_owner and human() != null:
 		# body swap: the body the player left becomes an AI that needs a moment to get its bearings
 		if belt_owner != null and belt_owner.controller == "ai":
-			belt_owner.next_at = maxi(belt_owner.next_at, now + 2)
+			belt_owner.next_at = maxi(belt_owner.next_at, tick + 2 * TPS)
 		_rebuild_belt()
 	_check_end()
 
@@ -941,7 +995,7 @@ func _check_end() -> bool:
 	return false
 
 func _log(t: String, msg: String, data: Dictionary) -> void:
-	log.append({"t": t, "msg": msg, "data": data, "at": now})
+	log.append({"t": t, "msg": msg, "data": data, "at": tick})
 
 ## Simulates playing a card without changing anything (the card's effect only, as if it landed
 ## now; the world seconds of its wind-up are not simulated).
@@ -960,7 +1014,7 @@ func preview(slot: int, aim: Vector2i) -> Dictionary:
 	tmp.rng = rng
 	tmp.actors = actors.duplicate()
 	tmp.next_uid = ctx.next_uid
-	tmp.now = now
+	tmp.now = tick
 	var before := {}
 	for a in actors:
 		before[a.uid] = [a.hp, a.pos]

@@ -140,7 +140,7 @@ func _log_line(e: Dictionary) -> void:
 		"telegraph", "telegraph_hit": col = "#d9a35a"
 		"death": col = "#8a8498"
 	var msg := str(e.get("msg", "")).replace("[", "(").replace("]", ")")
-	log_box.append_text("[color=#5a5468]%d초[/color] [color=%s]%s[/color]\n" % [int(e.get("at", 0)), col, msg])
+	log_box.append_text("[color=#5a5468]%.1f초[/color] [color=%s]%s[/color]\n" % [float(e.get("at", 0)) / Battle.TPS, col, msg])
 	if log_box.get_paragraph_count() > LOG_LINES + 10:
 		log_box.remove_paragraph(0)
 
@@ -223,7 +223,22 @@ func _step_replay(delta: float) -> void:
 		if p1 != p0:
 			board.moving[uid] = Vector2i(p1)
 	board.shown_hp = a["hp"] if k < 0.5 else b["hp"]
-	board.shown_now = int(a["t"])
+	board.shown_now = lerpf(float(a["t"]), float(b["t"]), k)
+	# 불릿타임: a step that takes longer than one replayed moment is spread over its whole time,
+	# so monsters walk three times slower instead of finishing their step in one moment
+	var gl: Dictionary = b.get("glide", {})
+	for uid in gl:
+		var g: Array = gl[uid]
+		var gt0 := float(g[2])
+		var gt1 := float(g[3])
+		if gt1 - gt0 <= float(b["t"]) - float(a["t"]) + 0.05 or not board.shown_pos.has(uid):
+			continue
+		var gk := clampf((board.shown_now - gt0) / (gt1 - gt0), 0.0, 1.0)
+		board.shown_pos[uid] = Vector2(g[0]).lerp(Vector2(g[1]), gk * gk * (3.0 - 2.0 * gk))
+		if gk < 1.0:
+			board.moving[uid] = Vector2i(g[1])
+		else:
+			board.moving.erase(uid)
 
 const FLASH := {"fire": Color("#ff8a3a"), "ice": Color("#bfe8ff"), "water": Color("#5aa8ff"), "electric": Color("#ffe14a")}
 
@@ -232,10 +247,10 @@ func _flashes() -> void:
 	var b := flow.battle
 	if log_i > b.log.size():
 		log_i = b.log.size()
-	var t_now: int = board.shown_now if board.replaying else b.now
+	var t_now: float = board.sim_time()
 	while log_i < b.log.size():
 		var e: Dictionary = b.log[log_i]
-		if int(e.get("at", 0)) > t_now:
+		if float(e.get("at", 0)) / Battle.TPS > t_now + 0.001:
 			break
 		log_i += 1
 		_log_line(e)
@@ -243,16 +258,16 @@ func _flashes() -> void:
 			"play":
 				var kind_by_card := {"roll": "roll", "guard": "guard", "parry": "guard"}
 				var cid: String = str(e["data"].get("card", ""))
+				var at_s := float(e["at"]) / Battle.TPS
+				var ws := float(e["data"].get("wsecs", maxi(1, int(e["data"].get("secs", 1)))))
 				if kind_by_card.has(cid) and e["data"].has("uid"):
-					board.acts[int(e["data"]["uid"])] = {"kind": kind_by_card[cid], "t0": int(e["at"]),
-						"t1": int(e["at"]) + maxi(1, int(e["data"].get("secs", 1)))}
+					board.acts[int(e["data"]["uid"])] = {"kind": kind_by_card[cid], "t0": at_s, "t1": at_s + ws}
 				elif e["data"].has("uid") and Effects.card_def(cid, catalog).get("parts", []).any(func(pt): return pt.get("op", "") == "damage"):
 					# a blow: the body starts winding up the moment the card is played, and lets go when it lands
-					board.acts[int(e["data"]["uid"])] = {"kind": "act", "t0": int(e["at"]),
-						"t1": int(e["at"]) + maxi(1, int(e["data"].get("secs", 1)))}
+					board.acts[int(e["data"]["uid"])] = {"kind": "act", "t0": at_s, "t1": at_s + ws}
 				if int(e["data"].get("secs", 0)) >= 2:
 					board.casts.append({"uid": int(e["data"].get("uid", -1)), "cells": e["data"].get("cells", []),
-						"t0": int(e["at"]), "t1": int(e["at"]) + int(e["data"]["secs"])})
+						"t0": at_s, "t1": at_s + ws})
 			"land":
 				var c := Effects.card_def(e["data"].get("card", ""), catalog)
 				var col := Color("#fff4c8")
@@ -598,6 +613,7 @@ func _layout_hand() -> void:
 		var sc := 0.6 + 0.4 * (depth + 1.0) / 2.0
 		var w := maxf(0.06, absf(depth))
 		cv.lit = in_hand and int(cv.get_meta("slot")) == selected
+		cv.time_rate = flow.battle.world_rate() if flow.battle != null else 1.0
 		var big := in_hand and cv == hovered_card and not aiming
 		var z := 2 if big else 1
 		if cv.zoom != z:
@@ -644,7 +660,7 @@ func _draw_hud() -> void:
 	# hand refill: a small ring on the deck icon counts the seconds to the next card
 	var dr := b.next_draw_at() - b.now
 	var dk := Vector2(1214, 20)
-	if dr >= 1:
+	if dr > 0.0:
 		hud.draw_arc(dk, 17, -PI / 2, -PI / 2 + TAU * (1.0 - float(dr) / maxf(1.0, float(b.round_time()))), 24, Color("#9cc8f0"), 2)
 	# game speed (1-5 keys): shown while it is not normal, and big for a moment after a change
 	if speed != 1.0 or real - speed_shown_at < 1.2:
@@ -832,10 +848,10 @@ func _unit_details(u: Actor) -> void:
 		var lines := []
 		for t in b.telegraphs:
 			if int(t["actor_uid"]) == u.uid:
-				lines.append("%s: %d초 뒤" % [Effects.card_def(t["card_id"], catalog).get("name", ""), int(t["fire_at"]) - b.now])
+				lines.append("%s: %s초 뒤" % [Effects.card_def(t["card_id"], catalog).get("name", ""), Battle.fmt_secs(b.secs_until(int(t["fire_at"])))])
 		var it := b.ai_intent(u)
 		if it.get("kind", "") == "move":
-			lines.append("이동: %d초 뒤" % (int(it["at"]) - b.now))
+			lines.append("이동: %s초 뒤" % Battle.fmt_secs(b.secs_until(int(it["at"]))))
 		var seq: Array = u.pattern if not u.pattern.is_empty() else u.deck
 		if not seq.is_empty():
 			var names := []

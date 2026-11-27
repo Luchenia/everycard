@@ -114,7 +114,7 @@ func test_telegraph_fires_after_card_time() -> void:
 	var p := b.human()
 	b.cmd_wait(1)
 	assert_eq(b.telegraphs.size(), 1, "telegraph posted at 1s")
-	assert_eq(b.telegraphs[0]["fire_at"], 3, "fires 2s later")
+	assert_eq(b.telegraphs[0]["fire_at"], 3 * Battle.TPS, "fires 2s later")
 	b.cmd_wait(1)
 	assert_eq(p.hp, 40, "not yet")
 	b.cmd_wait(1)
@@ -225,7 +225,7 @@ func test_time_budget_delays_foes() -> void:
 	var b := Battle.new(c, 1, "hero", ["biter"], LAYOUT)
 	b.cmd_wait(1)
 	Effects.apply({"target": {"shape": "self"}, "parts": [{"op": "time_budget", "delta": 3}]}, b.human(), b.human().pos, b.ctx)
-	assert_eq(b.telegraphs[0]["fire_at"], 6, "telegraph pushed back 3 seconds")
+	assert_eq(b.telegraphs[0]["fire_at"], 6 * Battle.TPS, "telegraph pushed back 3 seconds")
 
 func test_config_grid_size() -> void:
 	var c2 := Catalog.load_dir("res://data")

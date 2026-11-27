@@ -30,6 +30,10 @@ static func part_score(part: Dictionary, catalog: Catalog) -> float:
 		"shield": return float(part.get("amount", 0)) * float(o.get("per_amount", 1))
 		"discount": return float(part.get("amount", 0)) * float(o.get("per_amount", 1))
 		"borrow": return float(part.get("secs", 0)) * float(o.get("per_sec", 1))
+		"slow":
+			# 불릿타임: the player gains (factor - 1) seconds of action per slowed world second
+			var gain := float(part.get("secs", 4)) * (maxf(1.0, float(part.get("factor", 3))) - 1.0)
+			return gain * float(ops.get("borrow", {}).get("per_sec", 1))
 		"dash": return float(o.get("flat", 0))
 		"belt": return float(part.get("amount", 1)) * float(o.get("per_amount", 1))
 		"time_budget": return absf(float(part.get("delta", 0))) * float(o.get("per_delta", 1))

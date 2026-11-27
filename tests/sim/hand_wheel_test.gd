@@ -54,14 +54,14 @@ func test_heavy_roll_costs_two() -> void:
 	assert_eq(_ids(bt.belt), ["hv", "~", "a", "a", "a"], "heavy at the left end")
 	assert_true(bt.cmd_wheel(1), "roll")
 	assert_eq(bt.now, 2, "turning a heavy card out costs 2 seconds")
-	assert_true(bt.ring()[-1] == "hv", "it went to the back of the ring")
+	assert_true(bt.belt.ring()[-1] == "hv", "it went to the back of the ring")
 	assert_true(bt.cmd_wheel(-1), "the wheel the other way turns the ring the same way")
 	assert_eq(bt.now, 3, "normal card costs 1 second")
 	# a played card comes round only after every other card
 	bt.belt = HandBelt.new(["c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8"], bt.rng, c, 5, false)
 	bt.belt.take(0)
 	bt.belt.refill_one()
-	assert_eq(bt.ring()[-1], "c1", "the played card waits at the back")
+	assert_eq(bt.belt.ring()[-1], "c1", "the played card waits at the back")
 	var back_in := -1
 	for k in 8:
 		if _ids(bt.belt).has("c1"):

@@ -40,9 +40,10 @@ func _draw() -> void:
 		for i in mini(debt, SECS):
 			draw_rect(Rect2(x0 + i * w + 2, y + 8, w - 4, 3), Color(0.6, 0.6, 0.7, 0.6))
 	elif span_secs > 0 or span_exhaust > 0:
-		draw_rect(Rect2(x0, y - 5, minf(span_secs, SECS) * w, 10), Color(Art.GOLD, 0.8))
+		var wr := battle.world_rate()   # 불릿타임: the player's seconds cover a third of the world's
+		draw_rect(Rect2(x0, y - 5, minf(span_secs * wr, SECS) * w, 10), Color(Art.GOLD, 0.8))
 		for i in mini(span_exhaust, SECS - span_secs):
-			var r := Rect2(x0 + (span_secs + i) * w, y - 5, w, 10)
+			var r := Rect2(x0 + (span_secs + i) * wr * w, y - 5, w * wr, 10)
 			draw_rect(r, Color(0.5, 0.5, 0.58, 0.6))
 			draw_line(r.position + Vector2(2, 10), r.position + Vector2(10, 0), Color(0.2, 0.2, 0.25, 0.8), 2)
 	for i in SECS + 1:
@@ -52,7 +53,7 @@ func _draw() -> void:
 			draw_string(font, Vector2(x - 3, y + 17), "%d" % i, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.4))
 	# hand refill: a little card
 	var dr := battle.next_draw_at() - battle.now
-	if dr >= 1 and dr <= SECS:
+	if dr > 0.0 and dr <= SECS:
 		var xc := x0 + dr * w
 		draw_rect(Rect2(xc - 5, y - 22, 10, 14), Art.INK)
 		draw_rect(Rect2(xc - 4, y - 21, 8, 12), Color("#9cc8f0"))
@@ -60,16 +61,16 @@ func _draw() -> void:
 	for a in battle.actors:
 		if a.controller != "ai" or not a.alive() or not battle.grid.units.has(a) or battle._busy(a):
 			continue
-		var d: int = a.next_at - battle.now
-		if d >= 1 and d <= SECS:
+		var d: float = battle.secs_until(a.next_at)
+		if d > 0.0 and d <= SECS:
 			_face(a, Vector2(x0 + d * w, y - 9), 0.45)
 	# enemy blows
 	for t in battle.telegraphs:
-		var d2: int = int(t["fire_at"]) - battle.now
+		var d2: float = battle.secs_until(int(t["fire_at"]))
 		if d2 < 0 or d2 > SECS:
 			continue
 		var xt := x0 + d2 * w
-		var hot := d2 <= 1
+		var hot := d2 <= 1.0
 		var pulse := 0.5 + 0.5 * sin(real * (9.0 if hot else 4.0))
 		var col := Art.DANGER if hot else Color("#ff8a3a")
 		var dia := PackedVector2Array([Vector2(xt, y - 10), Vector2(xt + 9, y), Vector2(xt, y + 10), Vector2(xt - 9, y)])

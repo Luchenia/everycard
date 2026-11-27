@@ -27,6 +27,11 @@ var lines := 1
 var real := 0.0
 var zoom := 1
 var lit := false     # selected
+var time_rate := 1.0:   # world seconds per card second (불릿타임 shows a third)
+	set(v):
+		if v != time_rate:
+			time_rate = v
+			queue_redraw()
 var ghost := false
 
 func setup(id: String, cat: Catalog, f: Font, z := 1) -> void:
@@ -171,11 +176,14 @@ func _draw() -> void:
 	draw_string(nf, Vector2(np.x, round(base)), nm, HORIZONTAL_ALIGNMENT_CENTER, NAME_PLATE.size.x * z, nfs, Color("#F0ECE0"))
 	# seconds
 	var bf := Art.font("Galmuri11-Bold")
-	var st := "%d" % int(c.get("time", 0))
+	var st := "%d" % int(c.get("time", 0)) if time_rate == 1.0 else Battle.fmt_secs(float(c.get("time", 0)) * time_rate)
 	var bc := BADGE * z
 	var bp := Vector2(bc.x - 9 * z, bc.y + 4.5 * z)
-	draw_string_outline(bf, bp, st, HORIZONTAL_ALIGNMENT_CENTER, 18 * z, int(12 * z), int(2 * z), Color("#1a120c"))
-	draw_string(bf, bp, st, HORIZONTAL_ALIGNMENT_CENTER, 18 * z, int(12 * z), Color("#FFF0C8"))
+	var fs := int(12 * z) if st.length() < 3 else int(8 * z)   # "0.3" (불릿타임) in a smaller hand to fit the gem
+	if st.length() >= 3:
+		bp.y -= 1.5 * z
+	draw_string_outline(bf, bp, st, HORIZONTAL_ALIGNMENT_CENTER, 18 * z, fs, int(2 * z), Color("#1a120c"))
+	draw_string(bf, bp, st, HORIZONTAL_ALIGNMENT_CENTER, 18 * z, fs, Color("#FFF0C8"))
 	if int(c.get("weight", 1)) > 1:
 		draw_rect(Rect2(Vector2(74, 130) * z, Vector2(2, 4) * z), Art.INK)
 		draw_rect(Rect2(Vector2(77, 130) * z, Vector2(2, 4) * z), Art.INK)

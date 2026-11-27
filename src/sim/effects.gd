@@ -21,7 +21,7 @@ class BattleContext extends RefCounted:
 	var on_meta: Callable = Callable()
 	var on_deck_add: Callable = Callable()   # (actor, card_id) -> void, lets Battle put gained cards into the hand
 	var next_uid := 1000
-	var now := 0   # battle clock (seconds), kept in step by Battle
+	var now := 0   # battle clock in ticks (Battle.TPS per second), kept in step by Battle
 	var timers: Array = []   # 시한폭탄: {at, part, user, aim, cells}
 	var bonus := 0           # 빈틈 노리기 bonus for the card being applied
 	var coat: Dictionary = {}  # 독 바르기 coating for the card being applied
@@ -299,8 +299,8 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 		"timer":
 			# 시한폭탄: goes off `secs` seconds later on the cells around the aim
 			var around := Targeting.cells("circle", aim, aim, int(part.get("size", 1)))
-			ctx.timers.append({"at": ctx.now + int(part.get("secs", 3)), "part": part["part"], "user": user, "aim": aim, "cells": around})
-			_log(ctx, "timer_set", "시한폭탄 설치", {"cell": aim, "cells": around, "at": ctx.now + int(part.get("secs", 3))})
+			ctx.timers.append({"at": ctx.now + int(part.get("secs", 3)) * Battle.TPS, "part": part["part"], "user": user, "aim": aim, "cells": around})
+			_log(ctx, "timer_set", "시한폭탄 설치", {"cell": aim, "cells": around, "at": ctx.now + int(part.get("secs", 3)) * Battle.TPS})
 		"empower":
 			user.next_bonus += int(part.get("amount", 0))
 			_log(ctx, "empower", "%s 다음 공격 +%d" % [user.name, user.next_bonus], {"uid": user.uid})
@@ -321,7 +321,7 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 				ctx.on_meta.call({"op": "clone", "aim": aim, "secs": int(part.get("secs", 8))}, user)
 		"shield":
 			user.shield += int(part.get("amount", 0))
-			user.shield_until = ctx.now + int(part.get("secs", 6))
+			user.shield_until = ctx.now + int(part.get("secs", 6)) * Battle.TPS
 			_log(ctx, "shield", "%s 보호막 %d" % [user.name, user.shield], {"uid": user.uid, "amount": user.shield})
 		"dash":
 			# runs toward the aim (diagonals allowed), leaping over bodies on the way; walls and
@@ -359,7 +359,7 @@ static func apply_part(part: Dictionary, user, aim: Vector2i, cells: Array, ctx:
 				apply_part(part["part"], user, aim, cells, ctx)
 			else:
 				_log(ctx, "condition_false", "조건 불충족")
-		"belt", "time_budget", "borrow", "guard":
+		"belt", "time_budget", "borrow", "slow", "guard":
 			if ctx.on_meta.is_valid():
 				ctx.on_meta.call(part, user)
 		"swap_bodies":

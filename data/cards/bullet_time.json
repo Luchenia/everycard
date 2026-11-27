@@ -4,7 +4,7 @@
  "time": 0,
  "rarity": "legendary",
  "family": "neutral",
- "desc": "시간 10초를 [가불]받습니다.",
+ "desc": "4초 동안 세상이 3배 느리게 흐릅니다.",
  "weight": 1,
  "target": {
   "shape": "self",
@@ -13,8 +13,9 @@
  },
  "parts": [
   {
-   "op": "borrow",
-   "secs": 10
+   "op": "slow",
+   "factor": 3,
+   "secs": 4
   }
  ],
  "pool": "common"

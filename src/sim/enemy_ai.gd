@@ -39,7 +39,7 @@ static func choose(actor: Actor, battle) -> Dictionary:
 static func _trick(actor: Actor, foe: Actor, battle) -> Dictionary:
 	for t in actor.tricks:
 		var id: String = t["card"]
-		if battle.now < int(actor.trick_ready.get(id, 0)):
+		if battle.tick < int(actor.trick_ready.get(id, 0)):
 			continue
 		match t.get("when", ""):
 			"aligned":

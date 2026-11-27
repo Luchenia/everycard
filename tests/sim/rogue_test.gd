@@ -113,7 +113,7 @@ func test_ambush_and_stolen_time() -> void:
 	var f2: Actor = b2.actors[1]
 	var at0 := f2.next_at
 	assert_true(b2.cmd_play(0, f2.pos), "steal time")
-	assert_eq(f2.next_at, at0 + 2, "its next action is 2 seconds later")
+	assert_eq(f2.next_at, at0 + 2 * Battle.TPS, "its next action is 2 seconds later")
 
 func test_smoke_hides() -> void:
 	var b := _battle("smoke_bomb", _lay([1, 3], [[6, 3]]), ["hitter"])

@@ -19,9 +19,15 @@ var range_cells: Array = []      # cells the selected card can reach
 var aiming := false              # a card is selected: tall effects go see-through so cells stay readable
 var shown_pos: Dictionary = {}   # uid -> Vector2 (cell coords, fractional while replaying)
 var shown_hp: Dictionary = {}    # uid -> hp at the replayed second
-var shown_now := -1
+var shown_now := -1.0            # world seconds of the replayed moment (between two frames)
 var replaying := false
 var replay_k := 0.0              # 0..1 inside the replayed second
+
+## The moment on screen, in world seconds: the replayed moment, or the battle clock when still.
+func sim_time() -> float:
+	if replaying:
+		return shown_now
+	return battle.now if battle != null else 0.0
 var moving: Dictionary = {}      # uid -> Vector2i: where a gliding unit is heading
 var walk_link: Dictionary = {}   # uid -> Vector2i(walked the second before, walks the second after): a walk over several cells loops its stride instead of restarting
 var _last_look: Dictionary = {}  # uid -> {st, i, flip, sq}: last drawn frame, to blend into the next motion
@@ -383,7 +389,15 @@ func _hp_of(u: Actor) -> int:
 	return int(shown_hp.get(u.uid, u.hp)) if replaying else u.hp
 
 func _pos_of(u: Actor) -> Vector2:
-	return shown_pos.get(u.uid, Vector2(u.pos)) if replaying else Vector2(u.pos)
+	if replaying:
+		return shown_pos.get(u.uid, Vector2(u.pos))
+	# held mid-step (불릿타임): a monster still on its way stands where it has got to
+	if not u.glide.is_empty() and u.glide[1] == u.pos and battle != null and battle.tick < int(u.glide[3]):
+		var span := float(int(u.glide[3]) - int(u.glide[2]))
+		if span > Battle.TPS * battle.world_rate() + 0.5:
+			var gk := clampf(float(battle.tick - int(u.glide[2])) / span, 0.0, 1.0)
+			return Vector2(u.glide[0]).lerp(Vector2(u.glide[1]), gk * gk * (3.0 - 2.0 * gk))
+	return Vector2(u.pos)
 
 var _track_for: Battle
 
@@ -572,7 +586,7 @@ func _draw_marks() -> void:
 		for a in battle.actors:
 			var it := battle.ai_intent(a)
 			if it.get("kind", "") == "move":
-				_move_arrow(tl, Vector2(a.pos), it["to"], off, false, int(it["at"]) - battle.now)
+				_move_arrow(tl, Vector2(a.pos), it["to"], off, false, battle.secs_until(int(it["at"])))
 	_casts(tl, off)
 	if not replaying:
 		if not walk_path.is_empty() and walk_mode != "cancel":
@@ -956,7 +970,7 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 	var wind := _windup(u)
 	var flashed := false
 	var hurt_s := Art.strip("units", sid + "_hurt.png")
-	var tc := (float(shown_now) + replay_k) if replaying else float(battle.now)
+	var tc := sim_time()
 	var act: Dictionary = acts.get(u.uid, {})
 	if not act.is_empty() and tc > float(act["t1"]) + 0.01:
 		acts.erase(u.uid)
@@ -1077,10 +1091,10 @@ func _walk_frame(rs: Dictionary, uid: int) -> float:
 ## How far an enemy is into the wind-up of its announced blow: {k: 0..1, dir} or {}.
 func _windup(u: Actor) -> Dictionary:
 	if replaying:
-		var tc := float(shown_now) + replay_k
+		var tc := sim_time()
 		for c in casts:
 			if int(c["uid"]) == u.uid and tc >= float(c["t0"]) and tc < float(c["t1"]):
-				var ck := (tc - float(c["t0"])) / maxf(1.0, float(c["t1"] - c["t0"]))
+				var ck := (tc - float(c["t0"])) / maxf(0.05, float(c["t1"] - c["t0"]))
 				var cd := Vector2.ZERO
 				for p in c["cells"]:
 					cd += Vector2(p) - _pos_of(u)
@@ -1088,9 +1102,9 @@ func _windup(u: Actor) -> Dictionary:
 	for t in battle.telegraphs:
 		if int(t["actor_uid"]) != u.uid:
 			continue
-		var t_now := (float(shown_now) + replay_k) if replaying else float(battle.now)
-		var t0 := float(t.get("set_at", int(t["fire_at"]) - 2))
-		var span := maxf(1.0, float(t["fire_at"]) - t0)
+		var t_now := sim_time()
+		var t0 := float(t.get("set_at", int(t["fire_at"]) - 2 * Battle.TPS)) / Battle.TPS
+		var span := maxf(0.1, float(t["fire_at"]) / Battle.TPS - t0)
 		var k := clampf((t_now - t0) / span, 0.0, 1.0)
 		var c := Vector2.ZERO
 		for p in t["cells"]:
@@ -1106,8 +1120,8 @@ func _sprite_sq(tl: Control, st: Dictionary, ground: Vector2, i: int, mod: Color
 
 ## 시한폭탄: the bomb with a burning fuse, its blast area and the seconds left.
 func _bomb(tl: Control, tm: Dictionary, off: Vector2) -> void:
-	var left: int = int(tm["at"]) - battle.now
-	var pulse := 0.5 + 0.5 * sin(real * (10.0 if left <= 1 else 5.0))
+	var left: float = float(tm["at"]) / Battle.TPS - sim_time()
+	var pulse := 0.5 + 0.5 * sin(real * (10.0 if left <= 1.0 else 5.0))
 	for p in tm["cells"]:
 		var r := cell_rect(p, S)
 		r.position += off
@@ -1119,7 +1133,7 @@ func _bomb(tl: Control, tm: Dictionary, off: Vector2) -> void:
 	tl.draw_circle(c - Vector2(1.5, 1.5) * S, 1.5 * S, Color(1, 1, 1, 0.35))
 	tl.draw_line(c + Vector2(2, -4) * S, c + Vector2(4, -7) * S, Color("#b08840"), S)
 	tl.draw_circle(c + Vector2(4, -7) * S, (1.2 + pulse) * S, Color(1.0, 0.8, 0.3, 0.9))
-	var txt := "%d" % maxi(0, left)
+	var txt := Battle.fmt_secs(maxf(0.0, left))
 	var bp := cell_rect(tm["aim"]).position + off + Vector2(C - 6 * S, 2 * S)
 	tl.draw_string_outline(font, bp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, 5, Art.INK)
 	tl.draw_string(font, bp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#ffcf6a"))
@@ -1183,8 +1197,8 @@ func _mark(tl: Control, s: String, c: Vector2) -> void:
 	tl.draw_circle(c, 2 * S, col)
 
 func _telegraph(tl: Control, t: Dictionary, off: Vector2) -> void:
-	var left: int = int(t["fire_at"]) - (shown_now if replaying else battle.now)
-	var hot := left <= 1
+	var left: float = float(t["fire_at"]) / Battle.TPS - sim_time()
+	var hot := left <= 1.0
 	var pulse := 0.5 + 0.5 * sin(real * (9.0 if hot else 4.0))
 	var col := Art.DANGER if hot else Color("#ff8a3a")
 	var cells: Array = t["cells"]
@@ -1192,13 +1206,14 @@ func _telegraph(tl: Control, t: Dictionary, off: Vector2) -> void:
 	if pending and not hot:
 		col = Color("#d9a35a")
 		pulse = 0.2
-	var soon := not replaying and left <= _ahead() and _ahead() > 0
+	var wr := battle.world_rate()
+	var soon := not replaying and left <= _ahead() * wr + 0.001 and _ahead() > 0
 	if soon:
 		# lands during the action being planned: bolder, and a mark if it catches the hero there
 		hot = true
 		col = Art.DANGER
 		pulse = 0.5 + 0.5 * sin(real * 10.0)
-		var spot := _hero_at(left)
+		var spot := _hero_at(int(ceil(left / wr - 0.001)))
 		if cells.has(spot):
 			_danger_mark(tl, cell_rect(spot).get_center() + off, _blow_damage(t))
 	var centre := Vector2.ZERO
@@ -1219,7 +1234,7 @@ func _telegraph(tl: Control, t: Dictionary, off: Vector2) -> void:
 		return
 	var from := feet(_pos_of(a)) + off - Vector2(0, 8 * S)
 	var leap: bool = battle.catalog.actors.get(a.def_id, {}).get("leap", false)
-	var txt := "%d" % maxi(left, 0)
+	var txt := Battle.fmt_secs(maxf(left, 0.0))
 	var d := centre - from
 	if d.length() < C * 0.5:
 		# a blow around itself: the number rides above its head too
@@ -1282,7 +1297,7 @@ func _arrow(tl: Control, a: Vector2, b: Vector2, col: Color, h: float, hot: bool
 	return mid + off_n * 9 * S
 
 ## Where a body is going: a dashed arrow and the landing cell. secs < 0 hides the count.
-func _move_arrow(tl: Control, from_c: Vector2, to: Vector2i, off: Vector2, mine: bool, secs: int) -> void:
+func _move_arrow(tl: Control, from_c: Vector2, to: Vector2i, off: Vector2, mine: bool, secs: float) -> void:
 	var col := Color("#9fe8b0") if mine else Color("#e8e0d0")
 	var a := cell_rect(Vector2i(0, 0)).get_center() + from_c * C + off
 	var b := cell_rect(to).get_center() + off
@@ -1303,21 +1318,21 @@ func _move_arrow(tl: Control, from_c: Vector2, to: Vector2i, off: Vector2, mine:
 	tl.draw_line(s0, s1, Color(col, 0.85), S)
 	var nrm := Vector2(-dir.y, dir.x)
 	tl.draw_colored_polygon(PackedVector2Array([s1 + dir * 3 * S, s1 - dir * 2 * S + nrm * 3 * S, s1 - dir * 2 * S - nrm * 3 * S]), Color(col, 0.9))
-	if secs >= 1:
+	if secs > 0.0:
 		var lp := (s0 + s1) / 2 + Vector2(0, -6 * S)
-		tl.draw_string_outline(font, lp - Vector2(4, -5), "%d" % secs, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, 5, Art.INK)
-		tl.draw_string(font, lp - Vector2(4, -5), "%d" % secs, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, col)
+		tl.draw_string_outline(font, lp - Vector2(4, -5), Battle.fmt_secs(secs), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, 5, Art.INK)
+		tl.draw_string(font, lp - Vector2(4, -5), Battle.fmt_secs(secs), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, col)
 
 ## The player's card while it is being performed: its cells fill up and a ring over the head runs out.
 func _casts(tl: Control, off: Vector2) -> void:
 	if not replaying:
 		casts.clear()
 		return
-	var t := float(shown_now) + replay_k
+	var t := sim_time()
 	for c in casts:
 		if t < float(c["t0"]) or t >= float(c["t1"]):
 			continue
-		var k := (t - float(c["t0"])) / maxf(1.0, float(c["t1"] - c["t0"]))
+		var k := (t - float(c["t0"])) / maxf(0.05, float(c["t1"] - c["t0"]))
 		for p in c["cells"]:
 			var r := cell_rect(p, S)
 			r.position += off
@@ -1330,8 +1345,8 @@ func _casts(tl: Control, off: Vector2) -> void:
 		var head := feet(_pos_of(u)) + off - Vector2(0, (float(ust.get("ay", 22)) + 9) * S)
 		tl.draw_circle(head, 6 * S, Color(Art.INK, 0.8))
 		tl.draw_arc(head, 5 * S, -PI / 2, -PI / 2 + TAU * k, 24, Art.GOLD, 2 * S)
-		var left := int(ceil(float(c["t1"]) - t))
-		tl.draw_string(font, head + Vector2(-4, 6), "%d" % left, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color.WHITE)
+		var left := Battle.fmt_secs(float(c["t1"]) - t)
+		tl.draw_string(font, head + Vector2(-4 * left.length(), 6), left, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color.WHITE)
 
 func _ghost(tl: Control, t: Dictionary, off: Vector2) -> void:
 	var cells: Array = t["cells"]
@@ -1390,11 +1405,14 @@ func _walk(tl: Control, path: Array, off: Vector2, faint: bool) -> void:
 	for q in path:
 		pts.append(cell_rect(q).get_center() + off)
 	var col := Color("#9fe8b0", 0.45 if faint else 0.95)
+	var step := maxi(1, int(round(battle.world_rate() * Battle.TPS)))
 	for i in path.size():
-		var arrive := battle.now + i + 1
+		var arrive := battle.tick + (i + 1) * step
 		var bad := false
 		for t in battle.telegraphs:
-			if int(t["fire_at"]) == arrive and t["cells"].has(path[i]):
+			# a blow as the hero steps in catches it there; one while still on the way, on the cell before
+			var fa := int(t["fire_at"])
+			if (fa == arrive and t["cells"].has(path[i])) or (fa > arrive - step and fa < arrive and t["cells"].has(path[i - 1] if i > 0 else h.pos)):
 				bad = true
 		var seg_col := Color(Art.DANGER, col.a) if bad else col
 		tl.draw_line(pts[i], pts[i + 1], Color(Art.INK, col.a), 5 * S)

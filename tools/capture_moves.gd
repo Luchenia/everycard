@@ -27,7 +27,7 @@ func _process(_d: float) -> bool:
 			var a := Actor.from_def(b.catalog.actors[id], uid)
 			uid += 1
 			a.team = 1
-			a.next_at = b.now + 1
+			a.next_at = b.tick + Battle.TPS
 			b.grid.set_material(spots[id], "none")
 			b.grid.place_unit(a, spots[id])
 			b.actors.append(a)
