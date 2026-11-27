@@ -37,6 +37,8 @@ const HELD2 := 0.06              # study: held time is much slower ...
 const XFADE := 0.12   # seconds (wall clock) one motion takes to melt into the next
 var rt := 0.0                    # study: true real time (UI pulses), while `real` becomes world time
 var _wspeed := 1.0
+var drift := false               # the seconds playing are only the ring turning (set by the battle screen)
+var _drifted := false
 var pulse_t0 := -9.0             # study: real time the world last snapped into held time
 var _was_replaying := false
 var acts: Dictionary = {}        # uid -> {kind, t0, t1}: game seconds of a roll / guard card
@@ -126,7 +128,11 @@ func _process(delta: float) -> void:
 	clock += delta * _speed
 	# bodies: crawl like the rest, or (FREEZE) brake smoothly to a dead stop mid-pose
 	var utarget := _speed if replaying else (0.0 if (BT2 and FREEZE) else _speed)
-	_uspeed = lerpf(_uspeed, utarget, 1.0 - exp(-delta * 4.0)) if utarget < _uspeed else utarget
+	if BT2:
+		# bodies ease both ways: they brake into held time and pick up speed again, never lurch
+		_uspeed = lerpf(_uspeed, utarget, 1.0 - exp(-delta * (4.0 if utarget < _uspeed else 6.0)))
+	else:
+		_uspeed = lerpf(_uspeed, utarget, 1.0 - exp(-delta * 4.0)) if utarget < _uspeed else utarget
 	if _uspeed < 0.004:
 		_uspeed = 0.0
 	if rt < hitstop_until:
@@ -135,9 +141,13 @@ func _process(delta: float) -> void:
 	# world time: hits, slashes, flashes and bursts also crawl (or stop) in held time (study only)
 	_wspeed = _uspeed if BT2 else 1.0
 	real += delta * _wspeed
+	if drift and replaying:
+		_drifted = true
 	if BT2 and _was_replaying and not replaying:
-		pulse_t0 = rt
-	if BT2 and replaying and not _was_replaying:
+		if not _drifted:
+			pulse_t0 = rt   # (after only the ring turning the world never left grey: no new wave)
+		_drifted = false
+	if BT2 and replaying and not _was_replaying and not drift:
 		pulse_t0 = -rt   # negative: colour floods back in
 	_was_replaying = replaying
 	if BT2 and battle != null and replaying:
@@ -172,7 +182,10 @@ func _process(delta: float) -> void:
 
 func _calm() -> float:
 	var held := HELD2 if BT2 else HELD
-	return 1.0 - clampf((_speed - held) / maxf(0.01, play_speed - held), 0.0, 1.0)
+	var c := 1.0 - clampf((_speed - held) / maxf(0.01, play_speed - held), 0.0, 1.0)
+	if BT2 and (drift or _drifted):
+		c = maxf(c, 0.6)   # the ring turning lets time slip by in grey: colour only comes back for real actions
+	return c
 
 ## Frame index for a strip at time t; also remembers how far it is toward the next frame,
 ## so _sprite can cross-fade the two in held time instead of flipping at 1-5 fps.

@@ -175,11 +175,12 @@ func _step_replay(delta: float) -> void:
 		tail = lerpf(0.12, 1.0, q * q * (3.0 - 2.0 * q))
 	if fast_flow and BoardView.BT2:
 		# study: turning the ring lets time slip by gently instead of the world lurching to full speed
-		tail = minf(tail, 0.6)
-	warp = move_toward(warp, tail, delta * (2.5 if fast_flow and BoardView.BT2 else 4.0)) if warp < tail else tail
+		tail = minf(tail, 0.45)
+	warp = move_toward(warp, tail, delta * (1.5 if fast_flow and BoardView.BT2 else 4.0)) if warp < tail else tail
+	board.drift = fast_flow and BoardView.BT2
 	if flow.calm() or (fast_flow and not BoardView.BT2):
 		warp = 1.0   # nothing to fight, or only the ring turning: no slow motion
-	var calm_k := 3.0 if (flow.calm() or (fast_flow and not BoardView.BT2)) else (1.6 if fast_flow else 1.0)
+	var calm_k := 3.0 if (flow.calm() or (fast_flow and not BoardView.BT2)) else (1.2 if fast_flow else 1.0)
 	board.play_speed = speed * warp
 	if board.rt < board.hitstop_until:
 		return   # hit-stop: the replay holds on the blow
@@ -190,6 +191,7 @@ func _step_replay(delta: float) -> void:
 	if shown_frame >= fr.size() - 1:
 		replay_t = 0.0
 		fast_flow = false
+		board.drift = false
 		board.replaying = false
 		flow.update()
 		_refresh()
@@ -1282,6 +1284,7 @@ func _unhandled_input(ev: InputEvent) -> void:
 
 func _after() -> void:
 	fast_flow = false
+	board.drift = false
 	if not _replaying():
 		flow.update()
 	_refresh()
