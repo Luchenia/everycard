@@ -26,6 +26,9 @@ var moving: Dictionary = {}      # uid -> Vector2i: where a gliding unit is head
 var casts: Array = []            # {uid, cells, t0, t1}: the player's card being performed
 var _speed := 0.14
 const HELD := 0.2                # how fast the world still drifts while the player thinks
+static var FREEZE := true         # study: bodies brake to a full stop mid-pose; N switches to crawling on
+var uclock := 0.0                # study: body time (idle loops); stops dead in FREEZE
+var _uspeed := 1.0
 static var BT2 := true           # bullet-time study: B toggles the new look against the old one
 const HELD2 := 0.06              # study: held time is much slower ...
 var rt := 0.0                    # study: true real time (UI pulses), while `real` becomes world time
@@ -107,8 +110,14 @@ func _process(delta: float) -> void:
 	else:
 		_speed = move_toward(_speed, target, delta * 4.0)
 	clock += delta * _speed
-	# world time: hits, slashes, flashes and bursts also crawl in held time (study only)
-	_wspeed = _speed if BT2 else 1.0
+	# bodies: crawl like the rest, or (FREEZE) brake smoothly to a dead stop mid-pose
+	var utarget := _speed if replaying else (0.0 if (BT2 and FREEZE) else _speed)
+	_uspeed = lerpf(_uspeed, utarget, 1.0 - exp(-delta * 4.0)) if utarget < _uspeed else utarget
+	if _uspeed < 0.004:
+		_uspeed = 0.0
+	uclock += delta * _uspeed
+	# world time: hits, slashes, flashes and bursts also crawl (or stop) in held time (study only)
+	_wspeed = _uspeed if BT2 else 1.0
 	real += delta * _wspeed
 	if BT2 and _was_replaying and not replaying:
 		pulse_t0 = rt
@@ -882,7 +891,7 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 	var look_left := _faces_left(u)
 	var flip: bool = look_left == bool(st["faces_right"])
 	var ground := f + push + Vector2(0, hop)
-	var idx := _fr(st, clock * 1.0, u.uid * 3)
+	var idx := _fr(st, uclock * 1.0, u.uid * 3)
 	var tint := Color(0.35, 0.2, 0.55, 0.7) if u.controller == "echo" else Color.WHITE
 	# alive while time is held: idle loop (or slow breathing), an attacker visibly winding up for
 	# its blow, then the strike, a flinch when hit, and the hero's step while walking
@@ -891,9 +900,9 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 	var idle := Art.strip("units", sid + "_idle.png")
 	if not idle.is_empty():
 		st = idle
-		idx = _fr(idle, clock, u.uid * 7)
+		idx = _fr(idle, uclock, u.uid * 7)
 	else:
-		sq = Vector2(1.0, 1.0 + 0.025 * sin(clock * 2.2 + u.uid))
+		sq = Vector2(1.0, 1.0 + 0.025 * sin(uclock * 2.2 + u.uid))
 	var lk := (real - float(lunges[u.uid]["t0"])) if lunges.has(u.uid) else 9.0
 	var hit_s := Art.strip("units", sid + "_hit.png")
 	var strike_s := Art.strip("units", sid + "_strike.png")
@@ -967,7 +976,7 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 		var it := battle.ai_intent(u)
 		if it.get("kind", "") == "move":
 			var d := (Vector2(it["to"]) - Vector2(u.pos)).normalized()
-			ground += d * S * (1.5 + 0.8 * sin(clock * 3.0 + u.uid))
+			ground += d * S * (1.5 + 0.8 * sin(uclock * 3.0 + u.uid))
 	if u.splits and u.split_done:
 		sq *= 0.8   # a split half is a smaller body
 	_sprite_sq(tl, st, ground, idx, tint, flip, sq)

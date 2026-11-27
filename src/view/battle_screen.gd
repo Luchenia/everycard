@@ -1169,6 +1169,9 @@ func _unhandled_input(ev: InputEvent) -> void:
 		return
 	# physical keys, so a Korean input mode (ㅂㅈㄷㄱㅅ) still works
 	var pk: int = ev.physical_keycode
+	if pk == KEY_N:
+		BoardView.FREEZE = not BoardView.FREEZE   # study: crawl on vs brake to a full stop
+		return
 	if pk == KEY_B:
 		BoardView.BT2 = not BoardView.BT2   # study: compare the new held-time look with the old one
 		return

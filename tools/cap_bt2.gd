@@ -10,6 +10,7 @@ var out := ""
 func _initialize() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a == "--old": BoardView.BT2 = false
+		if a == "--freeze": BoardView.FREEZE = true
 		if a.begins_with("--out="): out = a.substr(6)
 	DirAccess.make_dir_recursive_absolute(out)
 	screen = load("res://scenes/battle.tscn").instantiate()
