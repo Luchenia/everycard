@@ -42,6 +42,8 @@ func run() -> void:
 	assert_true(it["cells"].has(Vector2i(3, 3)), "on the hero's cell")
 	assert_true(int(it["fire_at"]) > b.now, "with when it lands")
 	test_tempers()
+	test_likes_dislikes()
+	test_split()
 
 func ring_of_fire() -> Array:
 	var ring := []
@@ -88,3 +90,41 @@ func test_tempers() -> void:
 		burnt = burnt or b.hazard(nxt)
 		b.grid.move_unit(s, nxt)
 	assert_true(not burnt, "stubborn takes a short way round")
+
+func test_likes_dislikes() -> void:
+	# a fire imp hates water: it goes round a pool, and standing in it hurts
+	var b := Battle.new(c, 1, "walker", ["ember_imp"], {"player_pos": [1, 3], "enemy_pos": [[5, 3]], "materials": [[4, 3, "water"]]})
+	var imp: Actor = b.actors[1]
+	assert_true(b.hazard(Vector2i(4, 3), imp), "water is harm to the imp")
+	assert_true(not b.hazard(Vector2i(4, 3)), "but not to anyone")
+	assert_true(b.ai_step_cell(imp, b.human().pos) != Vector2i(4, 3), "goes round the water")
+	b.grid.move_unit(imp, Vector2i(4, 3))
+	var hp := imp.hp
+	b._likes_dislikes()
+	assert_true(imp.hp < hp, "water hurts the imp")
+	# and likes fire: not harm, and it heals there
+	b.grid.set_material(Vector2i(4, 3), "fire")
+	assert_true(not b.hazard(Vector2i(4, 3), imp), "fire is home to the imp")
+	imp.hp = 5
+	b._likes_dislikes()
+	assert_true(imp.hp > 5, "fire heals the imp")
+	# even a reckless slime steps off ice it hates
+	b = battle({"player_pos": [1, 3], "enemy_pos": [[5, 3]], "materials": [[5, 3, "ice"]]})
+	var s: Actor = b.actors[1]
+	assert_true(b._wants_out(s), "slime leaves the ice")
+
+func test_split() -> void:
+	var b := battle({"player_pos": [1, 3], "enemy_pos": [[5, 3]], "materials": []})
+	var s: Actor = b.actors[1]
+	var n := b.actors.size()
+	s.hp = s.max_hp / 2
+	b._after_action()
+	assert_eq(b.actors.size(), n + 1, "the slime split in two")
+	var kid: Actor = b.actors[b.actors.size() - 1]
+	assert_eq(kid.def_id, "slime", "into another slime")
+	assert_true(kid.alive() and s.alive(), "both halves alive")
+	assert_eq(kid.hp + s.hp, 9, "the hp is shared out")
+	assert_true(b.grid.units.has(kid) and kid.pos.distance_to(s.pos) == 1.0, "side by side")
+	s.hp = 1
+	b._after_action()
+	assert_eq(b.actors.size(), n + 1, "a half does not split again")

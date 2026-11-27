@@ -32,5 +32,13 @@
    "id": "damp"
   }
  ],
- "temper": "stubborn"
+ "temper": "stubborn",
+ "likes": {
+  "water": 2,
+  "damp": 1
+ },
+ "dislikes": {
+  "heat": 2,
+  "blaze": 3
+ }
 }

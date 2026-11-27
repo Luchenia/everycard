@@ -206,6 +206,13 @@ func _flashes() -> void:
 				board.shake(0.3)
 			"dodge":
 				board.burst(e["data"].get("cells", []), Color("#9fe8ff"))
+			"dislike":
+				board.burst(e["data"].get("cells", []), Color("#d8ecff"))
+			"like":
+				board.burst(e["data"].get("cells", []), Color("#9cf08a"))
+			"split":
+				board.burst(e["data"].get("cells", []), Color("#8fe07a"))
+				board.shake(0.15)
 			"backstab":
 				board.burst(e["data"].get("cells", []), Color("#ff5a7a"))
 			"timer_fire":

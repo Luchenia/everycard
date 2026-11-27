@@ -38,6 +38,10 @@ var coat: Dictionary = {}     # 독 바르기: {status, turns, charges}
 var expires_at := -1
 var temper := "careful"       # how it treats fire and curses on its way: reckless | careful | stubborn
 var stuck := 0                # seconds spent unable to get closer; a careful enemy loses patience
+var likes: Dictionary = {}    # material or state id -> hp healed each world step standing on it
+var dislikes: Dictionary = {} # material or state id -> hp lost each world step; also avoided like fire
+var splits := false           # 분열: at half hp it splits into two smaller ones (once)
+var split_done := false
 var guard_at := -1            # second covered by 받아치기 / 구르기
 var guard_kind := ""
 var guard_from := Vector2i(-99, -99)
@@ -60,6 +64,9 @@ static func from_def(def: Dictionary, new_uid: int) -> Actor:
 	a.pattern = Array(def.get("pattern", [])).duplicate()
 	a.passives = Array(def.get("passives", [])).duplicate()
 	a.temper = def.get("temper", "careful")
+	a.likes = def.get("likes", {}).duplicate()
+	a.dislikes = def.get("dislikes", {}).duplicate()
+	a.splits = bool(def.get("splits", false))
 	if def.has("facing"):
 		a.facing = Vector2i(def["facing"][0], def["facing"][1])
 	return a

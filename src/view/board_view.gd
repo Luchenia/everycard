@@ -850,6 +850,8 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 		if it.get("kind", "") == "move":
 			var d := (Vector2(it["to"]) - Vector2(u.pos)).normalized()
 			ground += d * S * (1.5 + 0.8 * sin(clock * 3.0 + u.uid))
+	if u.splits and u.split_done:
+		sq *= 0.8   # a split half is a smaller body
 	_sprite_sq(tl, st, ground, idx, tint, flip, sq)
 	if hit_k < 0.09 and not flashed:
 		_sprite_sq(tl, st, ground, idx, Color(5, 5, 5, 1), flip, sq)   # white flash

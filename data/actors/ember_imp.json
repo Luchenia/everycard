@@ -26,5 +26,17 @@
    "id": "heat"
   }
  ],
- "temper": "careful"
+ "temper": "careful",
+ "likes": {
+  "fire": 2,
+  "blaze": 3,
+  "heat": 1
+ },
+ "dislikes": {
+  "water": 3,
+  "swamp": 3,
+  "damp": 2,
+  "cold": 2,
+  "ice": 2
+ }
 }

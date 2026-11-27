@@ -28,5 +28,15 @@
   }
  ],
  "leap": true,
- "temper": "reckless"
+ "temper": "reckless",
+ "likes": {
+  "water": 2,
+  "swamp": 2,
+  "damp": 1
+ },
+ "dislikes": {
+  "cold": 2,
+  "ice": 2
+ },
+ "splits": true
 }

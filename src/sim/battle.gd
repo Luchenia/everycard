@@ -448,6 +448,7 @@ func _world_second() -> void:
 		_after_action()
 	if now % int(cfg["env_every"]) == 0:
 		EnvironmentStep.run(grid, catalog, rng, log, true, float(cfg["env_every"]))
+		_likes_dislikes()
 		Effects.tick_pending(ctx, true)
 		_after_action()
 	if phase != "player":
@@ -569,10 +570,10 @@ func _ai_act(a: Actor) -> void:
 	var aim: Vector2i = choice["aim"]
 	var foe: Actor = choice["foe"]
 	var shape: String = tgt.get("shape", "cell")
-	if hazard(a.pos) and not a.rooted() and a.temper != "reckless":
+	if _wants_out(a):
 		# standing in fire or a curse: get out before anything else
 		var out := ai_step_cell(a, aim, int(tgt.get("range", 1)))
-		if out != a.pos and not hazard(out):
+		if out != a.pos and not hazard(out, a):
 			a.facing = out - a.pos
 			grid.move_unit(a, out)
 			a.next_at = now + maxi(1, action_secs(int(cfg["move_time"]), a))
@@ -596,6 +597,23 @@ func _ai_act(a: Actor) -> void:
 		Effects.apply(card, a, aim, ctx)
 		a.next_at = now + secs
 
+## Even a reckless one leaves a cell it hates; the others leave any harm.
+func _wants_out(a: Actor) -> bool:
+	if a.rooted() or not hazard(a.pos, a):
+		return false
+	if a.temper != "reckless":
+		return true
+	return _hates(a.pos, a)
+
+## True when this cell holds something this kind of monster hates (even a reckless one avoids it).
+func _hates(p: Vector2i, a: Actor) -> bool:
+	if a.dislikes.is_empty():
+		return false
+	for k in cell_tags(p):
+		if a.dislikes.has(k):
+			return true
+	return false
+
 func _ai_step_toward(a: Actor, target: Vector2i, reach := 1) -> void:
 	var best := ai_step_cell(a, target, reach)
 	a.stuck = a.stuck + 1 if best == a.pos else 0
@@ -603,15 +621,71 @@ func _ai_step_toward(a: Actor, target: Vector2i, reach := 1) -> void:
 		a.facing = best - a.pos
 		grid.move_unit(a, best)
 
-## Cells an enemy will not walk into when there is another way: burning ground, curses, live wires.
-func hazard(p: Vector2i) -> bool:
-	var m := grid.get_material(p)
-	if m == "fire":
+## Cells an enemy will not walk into when there is another way: burning ground, curses, live wires,
+## and whatever that kind of monster hates (water for a fire imp). What it likes is never harm to it.
+const HAZARDS := ["blaze", "curse", "miasma", "charged", "collapse"]
+
+func hazard(p: Vector2i, a: Actor = null) -> bool:
+	var likes: Dictionary = a.likes if a != null else {}
+	if a != null and _hates(p, a):
 		return true
-	for id in ["blaze", "curse", "miasma", "charged", "collapse"]:
-		if grid.has_state(p, id):
+	if grid.get_material(p) == "fire" and not likes.has("fire"):
+		return true
+	for id in HAZARDS:
+		if grid.has_state(p, id) and not likes.has(id):
 			return true
 	return false
+
+## The material and every state on a cell, the words likes and dislikes are written in.
+func cell_tags(p: Vector2i) -> Array:
+	var out: Array = [grid.get_material(p)]
+	out.append_array(grid.states_at(p))
+	return out
+
+## Each world step a monster standing on what it hates gets hurt, on what it likes gets healed.
+func _likes_dislikes() -> void:
+	for a in actors:
+		if not a.alive() or not grid.units.has(a) or (a.likes.is_empty() and a.dislikes.is_empty()):
+			continue
+		var hurt := 0
+		var heal := 0
+		for k in cell_tags(a.pos):
+			hurt += int(a.dislikes.get(k, 0))
+			heal += int(a.likes.get(k, 0))
+		if hurt > 0:
+			a.hp = maxi(0, a.hp - hurt)
+			_log("dislike", "%s 싫어하는 칸 %d" % [a.name, hurt], {"uid": a.uid, "cells": [a.pos], "amount": hurt})
+		elif heal > 0 and a.hp < a.max_hp:
+			a.hp = mini(a.max_hp, a.hp + heal)
+			_log("like", "%s 좋아하는 칸 +%d" % [a.name, heal], {"uid": a.uid, "cells": [a.pos], "amount": heal})
+
+## 분열: a monster that splits, brought to half hp, breaks into two halves side by side (once each).
+func _splits() -> void:
+	for a in actors.duplicate():
+		if not a.splits or a.split_done or not a.alive() or not grid.units.has(a) or a.hp * 2 > a.max_hp or a.hp < 2:
+			continue
+		a.split_done = true
+		var spot := Vector2i(-1, -1)
+		for n in grid.neighbors4(a.pos):
+			if grid.passable(n) and grid.unit_at(n) == null and not grid.mat_def(n).get("lethal", false):
+				spot = n
+				break
+		if spot == Vector2i(-1, -1):
+			continue
+		var c := Actor.from_def(catalog.actors[a.def_id], ctx.next_uid)
+		ctx.next_uid += 1
+		c.team = a.team
+		c.controller = a.controller if a.controller == "ai" else "ai"
+		c.split_done = true
+		c.max_hp = maxi(1, a.max_hp / 2)
+		a.max_hp = c.max_hp
+		c.hp = a.hp / 2
+		a.hp -= c.hp
+		c.facing = a.facing
+		c.next_at = now + 1
+		grid.place_unit(c, spot)
+		actors.append(c)
+		_log("split", "%s 분열" % a.name, {"uid": c.uid, "from": a.uid, "cells": [a.pos, spot]})
 
 ## The cell an enemy steps to when its target is out of reach (its own cell if it cannot move).
 ## A real path search around walls and bodies. How it treats fire and curses on the way depends
@@ -653,7 +727,7 @@ func ai_step_cell(a: Actor, target: Vector2i, reach := 1) -> Vector2i:
 		for n in grid.neighbors4(c):
 			if not free.call(n):
 				continue
-			var nc: int = cost[c] + (hz if hazard(n) else 1)
+			var nc: int = cost[c] + (maxi(hz, HAZARD_COST["careful"]) if _hates(n, a) else (hz if hazard(n, a) else 1))
 			if not cost.has(n) or nc < cost[n]:
 				cost[n] = nc
 				first[n] = n if c == a.pos else first[c]
@@ -661,17 +735,17 @@ func ai_step_cell(a: Actor, target: Vector2i, reach := 1) -> Vector2i:
 	if best != a.pos:
 		var step: Vector2i = first[best]
 		# a careful one would rather wait a moment than step into fire
-		if not (temper == "careful" and hazard(step) and not hazard(a.pos)):
+		if not (temper == "careful" and hazard(step, a) and not hazard(a.pos, a)):
 			return step
 	# no way in reach: at least get closer without stepping into harm
 	var fallback := a.pos
 	for n in grid.neighbors4(a.pos):
-		if free.call(n) and (temper != "careful" or not hazard(n)) and dist(n, target) < best_d:
+		if free.call(n) and (temper != "careful" or not hazard(n, a)) and dist(n, target) < best_d:
 			fallback = n
 			best_d = dist(n, target)
-	if fallback == a.pos and hazard(a.pos):
+	if fallback == a.pos and hazard(a.pos, a):
 		for n in grid.neighbors4(a.pos):
-			if free.call(n) and not hazard(n):
+			if free.call(n) and not hazard(n, a):
 				return n
 	return fallback
 
@@ -686,9 +760,9 @@ func ai_intent(a: Actor) -> Dictionary:
 	var tgt: Dictionary = card.get("target", {})
 	var shape: String = tgt.get("shape", "cell")
 	var at := maxi(a.next_at, now + 1)
-	if hazard(a.pos) and not a.rooted() and a.temper != "reckless":
+	if _wants_out(a):
 		var out := ai_step_cell(a, choice["aim"], int(tgt.get("range", 1)))
-		if out != a.pos and not hazard(out):
+		if out != a.pos and not hazard(out, a):
 			return {"kind": "move", "to": out, "at": at}
 	if shape != "self" and shape != "all" and shape != "around" and dist(a.pos, choice["aim"]) > int(tgt.get("range", 1)):
 		var to := ai_step_cell(a, choice["aim"], int(tgt.get("range", 1)))
@@ -718,6 +792,7 @@ func _cleanup() -> void:
 
 func _after_action() -> void:
 	_throw_shards()
+	_splits()
 	_cleanup()
 	if human() != belt_owner and human() != null:
 		# body swap: the body the player left becomes an AI that needs a moment to get its bearings

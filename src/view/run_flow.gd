@@ -143,7 +143,7 @@ func go(d: Vector2i) -> void:
 		var left := []
 		for a in battle.actors:
 			if a.team == 1 and a.alive() and battle.grid.units.has(a):
-				left.append({"def": a.def_id, "hp": a.hp})
+				left.append({"def": a.def_id, "hp": a.hp, "max": a.max_hp, "split": a.split_done})
 		r["enemies"] = left
 	at += d
 	_enter(d)

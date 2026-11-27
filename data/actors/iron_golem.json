@@ -27,5 +27,10 @@
    "shape": "self"
   }
  ],
- "temper": "stubborn"
+ "temper": "stubborn",
+ "dislikes": {
+  "charged": 3,
+  "water": 2,
+  "damp": 1
+ }
 }
