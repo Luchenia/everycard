@@ -53,6 +53,7 @@ var clock := 0.0                 # effect time: crawls while paused (bullet time
 var real := 0.0
 var liquid: ColorRect
 var desat: ColorRect
+var marks: Control                # drawn above the held-time veil
 var top: Control
 var _state_img: Image
 var _state_tex: ImageTexture
@@ -81,16 +82,21 @@ func _ready() -> void:
 	mat.shader = load("res://src/view/liquid.gdshader")
 	liquid.material = mat
 	add_child(liquid)
+	top = Control.new()
+	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top.draw.connect(_draw_top)
+	add_child(top)
+	# held time: the whole world (floor, units, effects) drains to black-and-white; the marks above stay in colour
 	desat = ColorRect.new()
 	desat.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var dm := ShaderMaterial.new()
 	dm.shader = load("res://src/view/held_tint.gdshader")
 	desat.material = dm
 	add_child(desat)
-	top = Control.new()
-	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top.draw.connect(_draw_top)
-	add_child(top)
+	marks = Control.new()
+	marks.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	marks.draw.connect(_draw_marks)
+	add_child(marks)
 	fit()
 
 func fit() -> void:
@@ -100,6 +106,7 @@ func fit() -> void:
 		liquid.position = origin
 		liquid.size = Vector2(Grid.W, Grid.H) * C
 		top.size = size
+		marks.size = size
 		# the whole room, walls included, so held time reads as black-and-white, not as a tint
 		desat.position = Vector2.ZERO
 		desat.size = size
@@ -160,6 +167,8 @@ func _process(delta: float) -> void:
 	queue_redraw()
 	if top:
 		top.queue_redraw()
+	if marks:
+		marks.queue_redraw()
 
 func _calm() -> float:
 	var held := HELD2 if BT2 else HELD
@@ -528,6 +537,18 @@ func _draw_top() -> void:
 			r.position += off
 			tl.draw_rect(r, Color(col, 0.55 * (1.0 - k)))
 			tl.draw_rect(cell_rect(p, S).grow(k * 2 * S), Color(1, 1, 1, 0.7 * (1.0 - k)), false, S)
+	# bullet time: drifting motes and afterimages belong to the world, so they go grey with it
+	if BT2:
+		_held_look(tl, _calm())
+
+## Above the black-and-white veil: what the player must read (warnings, paths, bars, numbers)
+## keeps its colour while the world drains to grey in held time.
+func _draw_marks() -> void:
+	if battle == null:
+		return
+	var g := battle.grid
+	var off := _shake_off()
+	var tl := marks
 	# where bodies are heading: gliding now, or an enemy's next step
 	if replaying:
 		for uid in moving.keys():
@@ -567,9 +588,9 @@ func _draw_top() -> void:
 	for tm in battle.ctx.timers:
 		_bomb(tl, tm, off)
 	# hp bars and states, never hidden behind sprites
-	for it in items:
-		if it.has("unit"):
-			_hp_bar(tl, it["unit"], off)
+	for u in battle.actors:
+		if (replaying and shown_pos.has(u.uid)) or (not replaying and g.units.has(u)):
+			_hp_bar(tl, u, off)
 	_aim(tl, off)
 	for q in popups:
 		var k: float = (real - q["t0"]) / 1.0
@@ -581,9 +602,7 @@ func _draw_top() -> void:
 		tl.draw_string(font, pp - Vector2(10, 0), q["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 	# bullet time: a cool veil and slowly drifting motes while the player decides
 	var calm := _calm()
-	if BT2:
-		_held_look(tl, calm)
-	elif calm > 0.01:
+	if not BT2 and calm > 0.01:
 		# a slow breathing vignette closes in while time is held
 		var breath := 0.5 + 0.5 * sin(real * 1.4)
 		var room := Rect2(origin, Vector2(Grid.W, Grid.H) * C)
@@ -1125,14 +1144,14 @@ func _hp_bar(tl: Control, u: Actor, off: Vector2) -> void:
 		tl.draw_string_outline(font, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, 5, Art.INK)
 		tl.draw_string(font, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#bfe3ff") if u.shield > 0 else Color.WHITE)
 	# states as small marks above the head
-	var marks := []
+	var tags := []
 	for s in ["burning", "wet", "frozen", "crystal", "shocked", "rooted", "shadowed", "poisoned"]:
 		if u.has_status(s):
-			marks.append(s)
+			tags.append(s)
 	var ust := Art.unit(Art.unit_id(u))
 	var head := feet(_pos_of(u)) + off - Vector2(0, (float(ust.get("ay", 22)) + 3) * S)
-	for i in marks.size():
-		_mark(tl, marks[i], head + Vector2((i - (marks.size() - 1) / 2.0) * 7 * S, 0))
+	for i in tags.size():
+		_mark(tl, tags[i], head + Vector2((i - (tags.size() - 1) / 2.0) * 7 * S, 0))
 	# predicted damage of the aimed card
 	if preview.has("damage_by_uid") and preview["damage_by_uid"].has(u.uid):
 		var dmg := int(preview["damage_by_uid"][u.uid])

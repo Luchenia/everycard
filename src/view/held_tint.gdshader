@@ -1,6 +1,6 @@
 shader_type canvas_item;
-// Study: held time softly drains colour (a light black-and-white) from the floor and the ground states (units, effects and
-// warnings are drawn above this, so they keep theirs and stand out). The drain spreads out
+// Held time softly drains colour (a light black-and-white) from the whole world: floor, units and effects.
+// Warnings, paths, hp bars and numbers are drawn above this, so they keep their colour and stand out. The drain spreads out
 // from the hero as a ring when time stops.
 uniform sampler2D screen : hint_screen_texture, filter_nearest;
 uniform float amount = 0.0;
