@@ -681,6 +681,152 @@
         12,
         22
       ]
+    },
+    "hero_act.png": {
+      "what": "hero attack, exaggerated (PixelLab pixminimax): frames before peak = wind-up driven by progress, peak.. = release at 24fps",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 25,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        44
+      ],
+      "peak": 7
+    },
+    "ember_imp_act.png": {
+      "what": "ember imp pounce attack, exaggerated: wind-up before peak, leap and fire slam after",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 25,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        32,
+        44
+      ],
+      "peak": 11
+    },
+    "slime_act.png": {
+      "what": "slime body slam, exaggerated",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 25,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        32,
+        44
+      ],
+      "peak": 8
+    },
+    "walker_act.png": {
+      "what": "wanderer overhead chop, exaggerated",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 25,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        32,
+        44
+      ],
+      "peak": 11
+    },
+    "iron_golem_act.png": {
+      "what": "iron golem ground pound, exaggerated",
+      "frame": [
+        64,
+        64
+      ],
+      "count": 25,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        40,
+        60
+      ],
+      "peak": 12
+    },
+    "boss_tide_warden_act.png": {
+      "what": "tide warden tidal crash, exaggerated",
+      "frame": [
+        96,
+        96
+      ],
+      "count": 25,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        60,
+        92
+      ],
+      "peak": 14
+    },
+    "hero_run.png": {
+      "what": "hero one-cell dash, in place (the code glides the body); played across the replayed second",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 17,
+      "loop": false,
+      "anchor": [
+        16,
+        44
+      ]
+    },
+    "hero_roll.png": {
+      "what": "hero dodge roll (구르기), in place; played across the card's second",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 17,
+      "loop": false,
+      "anchor": [
+        16,
+        44
+      ]
+    },
+    "hero_hurt.png": {
+      "what": "hero hit reaction, exaggerated: jolts back, cloak flies, recovers",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        26,
+        44
+      ]
+    },
+    "hero_guard.png": {
+      "what": "hero guard stance (방어/받아치기), played across the card's seconds",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 17,
+      "loop": false,
+      "anchor": [
+        24,
+        44
+      ]
     }
   },
   "ui": {

@@ -183,6 +183,11 @@ func _flashes() -> void:
 		log_i += 1
 		match e["t"]:
 			"play":
+				var kind_by_card := {"roll": "roll", "guard": "guard", "parry": "guard"}
+				var cid: String = str(e["data"].get("card", ""))
+				if kind_by_card.has(cid) and e["data"].has("uid"):
+					board.acts[int(e["data"]["uid"])] = {"kind": kind_by_card[cid], "t0": int(e["at"]),
+						"t1": int(e["at"]) + maxi(1, int(e["data"].get("secs", 1)))}
 				if int(e["data"].get("secs", 0)) >= 2:
 					board.casts.append({"uid": int(e["data"].get("uid", -1)), "cells": e["data"].get("cells", []),
 						"t0": int(e["at"]), "t1": int(e["at"]) + int(e["data"]["secs"])})

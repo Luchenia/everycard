@@ -32,6 +32,7 @@ var rt := 0.0                    # study: true real time (UI pulses), while `rea
 var _wspeed := 1.0
 var pulse_t0 := -9.0             # study: real time the world last snapped into held time
 var _was_replaying := false
+var acts: Dictionary = {}        # uid -> {kind, t0, t1}: game seconds of a roll / guard card
 var trails: Array = []           # study: {uid, pos, t} afterimages left by moving units
 var _bf := {}
 var play_speed := 1.0            # game speed (1-5 keys): effects run faster with the replay
@@ -119,9 +120,13 @@ func _process(delta: float) -> void:
 			if shown_pos.has(u.uid):
 				var cp := _pos_of(u)
 				var fr := absf(cp.x - round(cp.x)) + absf(cp.y - round(cp.y))
-				if fr > 0.05:
+				var last_t := -9.0
+				for q in trails:
+					if int(q["uid"]) == u.uid:
+						last_t = maxf(last_t, float(q["t"]))
+				if fr > 0.05 and real - last_t > 0.07:
 					trails.append({"uid": u.uid, "pos": cp, "t": real})
-	trails = trails.filter(func(q): return real - float(q["t"]) < 0.35)
+	trails = trails.filter(func(q): return real - float(q["t"]) < 0.25)
 	if desat:
 		var m := desat.material as ShaderMaterial
 		m.set_shader_parameter("amount", _calm() if BT2 else 0.0)
@@ -196,7 +201,7 @@ func attack(uid: int, cells: Array) -> void:
 	var d := (c - Vector2(a.pos))
 	var dir := d.normalized() if d.length() > 0.01 else Vector2.RIGHT
 	lunges[uid] = {"t0": real, "dir": dir}
-	if d.length() <= 1.6:
+	if d.length() <= 1.6 and Art.strip("units", Art.unit_id(a) + "_act.png").is_empty():
 		oneshots.append({"fx": "slash", "ground": feet(Vector2(a.pos)) - Vector2(0, 6 * S), "t0": real, "flip": dir.x < 0})
 	for p in cells:
 		if battle.grid.unit_at(p) != null:
@@ -866,7 +871,8 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 	var hop := -sin(minf(frac * 2.0, 1.0) * PI) * 3 * S if replaying else 0.0
 	var hit_k := (real - float(flashes[u.uid])) if flashes.has(u.uid) else 9.0
 	var push := Vector2.ZERO
-	if lunges.has(u.uid):
+	var act_s := Art.strip("units", Art.unit_id(u) + "_act.png")
+	if lunges.has(u.uid) and act_s.is_empty():
 		var lk: float = (real - float(lunges[u.uid]["t0"])) / 0.22
 		if lk < 1.0:
 			push = lunges[u.uid]["dir"] * 3 * S * sin(lk * PI)
@@ -894,7 +900,38 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 	var walk_s := Art.strip("units", sid + "_walk.png")
 	var wind := _windup(u)
 	var flashed := false
-	if not hit_s.is_empty() and hit_k < hit_s["n"] / 24.0:
+	var hurt_s := Art.strip("units", sid + "_hurt.png")
+	var tc := (float(shown_now) + replay_k) if replaying else float(battle.now)
+	var act: Dictionary = acts.get(u.uid, {})
+	if not act.is_empty() and tc > float(act["t1"]) + 0.01:
+		acts.erase(u.uid)
+		act = {}
+	var act_k := clampf((tc - float(act.get("t0", 0))) / maxf(0.01, float(act.get("t1", 1)) - float(act.get("t0", 0))), 0.0, 0.999) if not act.is_empty() else -1.0
+	var act_strip := Art.strip("units", sid + "_" + str(act.get("kind", "")) + ".png") if not act.is_empty() else {}
+	if not hurt_s.is_empty() and hit_k < hurt_s["n"] / 24.0:
+		# exaggerated flinch drawn frame by frame (plays on world time, so it hangs in held time)
+		st = hurt_s
+		idx = _fr(hurt_s, hit_k)
+		ground += Vector2(1 if look_left else -1, 0) * 2 * S * sin(minf(hit_k * 4.0, 1.0) * PI)
+	elif not act_s.is_empty() and lk < (act_s["n"] - act_s["peak"]) / 24.0:
+		# the blow itself: the release half of the exaggerated attack strip
+		st = act_s
+		idx = _fr(act_s, lk, act_s["peak"])
+	elif not act_s.is_empty() and wind.has("k"):
+		# the wind-up half, driven by how close the blow is: it holds the cocked pose at the end
+		st = act_s
+		var kk: float = wind["k"] * float(act_s["peak"] - 1)
+		idx = int(kk)
+		_bf = {"tex": act_s["tex"], "i": idx, "n": mini(idx + 1, act_s["peak"] - 1), "a": kk - floor(kk)}
+	elif not act_strip.is_empty():
+		# 구르기 / 방어 / 받아치기: the card's own motion across its seconds
+		st = act_strip
+		var kf := act_k * float(act_strip["n"] - 1)
+		idx = int(kf)
+		_bf = {"tex": act_strip["tex"], "i": idx, "n": mini(idx + 1, act_strip["n"] - 1), "a": kf - floor(kf)}
+		if replaying and frac > 0.01:
+			ground.y -= hop
+	elif not hit_s.is_empty() and hit_k < hit_s["n"] / 24.0:
 		st = hit_s
 		idx = clampi(int(hit_k * 24.0), 0, hit_s["n"] - 1)
 		flashed = true
@@ -914,6 +951,13 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 			var away: Vector2 = -wind["dir"]
 			ground += away * 3 * S * k + Vector2(sin(real * 40.0 + u.uid), 0) * S * k * k
 			tint = tint.lerp(Color(1.4, 0.75, 0.7, tint.a), 0.6 * k * (0.6 + 0.4 * sin(real * 8.0)))
+	elif replaying and frac > 0.01 and not Art.strip("units", sid + "_run.png").is_empty():
+		var rs := Art.strip("units", sid + "_run.png")
+		st = rs
+		var rf := replay_k * float(rs["n"] - 1)
+		idx = int(rf)
+		_bf = {"tex": rs["tex"], "i": idx, "n": mini(idx + 1, rs["n"] - 1), "a": rf - floor(rf)}
+		ground.y -= hop   # the dash strip carries its own bounce
 	elif replaying and frac > 0.01 and not walk_s.is_empty():
 		st = walk_s
 		idx = clampi(int(replay_k * walk_s["n"]), 0, walk_s["n"] - 1)
@@ -1354,7 +1398,7 @@ func _held_look(tl: Control, calm: float) -> void:
 		tl.draw_rect(Rect2(p0.snapped(Vector2(S, S)), Vector2(S, S) * (2 if ember and k % 2 == 0 else 1)), col)
 	# afterimages of moving units: they hang where they were when time stops
 	for q in trails:
-		var a := 1.0 - (real - float(q["t"])) / 0.35
+		var a := 1.0 - (real - float(q["t"])) / 0.25
 		var u: Actor = null
 		for x in battle.actors:
 			if x.uid == int(q["uid"]):
@@ -1368,7 +1412,7 @@ func _held_look(tl: Control, calm: float) -> void:
 		var idle := Art.strip("units", Art.unit_id(u) + "_idle.png")
 		if not idle.is_empty():
 			st = idle
-		_sprite(tl, st, feet(q["pos"]), 0, Color(0.55, 0.8, 1.0, 0.28 * a), flip)
+		_sprite(tl, st, feet(q["pos"]), 0, Color(0.55, 0.8, 1.0, 0.18 * a), flip)
 	# the snap into held time: a thin ring racing out from the hero, once
 	if pulse_t0 >= 0.0:
 		var k2 := (rt - pulse_t0) / 0.55
