@@ -898,6 +898,7 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 	# its blow, then the strike, a flinch when hit, and the hero's step while walking
 	var sid := Art.unit_id(u)
 	var sq := Vector2.ONE
+	var body_st := st   # base sprite size: status marks sit on the body, not on a wider motion canvas
 	var idle := Art.strip("units", sid + "_idle.png")
 	if not idle.is_empty():
 		st = idle
@@ -985,7 +986,7 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 		_sprite_sq(tl, st, ground, idx, Color(5, 5, 5, 1), flip, sq)   # white flash
 	if u.has_status("shocked"):
 		var sh := Art.fx("shock")
-		_sprite(tl, sh, f - Vector2(0, st["h"] * 0.45 * S), _fr(sh, clock * 3.0, u.uid))
+		_sprite(tl, sh, f - Vector2(0, body_st["h"] * 0.45 * S), _fr(sh, clock * 3.0, u.uid))
 	if u.has_status("crystal"):
 		if battle.grid.get_material(u.pos) != "crystal":
 			var cr := Art.fx("crystal")
@@ -993,7 +994,7 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 			_crystal_glow(tl, cg, 1.0)
 			_sprite(tl, cr, cg, _fr(cr, clock, u.uid))
 	if u.has_status("frozen"):
-		tl.draw_rect(Rect2(f - Vector2(st["w"] * 0.4 * S, st["h"] * 0.85 * S), Vector2(st["w"] * 0.8 * S, st["h"] * 0.85 * S)), Color(0.7, 0.9, 1.0, 0.35))
+		tl.draw_rect(Rect2(f - Vector2(body_st["w"] * 0.4 * S, body_st["h"] * 0.85 * S), Vector2(body_st["w"] * 0.8 * S, body_st["h"] * 0.85 * S)), Color(0.7, 0.9, 1.0, 0.35))
 
 ## How far an enemy is into the wind-up of its announced blow: {k: 0..1, dir} or {}.
 func _windup(u: Actor) -> Dictionary:

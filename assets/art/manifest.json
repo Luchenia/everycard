@@ -389,17 +389,17 @@
     },
     "_notes": "attack/hit: generated attack animations were not readable, so do them in code: attack = 3px lunge toward target over 4 frames + fx/slash.png; hit = 2 frames white flash + 1px knockback + fx/hit.png. Shadow: ellipse 12x4 rgba(0,0,0,110) at the anchor. Sort all units and tall fx by anchor y.",
     "slime_idle.png": {
-      "what": "slime idle, 48 frames (3 different subtle loops that each start and end on the base pose), readable at 0.2x in held time",
+      "what": "slime idle, side view (PixelLab pixminimax, 2026-11-28)",
       "frame": [
-        24,
-        24
+        48,
+        48
       ],
-      "count": 48,
-      "fps": 24,
+      "count": 24,
+      "fps": 12,
       "loop": true,
       "anchor": [
-        12,
-        22
+        24,
+        44
       ]
     },
     "slime_windup.png": {
@@ -445,17 +445,17 @@
       ]
     },
     "ember_imp_idle.png": {
-      "what": "ember_imp idle, 48 frames (3 different subtle loops that each start and end on the base pose), readable at 0.2x in held time",
+      "what": "ember_imp idle, side view (PixelLab pixminimax, 2026-11-28)",
       "frame": [
-        24,
-        24
+        48,
+        48
       ],
-      "count": 48,
-      "fps": 24,
+      "count": 24,
+      "fps": 12,
       "loop": true,
       "anchor": [
-        12,
-        22
+        24,
+        44
       ]
     },
     "ember_imp_windup.png": {
@@ -501,17 +501,17 @@
       ]
     },
     "iron_golem_idle.png": {
-      "what": "iron_golem idle, 48 frames (3 different subtle loops that each start and end on the base pose), readable at 0.2x in held time",
+      "what": "iron_golem idle, side view (PixelLab pixminimax, 2026-11-28)",
       "frame": [
-        32,
-        32
+        64,
+        64
       ],
-      "count": 48,
-      "fps": 24,
+      "count": 24,
+      "fps": 12,
       "loop": true,
       "anchor": [
-        16,
-        30
+        32,
+        60
       ]
     },
     "iron_golem_windup.png": {
@@ -557,17 +557,17 @@
       ]
     },
     "boss_tide_warden_idle.png": {
-      "what": "boss_tide_warden idle, 48 frames (3 different subtle loops that each start and end on the base pose), readable at 0.2x in held time",
+      "what": "boss_tide_warden idle, side view (PixelLab pixminimax, 2026-11-28)",
       "frame": [
-        48,
-        48
+        96,
+        96
       ],
-      "count": 48,
-      "fps": 24,
+      "count": 24,
+      "fps": 12,
       "loop": true,
       "anchor": [
-        24,
-        46
+        48,
+        92
       ]
     },
     "boss_tide_warden_windup.png": {
@@ -613,17 +613,17 @@
       ]
     },
     "hero_idle.png": {
-      "what": "hero idle, 48 frames (3 different subtle loops that each start and end on the base pose), readable at 0.2x in held time",
+      "what": "hero idle, side view: breathing, cloak sway, grip adjust (PixelLab pixminimax, 2026-11-28)",
       "frame": [
-        24,
-        24
+        48,
+        48
       ],
-      "count": 48,
-      "fps": 24,
+      "count": 24,
+      "fps": 12,
       "loop": true,
       "anchor": [
-        12,
-        22
+        24,
+        44
       ]
     },
     "hero_windup.png": {
@@ -773,13 +773,13 @@
       "peak": 14
     },
     "hero_run.png": {
-      "what": "hero one-cell dash, in place (the code glides the body); played across the replayed second",
+      "what": "hero one-cell walk, side view, two steps with foot dust; in place (the code glides the body) across the replayed second",
       "frame": [
         48,
         48
       ],
-      "count": 17,
-      "fps": 17,
+      "count": 25,
+      "fps": 24,
       "loop": false,
       "anchor": [
         16,
@@ -787,13 +787,13 @@
       ]
     },
     "hero_roll.png": {
-      "what": "hero dodge roll (구르기), in place; played across the card's second",
+      "what": "hero dodge roll (구르기), side view, big tuck and landing rise; in place, played across the card's second",
       "frame": [
         48,
         48
       ],
-      "count": 17,
-      "fps": 17,
+      "count": 25,
+      "fps": 24,
       "loop": false,
       "anchor": [
         16,
@@ -801,7 +801,7 @@
       ]
     },
     "hero_hurt.png": {
-      "what": "hero hit reaction, exaggerated: jolts back, cloak flies, recovers",
+      "what": "hero hit reaction, side view: strong recoil, recovers",
       "frame": [
         48,
         48
@@ -815,13 +815,13 @@
       ]
     },
     "hero_guard.png": {
-      "what": "hero guard stance (방어/받아치기), played across the card's seconds",
+      "what": "hero guard (방어/받아치기), side view low stance: drops in, holds, rises; played across the card's seconds",
       "frame": [
         48,
         48
       ],
-      "count": 17,
-      "fps": 17,
+      "count": 16,
+      "fps": 24,
       "loop": false,
       "anchor": [
         24,
@@ -829,13 +829,13 @@
       ]
     },
     "slime_run.png": {
-      "what": "slime one-cell move, exaggerated, in place (the code glides the body); played across the replayed second",
+      "what": "slime one-cell move, side view; in place (the code glides the body) across the replayed second",
       "frame": [
         48,
         48
       ],
-      "count": 17,
-      "fps": 17,
+      "count": 25,
+      "fps": 24,
       "loop": false,
       "anchor": [
         32,
@@ -857,13 +857,13 @@
       ]
     },
     "ember_imp_run.png": {
-      "what": "ember_imp one-cell move, exaggerated, in place (the code glides the body); played across the replayed second",
+      "what": "ember_imp one-cell move, side view; in place (the code glides the body) across the replayed second",
       "frame": [
         48,
         48
       ],
-      "count": 17,
-      "fps": 17,
+      "count": 25,
+      "fps": 24,
       "loop": false,
       "anchor": [
         32,
@@ -885,13 +885,13 @@
       ]
     },
     "walker_run.png": {
-      "what": "walker one-cell move, exaggerated, in place (the code glides the body); played across the replayed second",
+      "what": "walker one-cell move, side view; in place (the code glides the body) across the replayed second",
       "frame": [
         48,
         48
       ],
-      "count": 17,
-      "fps": 17,
+      "count": 25,
+      "fps": 24,
       "loop": false,
       "anchor": [
         32,
@@ -913,13 +913,13 @@
       ]
     },
     "iron_golem_run.png": {
-      "what": "iron_golem one-cell move, exaggerated, in place (the code glides the body); played across the replayed second",
+      "what": "iron_golem one-cell move, side view; in place (the code glides the body) across the replayed second",
       "frame": [
         64,
         64
       ],
-      "count": 17,
-      "fps": 17,
+      "count": 25,
+      "fps": 24,
       "loop": false,
       "anchor": [
         40,
@@ -941,13 +941,13 @@
       ]
     },
     "boss_tide_warden_run.png": {
-      "what": "boss_tide_warden one-cell move, exaggerated, in place (the code glides the body); played across the replayed second",
+      "what": "boss_tide_warden one-cell move, side view; in place (the code glides the body) across the replayed second",
       "frame": [
         96,
         96
       ],
-      "count": 17,
-      "fps": 17,
+      "count": 25,
+      "fps": 24,
       "loop": false,
       "anchor": [
         60,
@@ -966,6 +966,20 @@
       "anchor": [
         48,
         92
+      ]
+    },
+    "walker_idle.png": {
+      "what": "walker idle, side view (PixelLab pixminimax, 2026-11-28)",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 24,
+      "fps": 12,
+      "loop": true,
+      "anchor": [
+        24,
+        44
       ]
     }
   },
