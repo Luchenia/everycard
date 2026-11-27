@@ -169,6 +169,9 @@ func _process(delta: float) -> void:
 				if fr > 0.05 and real - last_t > 0.07:
 					trails.append({"uid": u.uid, "pos": cp, "t": real})
 	trails = trails.filter(func(q): return real - float(q["t"]) < 0.25)
+	if marks:
+		# while time flows the scene plays like film: warnings and numbers fade back, and return when time is held
+		marks.modulate.a = lerpf(marks.modulate.a, lerpf(0.15, 1.0, _calm()) if BT2 else 1.0, 1.0 - exp(-delta * 8.0))
 	if desat:
 		var m := desat.material as ShaderMaterial
 		m.set_shader_parameter("amount", _calm() if BT2 else 0.0)
@@ -1301,7 +1304,8 @@ func _telegraph(tl: Control, t: Dictionary, off: Vector2) -> void:
 		var r := cell_rect(p, S)
 		r.position += off
 		var fa := 0.5 if pending else 1.0
-		tl.draw_rect(r, Color(col, (0.16 + 0.12 * pulse) * fa))
+		var body_there := battle.grid.unit_at(p) != null
+		tl.draw_rect(r, Color(col, (0.16 + 0.12 * pulse) * fa * (0.35 if body_there else 1.0)))
 		_corners(tl, r, Color(col, (0.75 + 0.25 * pulse) * fa), (3 if pending else 4) * S)
 		centre += r.get_center()
 	if cells.is_empty():
@@ -1320,8 +1324,9 @@ func _telegraph(tl: Control, t: Dictionary, off: Vector2) -> void:
 		_badge(tl, feet(_pos_of(a)) + off - Vector2(0, (float(ast0.get("ay", 22)) + 10) * S), txt, col, hot, pulse)
 		return
 	var start := from + d.normalized() * C * 0.3
-	var h := (d.length() * 0.35 + C * 0.45) if leap else 0.0
-	_arrow(tl, start, centre, col, h, hot, pulse)
+	var h := (d.length() * 0.3 + C * 0.3) if leap else 0.0
+	var stop := centre - d.normalized() * C * 0.42   # the head stops at the cell's edge: it never sits on the body
+	_arrow(tl, start, stop, col, h, hot, pulse)
 	# the seconds ride above the attacker's head, where the arrow starts
 	var ast := Art.unit(Art.unit_id(a))
 	_badge(tl, feet(_pos_of(a)) + off - Vector2(0, (float(ast.get("ay", 22)) + 10) * S), txt, col, hot, pulse)
@@ -1329,7 +1334,8 @@ func _telegraph(tl: Control, t: Dictionary, off: Vector2) -> void:
 var _badge_spots: Array = []   # where this frame's countdown badges went, so two never sit on each other
 
 func _badge(tl: Control, at: Vector2, txt: String, col: Color, hot: bool, pulse: float) -> void:
-	var r := 5.5 * S * (1.0 + (0.12 * pulse if hot else 0.0))
+	var r := 4.5 * S * (1.0 + (0.12 * pulse if hot else 0.0))
+	at.y -= 4 * S
 	for k in 6:
 		var clash := false
 		for q in _badge_spots:
@@ -1342,7 +1348,7 @@ func _badge(tl: Control, at: Vector2, txt: String, col: Color, hot: bool, pulse:
 	_badge_spots.append(at)
 	tl.draw_circle(at, r + S, Art.INK)
 	tl.draw_circle(at, r, col)
-	tl.draw_string(font, at + Vector2(-5 if txt.length() == 1 else -9, 6), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Art.INK)
+	tl.draw_string(font, at + Vector2(-4 if txt.length() == 1 else -8, 5), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Art.INK)
 
 ## Point on a straight or arched (leaping) path from a to b at k.
 func _arc_pt(a: Vector2, b: Vector2, h: float, k: float) -> Vector2:
@@ -1464,15 +1470,17 @@ func _blow_damage(t: Dictionary) -> int:
 
 func _danger_mark(tl: Control, c: Vector2, dmg: int) -> void:
 	var k := 0.5 + 0.5 * sin(real * 10.0)
-	var at := c + Vector2(0, -C * 0.9)
-	tl.draw_circle(at, (7 + k) * S, Art.INK)
-	tl.draw_circle(at, (6 + k) * S, Art.DANGER)
-	tl.draw_rect(Rect2(at + Vector2(-S, -4 * S), Vector2(2 * S, 5 * S)), Color.WHITE)
-	tl.draw_rect(Rect2(at + Vector2(-S, 2 * S), Vector2(2 * S, 2 * S)), Color.WHITE)
+	# beside the head (upper left of the cell), small: the body itself stays in view
+	var at := c + Vector2(-C * 0.55, -C * 0.75)
+	tl.draw_circle(at, (5 + 0.5 * k) * S, Art.INK)
+	tl.draw_circle(at, (4 + 0.5 * k) * S, Art.DANGER)
+	tl.draw_rect(Rect2(at + Vector2(-S * 0.5, -3 * S), Vector2(S, 3.5 * S)), Color.WHITE)
+	tl.draw_rect(Rect2(at + Vector2(-S * 0.5, 1.5 * S), Vector2(S, S)), Color.WHITE)
 	if dmg > 0:
 		var tx := "-%d" % dmg
-		tl.draw_string_outline(font, at + Vector2(9 * S, 6), tx, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, 6, Art.INK)
-		tl.draw_string(font, at + Vector2(9 * S, 6), tx, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Art.DANGER)
+		var tp := at + Vector2(-6 * S - 9 * tx.length(), 5)
+		tl.draw_string_outline(font, tp, tx, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, 5, Art.INK)
+		tl.draw_string(font, tp, tx, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Art.DANGER)
 
 ## A walk: the route cell by cell, the seconds it takes at its end, red where a blow lands on the way.
 func _walk(tl: Control, path: Array, off: Vector2, faint: bool) -> void:
