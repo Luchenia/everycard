@@ -173,10 +173,13 @@ func _step_replay(delta: float) -> void:
 		# study: a longer, eased brake into held time, so the last moment visibly slows to a crawl
 		var q := clampf(left / 0.9, 0.0, 1.0)
 		tail = lerpf(0.12, 1.0, q * q * (3.0 - 2.0 * q))
-	warp = move_toward(warp, tail, delta * 4.0) if warp < tail else tail
-	if flow.calm() or fast_flow:
+	if fast_flow and BoardView.BT2:
+		# study: turning the ring lets time slip by gently instead of the world lurching to full speed
+		tail = minf(tail, 0.6)
+	warp = move_toward(warp, tail, delta * (2.5 if fast_flow and BoardView.BT2 else 4.0)) if warp < tail else tail
+	if flow.calm() or (fast_flow and not BoardView.BT2):
 		warp = 1.0   # nothing to fight, or only the ring turning: no slow motion
-	var calm_k := 3.0 if (flow.calm() or fast_flow) else 1.0
+	var calm_k := 3.0 if (flow.calm() or (fast_flow and not BoardView.BT2)) else (1.6 if fast_flow else 1.0)
 	board.play_speed = speed * warp
 	replay_t += delta * speed * warp * calm_k / SEC_REAL
 	while replay_t >= 1.0 and shown_frame < fr.size() - 1:
