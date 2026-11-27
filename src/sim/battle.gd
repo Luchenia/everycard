@@ -219,6 +219,35 @@ func action_secs(base: int, actor: Actor) -> int:
 		return -1
 	return maxi(1, int(ceil(float(base) / ts - 0.0001)))
 
+## Ticks an action of `base` seconds takes for this actor at full world speed: a [가속] cell
+## (x1.5) turns 1 s into 0.7 s, a slow cell into 2 s. -1 in stopped time.
+func action_ticks(base: int, actor: Actor) -> int:
+	if base <= 0:
+		return 0
+	var ts := _ts(actor.pos)
+	if ts <= 0.0:
+		return -1
+	return maxi(1, int(ceil(float(base * TPS) / ts - 0.0001)))
+
+## World seconds the player's action of `base` card seconds takes right now, where the hero
+## stands (cell speed) and with 불릿타임: what the card's cost shows. -1 in stopped time.
+func cost_secs(base: int) -> float:
+	var h := human()
+	if h == null:
+		return float(base)
+	var pt := action_ticks(base, h)
+	if pt < 0:
+		return -1.0
+	return float(_world_ticks(pt)) / TPS
+
+## World ticks `pt` ticks of the player's time take (fewer while the world is slowed).
+func _world_ticks(pt: int) -> int:
+	if pt <= 0:
+		return 0
+	if slowed():
+		return maxi(1, int(round(pt * slow_rate)))
+	return pt
+
 func round_time() -> int:
 	return int(cfg["round_time"])
 
@@ -240,7 +269,7 @@ func cmd_move(dir: Vector2i) -> bool:
 	var to: Vector2i = h.pos + dir
 	if not grid.passable(to) or grid.unit_at(to) != null:
 		return false
-	var secs := action_secs(int(cfg["move_time"]), h)
+	var secs := action_ticks(int(cfg["move_time"]), h)
 	if secs < 0:
 		return false
 	_spend(secs, func():
@@ -257,7 +286,7 @@ func cmd_ability(aim: Vector2i) -> bool:
 	var h := human()
 	if not _can_act():
 		return false
-	var secs := action_secs(1, h)
+	var secs := action_ticks(1, h)
 	if secs < 0:
 		return false
 	match h.base_ability:
@@ -317,11 +346,12 @@ func cmd_play(slot: int, aim: Vector2i) -> bool:
 		h.deck.erase(id)
 		_log("once", "%s 사라짐" % card.get("name", id), {"card": id})
 	belt.refill_one()   # the used slot fills straight away
-	var secs := action_secs(int(card.get("time", 0)), h)
+	var secs := action_ticks(int(card.get("time", 0)), h)
 	var tg0: Dictionary = card.get("target", {})
-	var shown_secs := maxi(0, secs - (mini(h.discount, secs) if secs > 0 else 0))
-	_log("play", "%s: %s (%d초)" % [h.name, card.get("name", id), secs], {"card": id, "aim": aim, "uid": h.uid,
-		"secs": 0 if borrow_left > 0 else shown_secs, "wsecs": 0.0 if borrow_left > 0 else shown_secs(maxi(1, shown_secs)), "cells": Targeting.cells(tg0.get("shape", "cell"), h.pos, aim, int(tg0.get("size", 0)))})
+	var left_pt := maxi(0, secs - (mini(h.discount * TPS, secs) if secs > 0 else 0))
+	var wsecs := float(_world_ticks(left_pt)) / TPS
+	_log("play", "%s: %s (%s초)" % [h.name, card.get("name", id), fmt_secs(wsecs)], {"card": id, "aim": aim, "uid": h.uid,
+		"secs": 0 if borrow_left > 0 else int(ceil(left_pt / float(TPS))), "wsecs": 0.0 if borrow_left > 0 else maxf(wsecs, float(_world_ticks(TPS)) / TPS), "cells": Targeting.cells(tg0.get("shape", "cell"), h.pos, aim, int(tg0.get("size", 0)))})
 	_spend(secs, func():
 		var tg: Dictionary = card.get("target", {})
 		_log("land", "%s 발동" % card.get("name", id), {"card": id, "user": h.uid,
@@ -339,7 +369,7 @@ func cmd_play(slot: int, aim: Vector2i) -> bool:
 	var ex := int(card.get("exhaust", 0))
 	if ex > 0 and phase == "player":
 		_log("exhaust", "%s 탈진 %d초" % [h.name, ex], {"secs": ex})
-		_spend(ex, Callable(), false)
+		_spend(ex * TPS, Callable(), false)
 	return true
 
 ## Mouse-wheel roll: the end card on that side is discarded and a new card enters on the other
@@ -355,7 +385,7 @@ func cmd_wheel(dir: int) -> bool:
 		dir = -1
 	var end_id := belt.end_card(dir)
 	var w := maxi(1, int(Effects.card_def(end_id, catalog).get("weight", 1))) if end_id != "" else 1
-	var secs := action_secs(w * int(cfg["wheel_time"]), h)
+	var secs := action_ticks(w * int(cfg["wheel_time"]), h)
 	if secs < 0:
 		return false
 	_spend(secs, func():
@@ -376,14 +406,15 @@ func cmd_wait(secs := 1) -> bool:
 func borrowing() -> bool:
 	return borrow_left > 0
 
-## Spends `secs` of the human's time on an action. A pending 서두름 discount comes off first;
-## while time is borrowed (불릿타임) the action happens with the world frozen.
-func _spend(secs: int, on_done: Callable = Callable(), discountable := true) -> void:
+## Spends `pt` ticks of the human's time on an action. A pending 서두름 discount comes off first;
+## while time is borrowed the action happens with the world frozen.
+func _spend(pt: int, on_done: Callable = Callable(), discountable := true) -> void:
 	var h := human()
-	if discountable and h != null and h.discount > 0 and secs > 0:
-		var cut := mini(h.discount, secs)
-		secs -= cut
+	if discountable and h != null and h.discount > 0 and pt > 0:
+		var cut := mini(h.discount * TPS, pt)
+		pt -= cut
 		h.discount = 0
+	var secs := int(ceil(pt / float(TPS)))   # borrowed time is counted in whole seconds
 	if borrow_left > 0 and secs <= borrow_left:
 		borrow_left -= secs
 		borrow_used += secs
@@ -393,7 +424,7 @@ func _spend(secs: int, on_done: Callable = Callable(), discountable := true) -> 
 		return
 	if borrow_left > 0:
 		_repay()
-	advance(secs, on_done)
+	advance_ticks(pt, on_done)
 
 ## Ends borrowed time: the character is exhausted for 1.5x the borrowed seconds it used.
 func _repay() -> void:
@@ -409,22 +440,29 @@ func _repay() -> void:
 ## Runs the world `secs` seconds. on_done (the player's finishing action) resolves at the start
 ## of the last second, before the world reacts in that second. secs 0 = resolve immediately.
 func advance(secs: int, on_done: Callable = Callable()) -> void:
+	advance_ticks(maxi(0, secs) * TPS, on_done)
+
+## Runs `pt` ticks of the player's time: each player second (TPS ticks, or what is left) is a
+## stretch of world ticks, fewer while the world is slowed, and a frame for the replay.
+func advance_ticks(pt: int, on_done: Callable = Callable()) -> void:
 	var actor := human()   # the body that started the action; if control moved away, it is cancelled
-	if secs <= 0:
+	if pt <= 0:
 		if on_done.is_valid():
 			on_done.call()
 			_after_action()
 		_frame()   # instant actions still get a frame, so the view glides instead of jumping
 		return
-	for i in secs:
-		# one player second: TPS ticks of world time, fewer while the world is slowed
-		var n := _step_ticks()
+	var left := pt
+	while left > 0:
+		var chunk := mini(TPS, left)
+		left -= chunk
+		var n := _world_ticks(chunk)
 		for k in n:
 			if phase != "player":
 				return
 			tick += 1
 			ctx.now = tick
-			if i == secs - 1 and k == n - 1 and on_done.is_valid():
+			if left == 0 and k == n - 1 and on_done.is_valid():
 				if human() != null and human() == actor:
 					on_done.call()
 					_after_action()
@@ -694,20 +732,20 @@ func _ai_act(a: Actor) -> void:
 		var out := ai_step_cell(a, aim, int(tgt.get("range", 1)), card)
 		if out != a.pos and not hazard(out, a):
 			a.facing = out - a.pos
-			a.glide = [a.pos, out, tick, tick + maxi(1, action_secs(int(cfg["move_time"]), a)) * TPS]
+			a.glide = [a.pos, out, tick, tick + maxi(1, action_ticks(int(cfg["move_time"]), a))]
 			grid.move_unit(a, out)
-			a.next_at = tick + maxi(1, action_secs(int(cfg["move_time"]), a)) * TPS
+			a.next_at = tick + maxi(1, action_ticks(int(cfg["move_time"]), a))
 			return
 	if shape != "self" and shape != "all" and shape != "around" and not in_reach(card, a.pos, aim):
 		var plan := move_plan(a, foe, aim, card)
 		a.stuck = a.stuck + 1 if plan["to"] == a.pos else 0
 		if plan["to"] != a.pos:
 			a.facing = Targeting.dir_to(a.pos, plan["to"])
-			a.glide = [a.pos, plan["to"], tick, tick + int(plan["secs"]) * TPS]
+			a.glide = [a.pos, plan["to"], tick, tick + int(plan["ticks"])]
 			grid.move_unit(a, plan["to"])
 			if plan["cells"] > 1:
 				_log("hop", "%s 도약" % a.name, {"uid": a.uid, "cells": [plan["to"]]})
-		a.next_at = tick + int(plan["secs"]) * TPS
+		a.next_at = tick + int(plan["ticks"])
 		return
 	if choice.get("trick", false):
 		a.trick_ready[choice["card_id"]] = tick + int(choice["cd"]) * TPS
@@ -715,17 +753,17 @@ func _ai_act(a: Actor) -> void:
 		a.pattern_index += 1
 	if aim != a.pos:
 		a.facing = Targeting.dir_to(a.pos, aim)
-	var secs := maxi(1, action_secs(int(card.get("time", 1)), a))
+	var secs := maxi(1, action_ticks(int(card.get("time", 1)), a))   # ticks
 	if card.get("telegraph", false):
 		var cells := _attack_cells(card, a, aim, foe)
 		telegraphs.append({"actor_uid": a.uid, "card_id": choice["card_id"], "aim": aim, "cells": cells, "set_at": tick,
-			"fire_at": tick + secs * TPS, "track": card.get("track", false), "foe_uid": foe.uid})
-		a.next_at = tick + (secs + 1) * TPS
-		_log("telegraph", "%s: %s 예고 (%d초 뒤)" % [a.name, card.get("name", choice["card_id"]), secs], {"cells": cells})
+			"fire_at": tick + secs, "track": card.get("track", false), "foe_uid": foe.uid})
+		a.next_at = tick + secs + TPS
+		_log("telegraph", "%s: %s 예고 (%s초 뒤)" % [a.name, card.get("name", choice["card_id"]), fmt_secs(float(secs) / TPS)], {"cells": cells})
 	else:
 		_log("play", "%s: %s" % [a.name, card.get("name", choice["card_id"])], {"card": choice["card_id"], "aim": aim})
 		Effects.apply(card, a, aim, ctx)
-		a.next_at = tick + secs * TPS
+		a.next_at = tick + secs
 
 ## Where a monster's next move takes it, by its way of moving (no change to the world):
 ##  chase:     the shortest safe way to where it can strike;
@@ -737,6 +775,7 @@ func move_plan(a: Actor, foe: Actor, aim: Vector2i, card: Dictionary) -> Diction
 	var reach := int(card.get("target", {}).get("range", 1))
 	var base := a.move_secs if a.move_secs > 0 else int(cfg["move_time"])
 	var secs := maxi(1, action_secs(base, a))
+	var tk := maxi(1, action_ticks(base, a))
 	var to := a.pos
 	match a.move_style:
 		"kite":
@@ -747,7 +786,7 @@ func move_plan(a: Actor, foe: Actor, aim: Vector2i, card: Dictionary) -> Diction
 						best_d = dist(n, foe.pos)
 						to = n
 				if to != a.pos:
-					return {"to": to, "secs": secs, "cells": 1}
+					return {"to": to, "secs": secs, "ticks": tk, "cells": 1}
 			to = ai_step_cell(a, aim, reach, card, true)
 		"intercept":
 			var ahead: Vector2i = foe.pos + foe.facing * 2
@@ -763,10 +802,10 @@ func move_plan(a: Actor, foe: Actor, aim: Vector2i, card: Dictionary) -> Diction
 				var to2 := ai_step_cell(a, aim, reach, card)
 				a.pos = keep
 				if to2 != to and to2 != a.pos and grid.unit_at(to2) == null:
-					return {"to": to2, "secs": secs + 1, "cells": 2}
+					return {"to": to2, "secs": secs + 1, "ticks": tk + TPS, "cells": 2}
 		_:
 			to = ai_step_cell(a, aim, reach, card)
-	return {"to": to, "secs": secs, "cells": 1}
+	return {"to": to, "secs": secs, "ticks": tk, "cells": 1}
 
 ## Even a reckless one leaves a cell it hates; the others leave any harm.
 func _wants_out(a: Actor) -> bool:
@@ -963,8 +1002,8 @@ func _ai_intent(a: Actor) -> Dictionary:
 	if not has_damage:
 		return {}
 	var cells: Array = Targeting.cells(shape, a.pos, choice["aim"], int(tgt.get("size", 0))) if int(card.get("safe", 0)) == 0 else []
-	var secs := maxi(1, action_secs(int(card.get("time", 1)), a)) if card.get("telegraph", false) else 0
-	return {"kind": "attack", "at": at, "fire_at": at + secs * TPS, "cells": cells, "card_id": choice["card_id"],
+	var secs := maxi(1, action_ticks(int(card.get("time", 1)), a)) if card.get("telegraph", false) else 0
+	return {"kind": "attack", "at": at, "fire_at": at + secs, "cells": cells, "card_id": choice["card_id"],
 		"actor_uid": a.uid, "aim": choice["aim"], "pending": true}
 
 func _actor(uid: int) -> Actor:
