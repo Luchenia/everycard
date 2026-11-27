@@ -317,15 +317,9 @@ func _step_slide(delta: float) -> void:
 	var before := slide_t
 	slide_t += delta / (SLIDE_OUT if slide_t < 1.0 else SLIDE_IN)
 	if before < 1.0 and slide_t >= 1.0:
-		flow.go(slide_dir)
 		shown_frame = flow.battle.frames.size() - 1
 		log_i = flow.battle.log.size()
 		board.reset_tracking()
-		var r := flow.room()
-		banner = RunFlow.KIND_NAME.get(r["kind"], "")
-		if banner == "":
-			banner = RunFlow.THEME_NAME.get(r["theme"], "")
-		banner_at = real
 		_refresh()
 	if slide_t >= 2.0:
 		slide_dir = Vector2i.ZERO
@@ -345,11 +339,7 @@ func _slide_off() -> Vector2:
 
 ## Tools and tests: jump straight into the first room of a kind, as if walked in.
 func debug_enter(kind: String) -> void:
-	for p in flow.dungeon.rooms:
-		if flow.dungeon.rooms[p]["kind"] == kind:
-			flow.at = p
-			flow._enter(-flow.dungeon.doors(p)[0])
-			break
+	flow.start_battle(RunFlow.FIGHTS.size() - 1 if kind == "boss" else 0)
 	shown_frame = flow.battle.frames.size() - 1
 	log_i = flow.battle.log.size()
 	board.reset_tracking()
@@ -623,13 +613,6 @@ func _draw_hud() -> void:
 		var ht := "%d / %d" % [me.hp, me.max_hp] + ("  +%d" % me.shield if me.shield > 0 else "")
 		hud.draw_string_outline(font, hp_at + Vector2(128, 13), ht, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, 5, Art.INK)
 		hud.draw_string(font, hp_at + Vector2(128, 13), ht, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
-	# gold: a coin and the count under the health
-	var gc := Vector2(24, 72)
-	hud.draw_circle(gc, 8, Art.INK)
-	hud.draw_circle(gc, 6, Color("#e0b040"))
-	hud.draw_circle(gc + Vector2(-1, -1), 3, Color("#ffe48a"))
-	hud.draw_string_outline(font, gc + Vector2(14, 6), "%d" % flow.gold, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, 5, Art.INK)
-	hud.draw_string(font, gc + Vector2(14, 6), "%d" % flow.gold, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Art.GOLD)
 	# hand refill: a small ring on the deck icon counts the seconds to the next card
 	var dr := b.next_draw_at() - b.now
 	var dk := Vector2(1214, 20)
@@ -660,65 +643,28 @@ func _draw_hud() -> void:
 		hud.draw_string_outline(font, p, "-%d초" % h.discount, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 5, Art.INK)
 		hud.draw_string(font, p, "-%d초" % h.discount, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#bfe8ff"))
 
-## The floor map (top-right): every room is a small card face down until you have been in it;
-## rooms next to visited ones show as outlines. Special rooms carry a glyph once seen.
+## The run (top-right): one small card per battle, face down ahead, the current one lit and the
+## boss last with a crown mark.
 func _draw_map(at: Vector2) -> void:
-	var dg := flow.dungeon
-	var lo := Vector2i(99, 99)
-	var hi := Vector2i(-1, -1)
-	for p in dg.rooms:
-		if dg.seen(p):
-			lo = Vector2i(mini(lo.x, p.x), mini(lo.y, p.y))
-			hi = Vector2i(maxi(hi.x, p.x), maxi(hi.y, p.y))
-	if hi.x < 0:
-		return
-	var pitch := Vector2(26, 30)
+	var n := RunFlow.FIGHTS.size()
+	var pitch := 26.0
 	var sz := Vector2(18, 24)
-	var w := float(hi.x - lo.x + 1) * pitch.x
-	var o := at + Vector2(196 - w, 0)
-	# corridors first
-	for p in dg.rooms:
-		if not dg.rooms[p]["visited"]:
-			continue
-		for d in dg.doors(p):
-			var a := o + Vector2(p - lo) * pitch + sz / 2
-			hud.draw_line(a, a + Vector2(d) * pitch * 0.5, Color("#5a5468"), 3)
-	for p in dg.rooms:
-		if not dg.seen(p):
-			continue
-		var r: Dictionary = dg.rooms[p]
-		var rc := Rect2(o + Vector2(p - lo) * pitch, sz)
-		var here: bool = p == flow.at
+	var o := at + Vector2(196 - pitch * n, 0)
+	for i in n:
+		var rc := Rect2(o + Vector2(i * pitch, 0), sz)
 		hud.draw_rect(rc.grow(2), Art.INK)
-		if r["visited"]:
-			hud.draw_rect(rc, Color("#e8dcc0") if here else Color("#8a8296"))
+		if i < flow.index:
+			hud.draw_rect(rc, Color("#8a8296"))
+		elif i == flow.index:
+			hud.draw_rect(rc, Color("#e8dcc0"))
+			var pulse := 0.6 + 0.4 * sin(real * 4.0)
+			hud.draw_rect(rc.grow(3), Color(Art.GOLD, pulse), false, 2)
 		else:
 			hud.draw_rect(rc, Color("#24203a"))
 			hud.draw_rect(rc.grow(-2), Color("#2a4a9a"))
-		if here:
-			var pulse := 0.6 + 0.4 * sin(real * 4.0)
-			hud.draw_rect(rc.grow(3), Color(Art.GOLD, pulse), false, 2)
-		var c := rc.get_center()
-		var ink := Color("#2a2630") if r["visited"] else Color("#e8dcc0")
-		match r["kind"]:
-			"boss":
-				var crown := PackedVector2Array([c + Vector2(-6, 4), c + Vector2(-6, -4), c + Vector2(-3, 0), c + Vector2(0, -6), c + Vector2(3, 0), c + Vector2(6, -4), c + Vector2(6, 4)])
-				hud.draw_colored_polygon(crown, Color("#e04a4a"))
-			"shop":
-				hud.draw_circle(c, 5, Color("#e0b040"))
-				hud.draw_circle(c, 2, ink)
-			"chest":
-				if not r["used"]:
-					hud.draw_rect(Rect2(c - Vector2(5, 3), Vector2(10, 7)), Color("#b07038"))
-					hud.draw_rect(Rect2(c - Vector2(5, 1), Vector2(10, 1)), Color("#e0b040"))
-			"spring":
-				if not r["used"]:
-					hud.draw_circle(c + Vector2(0, 2), 4, Color("#4a8ae0"))
-					hud.draw_colored_polygon(PackedVector2Array([c + Vector2(-3, 1), c + Vector2(0, -6), c + Vector2(3, 1)]), Color("#4a8ae0"))
-			"fight":
-				if not r["cleared"] and r["visited"]:
-					hud.draw_line(c + Vector2(-4, -4), c + Vector2(4, 4), Color("#c04040"), 2)
-					hud.draw_line(c + Vector2(4, -4), c + Vector2(-4, 4), Color("#c04040"), 2)
+		if RunFlow.FIGHTS[i].get("boss", false):
+			var c := rc.get_center()
+			hud.draw_colored_polygon(PackedVector2Array([c + Vector2(-5, 3), c + Vector2(-5, -3), c + Vector2(-2, 0), c + Vector2(0, -5), c + Vector2(2, 0), c + Vector2(5, -3), c + Vector2(5, 3)]), Art.GOLD)
 
 func _update_span() -> void:
 	var b := flow.battle
@@ -899,7 +845,7 @@ func _title(t: String, y: float) -> void:
 
 func _reward_overlay() -> void:
 	_veil()
-	_title("보물 상자" if flow.room()["kind"] == "chest" else "방 정리", 200)
+	_title("승리", 200)
 	_button("넘기기", Vector2(590, 560), func(): _pick_reward(-1))
 	for i in flow.rewards.size():
 		var cv := CardView.new()
