@@ -302,101 +302,101 @@
       "what": "code effect, no sheet: light/magic beam drawn as 3px glow line (255,230,120,~45%) with 1px core (255,255,230), travels ~9px/frame (216px/s), bends at the GEM (cell centre y-7, not the floor) to a random angle; gem flashes white-yellow and a small ring expands at the bend. See reference/deflect.py, demo dungeon-floor/37_crystal_deflect.gif"
     },
     "roll_dust.png": {
-      "what": "one-shot low dust trail behind a roll or dash; anchor = ground (PixelLab, generated from text only, no reference art, 2026-11-28)",
+      "what": "one-shot light dust specks kicked up behind a roll or dash; anchor = ground (PixelLab, text only, light particle style, 2026-11-28)",
       "frame": [
-        48,
-        48
+        32,
+        32
       ],
-      "count": 17,
+      "count": 13,
       "fps": 16,
       "loop": false,
       "anchor": [
-        24,
-        42
+        16,
+        26
       ]
     },
     "land_ring.png": {
-      "what": "one-shot dust shockwave ring where a body lands; anchor = centre of the ring on the ground (PixelLab, generated from text only, no reference art, 2026-11-28)",
+      "what": "one-shot faint dotted dust ring where a body lands; anchor = centre of the ring on the ground (PixelLab, text only, light particle style, 2026-11-28)",
       "frame": [
-        48,
-        48
+        32,
+        32
       ],
-      "count": 17,
+      "count": 13,
       "fps": 16,
       "loop": false,
       "anchor": [
-        24,
-        27
+        16,
+        20
       ]
     },
     "hit_spark.png": {
-      "what": "one-shot white-gold impact star on the struck body (PixelLab, generated from text only, no reference art, 2026-11-28)",
+      "what": "one-shot light spark burst on the struck body (PixelLab, text only, light particle style, 2026-11-28)",
       "frame": [
-        48,
-        48
-      ],
-      "count": 13,
-      "fps": 24,
-      "loop": false,
-      "anchor": [
-        24,
-        24
-      ]
-    },
-    "speed_lines.png": {
-      "what": "one-shot dash lines streaking back from a dashing body (art for a body moving right: flip for left) (PixelLab, generated from text only, no reference art, 2026-11-28)",
-      "frame": [
-        48,
-        48
+        32,
+        32
       ],
       "count": 13,
       "fps": 20,
       "loop": false,
       "anchor": [
-        44,
-        24
+        16,
+        16
+      ]
+    },
+    "speed_lines.png": {
+      "what": "one-shot thin dash lines streaking back from a dashing body (art for a body moving right: flip for left) (PixelLab, text only, light particle style, 2026-11-28)",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 13,
+      "fps": 20,
+      "loop": false,
+      "anchor": [
+        28,
+        16
       ]
     },
     "crystal_shards.png": {
-      "what": "one-shot violet shards bursting out of a broken crystal, slow (hangs in held time) (PixelLab, generated from text only, no reference art, 2026-11-28)",
+      "what": "one-shot small violet shards drifting out of a broken crystal, slow (hangs in held time) (PixelLab, text only, light particle style, 2026-11-28)",
       "frame": [
-        48,
-        48
+        32,
+        32
       ],
       "count": 17,
       "fps": 14,
       "loop": false,
       "anchor": [
-        24,
-        24
+        16,
+        16
       ]
     },
     "droplets.png": {
-      "what": "one-shot water splash crown off a body hit by water (PixelLab, generated from text only, no reference art, 2026-11-28)",
+      "what": "one-shot light water splash particles off a body hit by water (PixelLab, text only, light particle style, 2026-11-28)",
       "frame": [
-        48,
-        48
+        32,
+        32
       ],
-      "count": 17,
+      "count": 13,
       "fps": 16,
       "loop": false,
       "anchor": [
-        24,
-        40
+        16,
+        26
       ]
     },
     "embers.png": {
-      "what": "one-shot fire embers bursting off a body hit by fire (PixelLab, generated from text only, no reference art, 2026-11-28)",
+      "what": "one-shot light fire sparks rising off a body hit by fire (PixelLab, text only, light particle style, 2026-11-28)",
       "frame": [
-        48,
-        48
+        32,
+        32
       ],
-      "count": 17,
+      "count": 13,
       "fps": 16,
       "loop": false,
       "anchor": [
-        24,
-        40
+        16,
+        24
       ]
     },
     "haste_field.png": {

@@ -272,15 +272,15 @@ func _move_dust(delta: float) -> void:
 			var act: Dictionary = acts.get(u.uid, {})
 			var fast: bool = dir.length() > 1.5 or act.get("kind", "") == "roll"
 			_moves[u.uid] = {"fast": fast, "dir": dir.normalized(), "next": real}
-			puff("roll_dust", f + Vector2(0, -2 * S), dir.x > 0, 0.0, true, 0.35 if not fast else 0.6, 0.9)
+			puff("roll_dust", f + Vector2(0, -2 * S), dir.x > 0, 0.0, true, 0.6 if not fast else 1.0, 0.9)
 			if fast:
-				puff("speed_lines", f - Vector2(0, 9 * S) - dir.normalized() * 11 * S, dir.x < 0, 0.0, false, 0.7, 0.8)
+				puff("speed_lines", f - Vector2(0, 9 * S) - dir.normalized() * 8 * S, dir.x < 0, 0.0, false, 1.0, 0.8)
 		elif going and bool(was["fast"]) and real >= float(was["next"]):
 			was["next"] = real + 0.16
-			puff("roll_dust", f + Vector2(0, -2 * S), float(was["dir"].x) > 0, 0.0, true, 0.55, 0.8)
+			puff("roll_dust", f + Vector2(0, -2 * S), float(was["dir"].x) > 0, 0.0, true, 0.8, 0.8)
 		elif not going and not was.is_empty():
 			if bool(was["fast"]):
-				puff("land_ring", f, false, 0.0, true, 0.7, 0.9)
+				puff("land_ring", f, false, 0.0, true, 1.0, 0.9)
 			_moves.erase(u.uid)
 
 ## A beam's real path (bounces off mirrors, turns at crystal gems): glow plus core, fading out.
