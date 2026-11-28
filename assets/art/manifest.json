@@ -302,101 +302,101 @@
       "what": "code effect, no sheet: light/magic beam drawn as 3px glow line (255,230,120,~45%) with 1px core (255,255,230), travels ~9px/frame (216px/s), bends at the GEM (cell centre y-7, not the floor) to a random angle; gem flashes white-yellow and a small ring expands at the bend. See reference/deflect.py, demo dungeon-floor/37_crystal_deflect.gif"
     },
     "roll_dust.png": {
-      "what": "one-shot dust trail behind a roll or dash, played on world time (hangs in held time); anchor = ground (PixelLab, snapped to the game palette, 2026-11-28)",
+      "what": "one-shot low dust trail behind a roll or dash; anchor = ground (PixelLab, generated from text only, no reference art, 2026-11-28)",
       "frame": [
-        32,
-        32
+        48,
+        48
       ],
-      "count": 16,
+      "count": 17,
       "fps": 16,
       "loop": false,
       "anchor": [
-        16,
-        28
+        24,
+        42
       ]
     },
     "land_ring.png": {
-      "what": "one-shot flat dust ring where a body lands; anchor = centre of the ring on the ground (PixelLab, snapped to the game palette, 2026-11-28)",
+      "what": "one-shot dust shockwave ring where a body lands; anchor = centre of the ring on the ground (PixelLab, generated from text only, no reference art, 2026-11-28)",
       "frame": [
-        32,
-        32
+        48,
+        48
       ],
-      "count": 12,
+      "count": 17,
       "fps": 16,
       "loop": false,
       "anchor": [
-        16,
-        16
+        24,
+        27
       ]
     },
     "hit_spark.png": {
-      "what": "one-shot white-gold impact star with a shock ring on the struck body (PixelLab, snapped to the game palette, 2026-11-28)",
+      "what": "one-shot white-gold impact star on the struck body (PixelLab, generated from text only, no reference art, 2026-11-28)",
       "frame": [
-        32,
-        32
+        48,
+        48
       ],
-      "count": 11,
+      "count": 13,
       "fps": 24,
       "loop": false,
       "anchor": [
-        16,
-        16
+        24,
+        24
       ]
     },
     "speed_lines.png": {
-      "what": "one-shot white speed lines streaking back from a dashing body (art points left: flip for a body moving left) (PixelLab, snapped to the game palette, 2026-11-28)",
+      "what": "one-shot dash lines streaking back from a dashing body (art for a body moving right: flip for left) (PixelLab, generated from text only, no reference art, 2026-11-28)",
       "frame": [
-        32,
-        32
+        48,
+        48
       ],
-      "count": 11,
+      "count": 13,
       "fps": 20,
       "loop": false,
       "anchor": [
-        28,
-        16
+        44,
+        24
       ]
     },
     "crystal_shards.png": {
-      "what": "one-shot violet shards tumbling out of a broken crystal, slow (hangs in held time) (PixelLab, snapped to the game palette, 2026-11-28)",
+      "what": "one-shot violet shards bursting out of a broken crystal, slow (hangs in held time) (PixelLab, generated from text only, no reference art, 2026-11-28)",
       "frame": [
-        32,
-        32
+        48,
+        48
       ],
       "count": 17,
       "fps": 14,
       "loop": false,
       "anchor": [
-        16,
-        16
+        24,
+        24
       ]
     },
     "droplets.png": {
-      "what": "one-shot water droplets spraying off a body hit by water (PixelLab, snapped to the game palette, 2026-11-28)",
+      "what": "one-shot water splash crown off a body hit by water (PixelLab, generated from text only, no reference art, 2026-11-28)",
       "frame": [
-        24,
-        24
+        48,
+        48
       ],
-      "count": 12,
+      "count": 17,
       "fps": 16,
       "loop": false,
       "anchor": [
-        12,
-        14
+        24,
+        40
       ]
     },
     "embers.png": {
-      "what": "one-shot fire embers bursting off a body hit by fire (PixelLab, snapped to the game palette, 2026-11-28)",
+      "what": "one-shot fire embers bursting off a body hit by fire (PixelLab, generated from text only, no reference art, 2026-11-28)",
       "frame": [
-        32,
-        32
+        48,
+        48
       ],
-      "count": 12,
+      "count": 17,
       "fps": 16,
       "loop": false,
       "anchor": [
-        16,
-        18
+        24,
+        40
       ]
     },
     "haste_field.png": {
