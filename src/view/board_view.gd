@@ -452,7 +452,7 @@ func _pos_of(u: Actor) -> Vector2:
 	# held mid-step (불릿타임): a monster still on its way stands where it has got to
 	if not u.glide.is_empty() and u.glide[1] == u.pos and battle != null and battle.tick < int(u.glide[3]):
 		var span := float(int(u.glide[3]) - int(u.glide[2]))
-		if span > Battle.TPS * battle.world_rate() + 0.5:
+		if span > 0.5:
 			var gk := clampf(float(battle.tick - int(u.glide[2])) / span, 0.0, 1.0)
 			return Vector2(u.glide[0]).lerp(Vector2(u.glide[1]), gk * gk * (3.0 - 2.0 * gk))
 	return Vector2(u.pos)
@@ -1049,7 +1049,7 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 	var f := feet(cp) + off
 	# moving between cells: a little hop
 	var frac := absf(cp.x - round(cp.x)) + absf(cp.y - round(cp.y))
-	var hop := -sin(minf(frac * 2.0, 1.0) * PI) * 3 * S if replaying else 0.0
+	var hop := -sin(minf(frac * 2.0, 1.0) * PI) * 3 * S if (replaying or frac > 0.01) else 0.0
 	var hit_k := (real - float(flashes[u.uid])) if flashes.has(u.uid) else 9.0
 	var push := Vector2.ZERO
 	var act_s := Art.strip("units", Art.unit_id(u) + "_act.png")
@@ -1135,16 +1135,16 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 			var away: Vector2 = -wind["dir"]
 			ground += away * 3 * S * k + Vector2(sin(real * 40.0 + u.uid), 0) * S * k * k
 			tint = tint.lerp(Color(1.4, 0.75, 0.7, tint.a), 0.6 * k * (0.6 + 0.4 * sin(real * 8.0)))
-	elif replaying and frac > 0.01 and not Art.strip("units", sid + "_run.png").is_empty():
+	elif frac > 0.01 and not Art.strip("units", sid + "_run.png").is_empty():
 		var rs := Art.strip("units", sid + "_run.png")
 		st = rs
 		var rf := _walk_frame(rs, u.uid)
 		idx = int(rf)
 		_bf = {"tex": rs["tex"], "i": idx, "n": mini(idx + 1, rs["n"] - 1), "a": rf - floor(rf)}
 		ground.y -= hop   # the dash strip carries its own bounce
-	elif replaying and frac > 0.01 and not walk_s.is_empty():
+	elif frac > 0.01 and not walk_s.is_empty():
 		st = walk_s
-		idx = clampi(int(replay_k * walk_s["n"]), 0, walk_s["n"] - 1)
+		idx = clampi(int((replay_k if replaying else _held_k(u.uid)) * walk_s["n"]), 0, walk_s["n"] - 1)
 		ground.y -= hop   # the step strip carries its own bounce
 	elif not replaying and u.controller == "ai":
 		# about to step: lean toward the next cell, rocking slowly in held time
@@ -1187,19 +1187,28 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 
 ## Frame (fractional) of a move strip for this replayed second. A walk over several cells starts
 ## once, loops the strip's stride (manifest "cycle") while it keeps going, and settles once at the end.
+## How far a held unit has got through the step it is still taking (0 when it is not stepping).
+func _held_k(uid: int) -> float:
+	var u: Actor = battle._actor(uid) if battle != null else null
+	if u == null or u.glide.is_empty() or battle.tick >= int(u.glide[3]):
+		return 0.0
+	var span := float(int(u.glide[3]) - int(u.glide[2]))
+	return clampf(float(battle.tick - int(u.glide[2])) / maxf(span, 1.0), 0.0, 1.0)
+
 func _walk_frame(rs: Dictionary, uid: int) -> float:
 	var n := float(rs["n"] - 1)
+	var rk := replay_k if replaying else _held_k(uid)
 	var cy: Array = rs.get("cycle", [])
 	var link: Vector2i = walk_link.get(uid, Vector2i.ZERO)
 	if cy.size() < 2 or link == Vector2i.ZERO:
-		return replay_k * n
+		return rk * n
 	var a := float(cy[0])
 	var b := float(cy[1])
 	if link.x == 0:   # first cell of a longer walk: set off, then into the stride
-		return replay_k * b
+		return rk * b
 	if link.y == 1:   # in the middle: the stride, looping
-		return a + replay_k * (b - a)
-	return a + replay_k * (n - a)   # last cell: from the stride into the stop
+		return a + rk * (b - a)
+	return a + rk * (n - a)   # last cell: from the stride into the stop
 
 ## How far an enemy is into the wind-up of its announced blow: {k: 0..1, dir} or {}.
 func _windup(u: Actor) -> Dictionary:

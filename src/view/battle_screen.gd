@@ -34,6 +34,7 @@ var drag_from := Vector2i(-1, -1)
 var drag_px := Vector2.ZERO   # where the button went down: dragging right of it confirms, left cancels
 const DRAG_GO := 24.0
 var focus_at := -9.0
+var settle_tau := 0.0       # wall seconds into the slowing moment after the player's move
 var speed := 1.0             # playback speed of passing seconds (1-5 keys)
 var speed_shown_at := -9.0
 var hand_cursor: HandCursor     # when the window got focus: the click that focuses it never walks
@@ -174,25 +175,40 @@ func _step_replay(delta: float) -> void:
 		warp = BoardView.HELD
 		flow_from = shown_frame
 	board.replaying = true
-	# ramp out of bullet time, and settle back into it over the last moments of the flow
-	var left := float(fr.size() - 1 - shown_frame) - replay_t
-	var tail := lerpf(0.3, 1.0, clampf(left / 0.6, 0.0, 1.0))
-	if BoardView.BT2:
-		# study: a longer, eased brake into held time, so the last moment visibly slows to a crawl
-		var q := clampf(left / 0.9, 0.0, 1.0)
-		tail = lerpf(0.12, 1.0, q * q * (3.0 - 2.0 * q))
-	if fast_flow and BoardView.BT2:
-		# study: turning the ring lets time slip by gently instead of the world lurching to full speed
-		tail = minf(tail, 0.45)
-	warp = move_toward(warp, tail, delta * (1.5 if fast_flow and BoardView.BT2 else 4.0)) if warp < tail else tail
-	board.drift = fast_flow and BoardView.BT2
-	if flow.calm() or (fast_flow and not BoardView.BT2):
-		warp = 1.0   # nothing to fight, or only the ring turning: no slow motion
-	var calm_k := 3.0 if (flow.calm() or (fast_flow and not BoardView.BT2)) else (1.2 if fast_flow else 1.0)
-	board.play_speed = speed * warp
-	if board.rt < board.hitstop_until:
-		return   # hit-stop: the replay holds on the blow
-	replay_t += delta * speed * warp * calm_k / SEC_REAL
+	# the moment after the player's move (battle.settle): the world slows by halves, 1, 1/2, 1/4 ...
+	# so it runs on a fixed sliver of time and comes to rest mid-motion instead of snapping to a stop
+	var has_settle: bool = bool(fr[-1].get("settle", false)) and not flow.calm()
+	if has_settle and shown_frame == fr.size() - 2:
+		if board.rt >= board.hitstop_until:
+			settle_tau += delta
+		var g := maxf(float(fr[-1]["t"]) - float(fr[shown_frame]["t"]), 0.05)
+		var h := g * log(2.0) * SEC_REAL / maxf(speed, 0.1)
+		var r := pow(0.5, settle_tau / h)
+		var held := BoardView.HELD2 if BoardView.BT2 else BoardView.HELD
+		warp = maxf(r, held)
+		board.play_speed = speed * warp
+		replay_t = 1.0 if r <= held else 1.0 - r
+	else:
+		settle_tau = 0.0
+		# ramp out of bullet time, and settle back into it over the last moments of the flow
+		var left := float(fr.size() - 1 - shown_frame) - replay_t
+		var tail := 1.0 if has_settle else lerpf(0.3, 1.0, clampf(left / 0.6, 0.0, 1.0))
+		if BoardView.BT2 and not has_settle:
+			# study: a longer, eased brake into held time, so the last moment visibly slows to a crawl
+			var q := clampf(left / 0.9, 0.0, 1.0)
+			tail = lerpf(0.12, 1.0, q * q * (3.0 - 2.0 * q))
+		if fast_flow and BoardView.BT2:
+			# study: turning the ring lets time slip by gently instead of the world lurching to full speed
+			tail = minf(tail, 0.45)
+		warp = move_toward(warp, tail, delta * (1.5 if fast_flow and BoardView.BT2 else 4.0)) if warp < tail else tail
+		board.drift = fast_flow and BoardView.BT2
+		if flow.calm() or (fast_flow and not BoardView.BT2):
+			warp = 1.0   # nothing to fight, or only the ring turning: no slow motion
+		var calm_k := 3.0 if (flow.calm() or (fast_flow and not BoardView.BT2)) else (1.2 if fast_flow else 1.0)
+		board.play_speed = speed * warp
+		if board.rt < board.hitstop_until:
+			return   # hit-stop: the replay holds on the blow
+		replay_t += delta * speed * warp * calm_k / SEC_REAL
 	while replay_t >= 1.0 and shown_frame < fr.size() - 1:
 		replay_t -= 1.0
 		shown_frame += 1
