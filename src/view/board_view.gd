@@ -1550,15 +1550,9 @@ func _walk(tl: Control, path: Array, off: Vector2, faint: bool) -> void:
 	tl.draw_string_outline(font, tp, tx, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, 6, Color(Art.INK, col.a))
 	tl.draw_string(font, tp, tx, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 1, 1, col.a))
 
-## Aiming: the hovered cell, and when it is out of reach a line that falls short and fizzles.
+## Aiming: the hovered cell and an arc to it. A cell the card cannot be used on gets no mark at all.
 func _aim(tl: Control, off: Vector2) -> void:
 	var h := battle.human()
-	if not fizzle.is_empty() and real - float(fizzle["t0"]) < 0.6:
-		var k := (real - float(fizzle["t0"])) / 0.6
-		var fr := cell_rect(fizzle["cell"], S + k * 4 * S)
-		fr.position += off
-		tl.draw_line(fr.position, fr.end, Color(Art.DANGER, 1.0 - k), 2 * S)
-		tl.draw_line(Vector2(fr.end.x, fr.position.y), Vector2(fr.position.x, fr.end.y), Color(Art.DANGER, 1.0 - k), 2 * S)
 	if hover.x < 0 or h == null or replaying or self_aim:
 		return
 	var hr := cell_rect(hover)
@@ -1574,32 +1568,7 @@ func _aim(tl: Control, off: Vector2) -> void:
 		if hover != h.pos:
 			_dotted_arc(tl, from, to, arch, 1.0, Color(Art.GOLD, 0.95))
 		return
-	# out of reach: the arc flies as far as the reach allows, then drops short of the cell
-	var reach_k := 0.0
-	for i in range(1, 41):
-		var k := float(i) / 40.0
-		var cq := cell_at(from.lerp(to, k) - off)
-		if cq.x >= 0 and (cq in range_cells or cq == h.pos):
-			reach_k = k
-	_dotted_arc(tl, from, to, arch, reach_k, Color(Art.GOLD, 0.95))
-	# the rest of the way stays on the same arc, faint and red, broken where reach runs out
-	var last := _arc_pt(from, to, arch, reach_k)
-	var n2 := int(from.distance_to(to) / (5 * S)) + 2
-	for i in n2:
-		var k := float(i) / n2
-		if k <= reach_k + 0.04:
-			continue
-		var q := _arc_pt(from, to, arch, k)
-		tl.draw_rect(Rect2(q.snapped(Vector2(S, S)) - Vector2(S, S), Vector2(2 * S, 2 * S)), Color(Art.DANGER, 0.45))
-	tl.draw_line(last + Vector2(-3, -3) * S, last + Vector2(3, 3) * S, Art.INK, 3 * S)
-	tl.draw_line(last + Vector2(3, -3) * S, last + Vector2(-3, 3) * S, Art.INK, 3 * S)
-	tl.draw_line(last + Vector2(-3, -3) * S, last + Vector2(3, 3) * S, Art.DANGER, S)
-	tl.draw_line(last + Vector2(3, -3) * S, last + Vector2(-3, 3) * S, Art.DANGER, S)
-	# the cell itself: a red frame exactly on its edges
-	var cr := cell_rect(hover, S)
-	cr.position += off
-	tl.draw_rect(cr, Color(Art.DANGER, 0.10))
-	tl.draw_rect(cr, Color(Art.DANGER, 0.8), false, S)
+	# out of reach (a wall in the way, too far): nothing is drawn there, a cell you cannot use is not marked
 
 func _dotted_arc(tl: Control, a: Vector2, b: Vector2, h: float, upto: float, col: Color) -> void:
 	var n := int(a.distance_to(b) / (5 * S)) + 2
