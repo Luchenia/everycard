@@ -1379,6 +1379,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 	_after()
 
 func _after() -> void:
+	if flow.phase == "battle" and flow.battle != null:
+		flow.battle.settle()   # the world runs on a moment while it slows to a stop
 	fast_flow = false
 	board.drift = false
 	if not _replaying():

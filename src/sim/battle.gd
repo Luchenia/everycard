@@ -7,7 +7,7 @@ extends RefCounted
 
 const HAND_MODE := "relaxed"   # "relaxed" | "lifespan"
 const DEFAULTS := {"round_time": 10, "grid_w": 9, "grid_h": 7, "env_every": 2, "move_time": 1,
-	"wheel_time": 1, "draws_per_round": 2}
+	"wheel_time": 1, "draws_per_round": 2, "settle_time": 0.0, "ai_jitter": 0}
 
 var catalog: Catalog
 var cfg: Dictionary = {}
@@ -23,6 +23,8 @@ var now: float:              # the battle clock in world seconds (read only)
 	get: return float(tick) / TPS
 var slow_until := -1         # 불릿타임: the world runs slow until this tick
 var slow_rate := 1.0         # world seconds per player second while slowed (1/3: three times slower)
+var jit_seed := 0            # monsters' small timing differences come from this, their uid and the tick
+var _settled_at := 0         # tick of the last settle (see settle())
 var phase := "player"        # player | won | lost
 var stays_open := false      # a room you can walk around in: no foes left does not end it
 var telegraphs: Array = []   # {actor_uid, card_id, aim, cells, fire_at, track, foe_uid}
@@ -38,6 +40,7 @@ func _init(cat: Catalog, seed_value: int, player_def: String, enemy_defs: Array,
 	Grid.W = int(cfg["grid_w"])
 	Grid.H = int(cfg["grid_h"])
 	rng = SimRng.new(seed_value)
+	jit_seed = seed_value
 	grid = Grid.new(catalog)
 	ctx = Effects.BattleContext.new()
 	ctx.grid = grid
@@ -472,6 +475,32 @@ func advance_ticks(pt: int, on_done: Callable = Callable()) -> void:
 			_world_tick()
 		_frame()
 
+## After the player's input has played out, the world keeps flowing a little while it slows to a
+## stop (the screen halves its speed again and again, so the time that passes adds up to a fixed
+## amount: settle_time seconds). Called once per input by the screen; nothing if no time passed.
+func settle() -> void:
+	if tick == _settled_at or phase != "player" or borrow_left > 0:
+		return
+	var n := _world_ticks(int(round(float(cfg["settle_time"]) * TPS)))
+	if n > 0:
+		for k in n:
+			if phase != "player":
+				break
+			tick += 1
+			ctx.now = tick
+			_world_tick()
+		_frame()
+		frames[-1]["settle"] = true
+	_settled_at = tick
+
+## A monster's action time with its own small variation (0 to ai_jitter tenths longer), so
+## monsters do not all move on the same whole seconds.
+func _ai_ticks(base: int, a: Actor) -> int:
+	var t := maxi(1, action_ticks(base, a))
+	var j := int(cfg["ai_jitter"])
+	# from who and when, not from a random stream: asking ahead (the screen's preview) changes nothing
+	return t + (posmod(hash([jit_seed, a.uid, tick, base]), j + 1) if j > 0 else 0)
+
 ## World ticks one player second takes now (TPS normally, a third of that in 불릿타임).
 func _step_ticks() -> int:
 	if slowed():
@@ -732,9 +761,10 @@ func _ai_act(a: Actor) -> void:
 		var out := ai_step_cell(a, aim, int(tgt.get("range", 1)), card)
 		if out != a.pos and not hazard(out, a):
 			a.facing = out - a.pos
-			a.glide = [a.pos, out, tick, tick + maxi(1, action_ticks(int(cfg["move_time"]), a))]
+			var mt := _ai_ticks(int(cfg["move_time"]), a)
+			a.glide = [a.pos, out, tick, tick + mt]
 			grid.move_unit(a, out)
-			a.next_at = tick + maxi(1, action_ticks(int(cfg["move_time"]), a))
+			a.next_at = tick + mt
 			return
 	if shape != "self" and shape != "all" and shape != "around" and not in_reach(card, a.pos, aim):
 		var plan := move_plan(a, foe, aim, card)
@@ -753,7 +783,7 @@ func _ai_act(a: Actor) -> void:
 		a.pattern_index += 1
 	if aim != a.pos:
 		a.facing = Targeting.dir_to(a.pos, aim)
-	var secs := maxi(1, action_ticks(int(card.get("time", 1)), a))   # ticks
+	var secs := _ai_ticks(int(card.get("time", 1)), a)   # ticks
 	if card.get("telegraph", false):
 		var cells := _attack_cells(card, a, aim, foe)
 		telegraphs.append({"actor_uid": a.uid, "card_id": choice["card_id"], "aim": aim, "cells": cells, "set_at": tick,
@@ -775,7 +805,7 @@ func move_plan(a: Actor, foe: Actor, aim: Vector2i, card: Dictionary) -> Diction
 	var reach := int(card.get("target", {}).get("range", 1))
 	var base := a.move_secs if a.move_secs > 0 else int(cfg["move_time"])
 	var secs := maxi(1, action_secs(base, a))
-	var tk := maxi(1, action_ticks(base, a))
+	var tk := _ai_ticks(base, a)
 	var to := a.pos
 	match a.move_style:
 		"kite":

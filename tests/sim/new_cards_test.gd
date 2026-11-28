@@ -25,6 +25,7 @@ func run() -> void:
 	test_wait_ends_borrow_early()
 	test_bullet_time_slows_the_world()
 	test_haste_field_shortens_actions()
+	test_settle_and_jitter()
 	test_crystal_roots_and_shatters()
 	test_oil_on_fire_flares()
 
@@ -140,6 +141,33 @@ func test_haste_field_shortens_actions() -> void:
 	assert_eq(int(b.telegraphs[0]["fire_at"]) - int(b.telegraphs[0]["set_at"]), 27, "a 4-second wind-up in the field takes 2.7 s")
 	b._on_meta({"op": "slow", "factor": 3, "secs": 4}, h)
 	assert_eq(b.cost_secs(1), 0.2, "and a third of that in bullet time")
+
+## The world runs on settle_time after each input while it slows to a stop (once, not per step),
+## and monsters' times differ by a few tenths.
+func test_settle_and_jitter() -> void:
+	c.config["settle_time"] = 0.3
+	c.config["ai_jitter"] = 3
+	var b := _battle("strike", "slow_hitter")
+	var t0 := b.tick
+	b.cmd_move(Vector2i.UP)
+	b.cmd_move(Vector2i.DOWN)
+	b.settle()
+	assert_eq(b.tick - t0, 23, "two steps, then 0.3 s of settling")
+	assert_true(b.frames[-1].get("settle", false), "the settling has its own frame")
+	b.settle()
+	assert_eq(b.tick - t0, 23, "no time passed: nothing more")
+	var wind := []
+	for k in 30:
+		var bb := _battle("strike", "slow_hitter")
+		bb.jit_seed = k
+		for i in 3:
+			if not bb.telegraphs.is_empty():
+				break
+			bb.cmd_wait(1)
+		wind.append(int(bb.telegraphs[0]["fire_at"]) - int(bb.telegraphs[0]["set_at"]))
+	assert_true(wind.min() >= 40 and wind.max() <= 43 and wind.max() > wind.min(), "4 s wind-ups vary by tenths %s" % [wind])
+	c.config.erase("settle_time")
+	c.config.erase("ai_jitter")
 
 func test_crystal_roots_and_shatters() -> void:
 	var lay := {"player_pos": [1, 3], "enemy_pos": [[3, 3]], "materials": []}
