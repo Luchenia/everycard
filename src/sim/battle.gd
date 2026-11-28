@@ -771,7 +771,9 @@ func _ai_act(a: Actor) -> void:
 		a.stuck = a.stuck + 1 if plan["to"] == a.pos else 0
 		if plan["to"] != a.pos:
 			a.facing = Targeting.dir_to(a.pos, plan["to"])
-			a.glide = [a.pos, plan["to"], tick, tick + int(plan["ticks"])]
+			# a leap is one quick jump (then it catches its breath until next_at); a walk takes the whole step
+			var gt := mini(int(plan["ticks"]), LEAP_TICKS) if plan["cells"] > 1 else int(plan["ticks"])
+			a.glide = [a.pos, plan["to"], tick, tick + gt]
 			grid.move_unit(a, plan["to"])
 			if plan["cells"] > 1:
 				_log("hop", "%s 도약" % a.name, {"uid": a.uid, "cells": [plan["to"]]})
@@ -932,6 +934,7 @@ func _splits() -> void:
 ## on its temper: reckless ones walk straight through, careful ones go around and wait when there
 ## is no other way, stubborn ones take a short cut through harm when the way round is long. A
 ## careful enemy shut in long enough (STUCK_LIMIT seconds) loses patience and breaks out.
+const LEAP_TICKS := 8   # a slime's two-cell leap is in the air for 0.8 s
 const HAZARD_COST := {"reckless": 1, "careful": 8, "stubborn": 4}
 const STUCK_LIMIT := 3
 
