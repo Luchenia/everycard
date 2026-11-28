@@ -261,13 +261,19 @@ func _step_replay(delta: float) -> void:
 	board.shown_now = lerpf(float(a["t"]), float(b["t"]), k)
 	# 불릿타임: a step that takes longer than one replayed moment is spread over its whole time,
 	# so monsters walk three times slower instead of finishing their step in one moment
-	var gl: Dictionary = b.get("glide", {})
+	# A recorded step is always drawn from its own record, whichever moments it spans: switching
+	# between this and the frame-to-frame glide made a leap jump, slide back and jump again.
+	var gl: Dictionary = a.get("glide", {}).duplicate()
+	gl.merge(b.get("glide", {}), true)
+	board.glide_k = {}
 	for uid in gl:
 		var g: Array = gl[uid]
 		var gt0 := float(g[2])
 		var gt1 := float(g[3])
-		if gt1 - gt0 <= float(b["t"]) - float(a["t"]) + 0.05 or not board.shown_pos.has(uid):
+		if not board.shown_pos.has(uid) or gt1 - gt0 < 0.01:
 			continue
+		if board.shown_now > gt1 + 0.001 and Vector2(b["pos"].get(uid, g[1])) != Vector2(g[1]):
+			continue   # it has moved on since (pushed, another step): the frames know better
 		var gk := clampf((board.shown_now - gt0) / (gt1 - gt0), 0.0, 1.0)
 		board.glide_k[uid] = gk   # the step strip follows the whole step, not each replayed moment (no double hop)
 		board.shown_pos[uid] = Vector2(g[0]).lerp(Vector2(g[1]), gk * gk * (3.0 - 2.0 * gk))
