@@ -5,7 +5,8 @@ extends Control
 ## a picked card), Q W E R T pick a card, 1-5 game speed, arrows move (1 s), mouse wheel or A/D flip
 ## through the hand, Space wait 1 s.
 
-const SEC_REAL := 0.5    # real seconds one game second takes when replayed
+const SEC_REAL := 1.0    # real seconds one game second takes when replayed (Luchenia 2026-11-28: half the old 0.5 pace)
+const PLAY_K := 0.5      # effects and body clocks slow by the same factor, so feet and sparks keep pace with the bodies
 const HUB := Vector2(640, 800)   # hand wheel hub on screen
 
 var catalog: Catalog
@@ -186,7 +187,7 @@ func _step_replay(delta: float) -> void:
 		var r := pow(0.5, settle_tau / h)
 		var held := BoardView.HELD2 if BoardView.BT2 else BoardView.HELD
 		warp = maxf(r, held)
-		board.play_speed = speed * warp
+		board.play_speed = speed * maxf(warp * PLAY_K, held)
 		replay_t = 1.0 if r <= held else 1.0 - r
 	else:
 		settle_tau = 0.0
@@ -205,7 +206,7 @@ func _step_replay(delta: float) -> void:
 		if flow.calm() or (fast_flow and not BoardView.BT2):
 			warp = 1.0   # nothing to fight, or only the ring turning: no slow motion
 		var calm_k := 3.0 if (flow.calm() or (fast_flow and not BoardView.BT2)) else (1.2 if fast_flow else 1.0)
-		board.play_speed = speed * warp
+		board.play_speed = speed * warp * PLAY_K
 		if board.rt < board.hitstop_until:
 			return   # hit-stop: the replay holds on the blow
 		replay_t += delta * speed * warp * calm_k / SEC_REAL
@@ -356,7 +357,7 @@ func _process(delta: float) -> void:
 	real += delta
 	if flow == null or flow.battle == null:
 		return
-	board.play_speed = speed
+	board.play_speed = speed * PLAY_K
 	_step_replay(delta)
 	_step_slide(delta)
 	_flashes()
