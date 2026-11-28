@@ -228,6 +228,7 @@ func _step_replay(delta: float) -> void:
 	var next: Dictionary = fr[shown_frame + 2] if shown_frame + 2 < fr.size() else {}
 	board.shown_pos = {}
 	board.moving = {}
+	board.glide_k = {}
 	board.walk_link = {}
 	board.replay_k = k
 	for uid in a["pos"]:
@@ -268,6 +269,7 @@ func _step_replay(delta: float) -> void:
 		if gt1 - gt0 <= float(b["t"]) - float(a["t"]) + 0.05 or not board.shown_pos.has(uid):
 			continue
 		var gk := clampf((board.shown_now - gt0) / (gt1 - gt0), 0.0, 1.0)
+		board.glide_k[uid] = gk   # the step strip follows the whole step, not each replayed moment (no double hop)
 		board.shown_pos[uid] = Vector2(g[0]).lerp(Vector2(g[1]), gk * gk * (3.0 - 2.0 * gk))
 		if gk < 1.0:
 			board.moving[uid] = Vector2i(g[1])

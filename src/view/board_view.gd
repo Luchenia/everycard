@@ -22,6 +22,7 @@ var shown_hp: Dictionary = {}    # uid -> hp at the replayed second
 var shown_now := -1.0            # world seconds of the replayed moment (between two frames)
 var replaying := false
 var replay_k := 0.0              # 0..1 inside the replayed second
+var glide_k: Dictionary = {}      # uid -> 0..1 through a step that spans several replayed moments
 
 ## The moment on screen, in world seconds: the replayed moment, or the battle clock when still.
 func sim_time() -> float:
@@ -495,6 +496,7 @@ func reset_tracking() -> void:
 		flashes.clear()
 		flash_rt.clear()
 		shown_pos.clear()
+		glide_k.clear()
 		shown_hp.clear()
 		moving.clear()
 		walk_link.clear()
@@ -1144,7 +1146,7 @@ func _unit(tl: Control, u: Actor, off: Vector2) -> void:
 		ground.y -= hop   # the dash strip carries its own bounce
 	elif frac > 0.01 and not walk_s.is_empty():
 		st = walk_s
-		idx = clampi(int((replay_k if replaying else _held_k(u.uid)) * walk_s["n"]), 0, walk_s["n"] - 1)
+		idx = clampi(int((float(glide_k.get(u.uid, replay_k)) if replaying else _held_k(u.uid)) * walk_s["n"]), 0, walk_s["n"] - 1)
 		ground.y -= hop   # the step strip carries its own bounce
 	elif not replaying and u.controller == "ai":
 		# about to step: lean toward the next cell, rocking slowly in held time
@@ -1197,7 +1199,7 @@ func _held_k(uid: int) -> float:
 
 func _walk_frame(rs: Dictionary, uid: int) -> float:
 	var n := float(rs["n"] - 1)
-	var rk := replay_k if replaying else _held_k(uid)
+	var rk: float = float(glide_k.get(uid, replay_k)) if replaying else _held_k(uid)
 	var cy: Array = rs.get("cycle", [])
 	var link: Vector2i = walk_link.get(uid, Vector2i.ZERO)
 	if cy.size() < 2 or link == Vector2i.ZERO:
