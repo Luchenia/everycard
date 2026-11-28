@@ -1,0 +1,19 @@
+[
+ {"id": "heat", "name": "열기", "secs": 6, "opposes": ["cold"], "upgrade": "blaze"},
+ {"id": "blaze", "name": "업화", "secs": 6, "opposes": ["cold"]},
+ {"id": "cold", "name": "냉기", "secs": 6, "opposes": ["heat", "blaze"]},
+ {"id": "damp", "name": "습기", "secs": 8},
+ {"id": "charged", "name": "전기", "secs": 2, "flows": true},
+ {"id": "slick", "name": "미끄러움", "secs": 8},
+ {"id": "crush", "name": "짓누름", "secs": 2, "dir": true, "push": 3, "upgrade": "collapse"},
+ {"id": "collapse", "name": "붕괴", "secs": 2},
+ {"id": "gust", "name": "돌풍", "secs": 4, "dir": true, "push": 4},
+ {"id": "pull", "name": "중력", "secs": 4, "dir": true, "push": 3},
+ {"id": "haste", "name": "가속", "secs": 8, "opposes": ["slow", "stopped"], "time": 1.5},
+ {"id": "slow", "name": "느림", "secs": 8, "opposes": ["haste", "stopped"], "time": 0.5},
+ {"id": "stopped", "name": "멈춘 시간", "secs": 4, "opposes": ["haste", "slow"], "time": 0.0},
+ {"id": "miasma", "name": "독기", "secs": 6},
+ {"id": "curse", "name": "저주", "secs": 10},
+ {"id": "echo", "name": "울림", "secs": 2},
+ {"id": "mana", "name": "마나", "secs": 8}
+]

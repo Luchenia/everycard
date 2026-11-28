@@ -1,0 +1,25 @@
+{
+ "id": "laser",
+ "name": "광명 있으라",
+ "time": 4,
+ "weight": 1,
+ "rarity": "rare",
+ "target": {
+  "shape": "line",
+  "range": 8,
+  "size": 0,
+  "reach": "line"
+ },
+ "parts": [
+  {
+   "op": "beam",
+   "damage": 10,
+   "kind": "energy",
+   "length": 9
+  }
+ ],
+ "desc": "일직선으로 빛을 쏘아 10의 피해를 입힙니다. [반사] [탈진]",
+ "exhaust": 2,
+ "family": "magic",
+ "pool": "mage"
+}

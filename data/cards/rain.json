@@ -1,0 +1,26 @@
+{
+ "id": "rain",
+ "name": "소나기",
+ "time": 3,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "circle",
+  "range": 4,
+  "size": 1,
+  "reach": "circle"
+ },
+ "parts": [
+  {
+   "op": "material",
+   "id": "water"
+  },
+  {
+   "op": "state",
+   "id": "damp"
+  }
+ ],
+ "desc": "3×3 범위를 [젖음] 상태로 만듭니다.",
+ "family": "magic",
+ "pool": "mage"
+}

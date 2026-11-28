@@ -1,0 +1,22 @@
+{
+ "id": "bullet_time",
+ "name": "불릿타임",
+ "time": 0,
+ "rarity": "legendary",
+ "family": "neutral",
+ "desc": "4초 동안 세상이 3배 느리게 흐릅니다.",
+ "weight": 1,
+ "target": {
+  "shape": "self",
+  "range": 0,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "slow",
+   "factor": 3,
+   "secs": 4
+  }
+ ],
+ "pool": "common"
+}

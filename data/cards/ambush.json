@@ -1,0 +1,26 @@
+{
+ "id": "ambush",
+ "weight": 1,
+ "name": "기습",
+ "time": 2,
+ "rarity": "rare",
+ "family": "sword",
+ "pool": "wanderer",
+ "target": {
+  "shape": "cell",
+  "range": 1,
+  "size": 0,
+  "reach": "square"
+ },
+ "parts": [
+  {
+   "op": "interrupt"
+  },
+  {
+   "op": "damage",
+   "amount": 6,
+   "kind": "physical"
+  }
+ ],
+ "desc": "붙어 있는 적의 공격 예고를 끊고 6의 피해를 입힙니다."
+}

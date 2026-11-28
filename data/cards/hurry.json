@@ -1,0 +1,22 @@
+{
+ "id": "hurry",
+ "name": "빨리빨리!",
+ "time": 3,
+ "rarity": "rare",
+ "family": "neutral",
+ "desc": "3×3 범위의 시간을 [가속]합니다.",
+ "weight": 1,
+ "target": {
+  "shape": "circle",
+  "range": 3,
+  "size": 1,
+  "reach": "circle"
+ },
+ "parts": [
+  {
+   "op": "state",
+   "id": "haste"
+  }
+ ],
+ "pool": "common"
+}

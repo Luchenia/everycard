@@ -1,0 +1,1213 @@
+{
+  "cell_px": 16,
+  "note": "All sizes are native pixels. Board draws 16px cells (game scales x3). Strips are horizontal, frames left to right. anchor = pixel inside one frame that sits on the cell ground point (cell centre x, about 12px down from cell top), unless noted.",
+  "floor": {
+    "stone_floor.png": {
+      "what": "16 floor tile variants in a strip",
+      "frame": [
+        16,
+        16
+      ],
+      "count": 16,
+      "groups": {
+        "plain": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "cracked": [
+          4,
+          5,
+          6,
+          7
+        ],
+        "dark_patch": [
+          8,
+          9,
+          10,
+          11
+        ],
+        "chipped": [
+          12,
+          13,
+          14,
+          15
+        ]
+      },
+      "how": "Pick per cell from the seed: ~88% plain, 7% cracked, 5% chipped; dark_patch in 3-6 round blobs (blend 50% toward plain first, see reference/compose.py)."
+    },
+    "stone_wall_top.png": {
+      "what": "wall top blocks (room border), strip",
+      "frame": [
+        16,
+        16
+      ],
+      "count": 16,
+      "groups": {
+        "plain": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "variants": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    "stone_wall_face.png": {
+      "what": "front face of the top wall, one row under the top wall cap; tile horizontally (flip every other copy)",
+      "frame": [
+        32,
+        16
+      ],
+      "count": 1
+    }
+  },
+  "fx": {
+    "fire.png": {
+      "what": "[화염] cell: standing flame, stays inside 14px width, rises ~1 cell above.",
+      "frame": [
+        16,
+        36
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        8,
+        32
+      ],
+      "layer": "y-sorted with units",
+      "also": "draw an orange cell tint under it (rgba 120,30,10,~85) with 1px outline (255,120,40,~110), flicker; add warm additive glow ~40px"
+    },
+    "fire_ignite.png": {
+      "what": "one-shot: [화염] starts; play then switch to fire loop",
+      "frame": [
+        24,
+        40
+      ],
+      "count": 18,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        12,
+        34
+      ]
+    },
+    "fire_out.png": {
+      "what": "one-shot: [화염] put out (by [젖음] etc.)",
+      "frame": [
+        20,
+        34
+      ],
+      "count": 18,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        10,
+        30
+      ]
+    },
+    "crystal.png": {
+      "what": "[결정] cell: one floating gem per cell (Luchenia chose B, 2026-11-26), bobs and turns; its own soft shadow is baked in and shrinks as it rises, so draw no extra shadow. If a unit stands in the cell ([속박]), draw it 14px higher so it hovers over the unit head.",
+      "frame": [
+        16,
+        32
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        8,
+        27
+      ],
+      "layer": "y-sorted with units",
+      "also": "soft violet additive glow ~36px"
+    },
+    "mirror.png": {
+      "what": "[거울] object: standing mirror shard, blocks the cell",
+      "frame": [
+        16,
+        32
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        8,
+        27
+      ],
+      "layer": "y-sorted with units"
+    },
+    "water_splash.png": {
+      "what": "droplets on [젖음] puddle cells (put on ~1 in 3 water cells)",
+      "frame": [
+        16,
+        16
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        8,
+        12
+      ]
+    },
+    "ice_glint.png": {
+      "what": "sparkles on top of [빙결] fill, every ice cell, offset frames per cell",
+      "frame": [
+        16,
+        16
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        8,
+        8
+      ]
+    },
+    "ice_shatter.png": {
+      "what": "one-shot: [빙결]/[결정] breaks; fade the ice fill out over the same 18 frames",
+      "frame": [
+        16,
+        16
+      ],
+      "count": 18,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        8,
+        8
+      ]
+    },
+    "swamp_bubbles.png": {
+      "what": "bubbles on top of [늪] fill, every swamp cell",
+      "frame": [
+        16,
+        16
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        8,
+        8
+      ]
+    },
+    "gust_right.png": {
+      "what": "[돌풍] cell, wind blowing RIGHT. Other directions: flip horizontally (left) or rotate 90 (up/down). Draw it twice (alpha) and add a faint cell tint rgba(170,210,235,34) so direction reads.",
+      "frame": [
+        16,
+        16
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        8,
+        8
+      ]
+    },
+    "shock.png": {
+      "what": "[감전] on a unit: overlay 16x24 centred on the unit body (anchor = unit centre)",
+      "frame": [
+        16,
+        24
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        8,
+        12
+      ]
+    },
+    "haste.png": {
+      "what": "[가속] cell rune; draw at ~60% alpha",
+      "frame": [
+        16,
+        16
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        8,
+        8
+      ]
+    },
+    "slash.png": {
+      "what": "one-shot attack arc, facing right (flip for left). anchor is left of the arc: put it at the attacker.",
+      "frame": [
+        18,
+        24
+      ],
+      "count": 10,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        -4,
+        12
+      ]
+    },
+    "hit.png": {
+      "what": "one-shot hit burst on the target centre",
+      "frame": [
+        23,
+        22
+      ],
+      "count": 8,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        11,
+        11
+      ]
+    },
+    "_fills": {
+      "what": "[젖음] water, [빙결] ice, [기름] oil, [늪] swamp are NOT tiles: draw one organic puddle per connected group of cells, edges shrink 1.5-4.7px inward with noise (never spill into other cells), wet-stone ring, animated ripple. Reference implementation: reference/puddle.py (mask) + reference/states.py (colours per state, 48-frame loop). Port to a shader or bake per group at runtime."
+    },
+    "crystal_shatter.png": {
+      "what": "one-shot: a crystal (or a [결정화] unit) is broken by a projectile or physical hit. Cracks and shakes (0-5), white flash (6), bursts, shards fly into all 8 neighbour cells pointing outward, neighbour cells flash white then red (12-14) = the damage area, fade, empty tail. Remove the crystal sprite on frame 6.",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        24,
+        24
+      ],
+      "anchor_means": "centre of the crystal cell",
+      "layer": "above units (shards fly over neighbours)",
+      "also": "apply damage + unit hit flash to neighbours on frame 12"
+    },
+    "crystal_deflect": {
+      "what": "code effect, no sheet: light/magic beam drawn as 3px glow line (255,230,120,~45%) with 1px core (255,255,230), travels ~9px/frame (216px/s), bends at the GEM (cell centre y-7, not the floor) to a random angle; gem flashes white-yellow and a small ring expands at the bend. See reference/deflect.py, demo dungeon-floor/37_crystal_deflect.gif"
+    },
+    "roll_dust.png": {
+      "what": "one-shot light dust specks kicked up behind a roll or dash; anchor = ground (PixelLab, text only, light particle style, 2026-11-28)",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 13,
+      "fps": 16,
+      "loop": false,
+      "anchor": [
+        16,
+        26
+      ]
+    },
+    "land_ring.png": {
+      "what": "one-shot faint dotted dust ring where a body lands; anchor = centre of the ring on the ground (PixelLab, text only, light particle style, 2026-11-28)",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 13,
+      "fps": 16,
+      "loop": false,
+      "anchor": [
+        16,
+        20
+      ]
+    },
+    "hit_spark.png": {
+      "what": "one-shot light spark burst on the struck body (PixelLab, text only, light particle style, 2026-11-28)",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 13,
+      "fps": 20,
+      "loop": false,
+      "anchor": [
+        16,
+        16
+      ]
+    },
+    "speed_lines.png": {
+      "what": "one-shot thin dash lines streaking back from a dashing body (art for a body moving right: flip for left) (PixelLab, text only, light particle style, 2026-11-28)",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 13,
+      "fps": 20,
+      "loop": false,
+      "anchor": [
+        28,
+        16
+      ]
+    },
+    "crystal_shards.png": {
+      "what": "one-shot small violet shards drifting out of a broken crystal, slow (hangs in held time) (PixelLab, text only, light particle style, 2026-11-28)",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 17,
+      "fps": 14,
+      "loop": false,
+      "anchor": [
+        16,
+        16
+      ]
+    },
+    "droplets.png": {
+      "what": "one-shot light water splash particles off a body hit by water (PixelLab, text only, light particle style, 2026-11-28)",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 13,
+      "fps": 16,
+      "loop": false,
+      "anchor": [
+        16,
+        26
+      ]
+    },
+    "embers.png": {
+      "what": "one-shot light fire sparks rising off a body hit by fire (PixelLab, text only, light particle style, 2026-11-28)",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 13,
+      "fps": 16,
+      "loop": false,
+      "anchor": [
+        16,
+        24
+      ]
+    },
+    "haste_field.png": {
+      "what": "[가속] field: one gold clock dial on the floor stretched over a whole connected group of haste cells, loops (PixelLab, 2026-11-28)",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 25,
+      "fps": 12,
+      "loop": true,
+      "anchor": [
+        24,
+        24
+      ]
+    }
+  },
+  "units": {
+    "hero.png": {
+      "what": "player hero idle, faces right",
+      "frame": [
+        24,
+        24
+      ],
+      "count": 16,
+      "fps": 12,
+      "loop": true,
+      "anchor": [
+        12,
+        22
+      ]
+    },
+    "slime.png": {
+      "what": "slime idle, faces left",
+      "frame": [
+        24,
+        24
+      ],
+      "count": 16,
+      "fps": 12,
+      "loop": true,
+      "anchor": [
+        12,
+        22
+      ]
+    },
+    "ember_imp.png": {
+      "what": "ember imp idle, faces left",
+      "frame": [
+        24,
+        24
+      ],
+      "count": 16,
+      "fps": 12,
+      "loop": true,
+      "anchor": [
+        12,
+        22
+      ]
+    },
+    "walker.png": {
+      "what": "wanderer idle (humanoid like the player), faces left",
+      "frame": [
+        24,
+        24
+      ],
+      "count": 16,
+      "fps": 12,
+      "loop": true,
+      "anchor": [
+        12,
+        22
+      ]
+    },
+    "iron_golem.png": {
+      "what": "iron golem idle, 32px, faces left",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 16,
+      "fps": 12,
+      "loop": true,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "boss_tide_warden.png": {
+      "what": "tide warden boss idle, 48px canvas (~40px tall), faces left",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 16,
+      "fps": 12,
+      "loop": true,
+      "anchor": [
+        24,
+        46
+      ]
+    },
+    "_notes": "attack/hit: generated attack animations were not readable, so do them in code: attack = 3px lunge toward target over 4 frames + fx/slash.png; hit = 2 frames white flash + 1px knockback + fx/hit.png. Shadow: ellipse 12x4 rgba(0,0,0,110) at the anchor. Sort all units and tall fx by anchor y.",
+    "slime_idle.png": {
+      "what": "slime idle, 48 frames (3 different subtle loops that each start and end on the base pose), readable at 0.2x in held time",
+      "frame": [
+        24,
+        24
+      ],
+      "count": 48,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        12,
+        22
+      ]
+    },
+    "slime_windup.png": {
+      "what": "slime windup: driven by attack progress: frame 0 = warning starts, 23 = fully cocked (holdable). Crouch/lean back, tint and a pulsing rim glow build up, trembles in the last third.",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "slime_strike.png": {
+      "what": "slime strike: one-shot release from the cocked pose, then back to base; play at 24fps",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 8,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "slime_hit.png": {
+      "what": "slime hit: one-shot flinch: white flash, knockback, recover to base",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 6,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "ember_imp_idle.png": {
+      "what": "ember_imp idle, 48 frames (3 different subtle loops that each start and end on the base pose), readable at 0.2x in held time",
+      "frame": [
+        24,
+        24
+      ],
+      "count": 48,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        12,
+        22
+      ]
+    },
+    "ember_imp_windup.png": {
+      "what": "ember_imp windup: driven by attack progress: frame 0 = warning starts, 23 = fully cocked (holdable). Crouch/lean back, tint and a pulsing rim glow build up, trembles in the last third.",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "ember_imp_strike.png": {
+      "what": "ember_imp strike: one-shot release from the cocked pose, then back to base; play at 24fps",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 8,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "ember_imp_hit.png": {
+      "what": "ember_imp hit: one-shot flinch: white flash, knockback, recover to base",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 6,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "iron_golem_idle.png": {
+      "what": "iron_golem idle, 48 frames (3 different subtle loops that each start and end on the base pose), readable at 0.2x in held time",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 48,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "iron_golem_windup.png": {
+      "what": "iron_golem windup: driven by attack progress: frame 0 = warning starts, 23 = fully cocked (holdable). Crouch/lean back, tint and a pulsing rim glow build up, trembles in the last third.",
+      "frame": [
+        40,
+        40
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        20,
+        38
+      ]
+    },
+    "iron_golem_strike.png": {
+      "what": "iron_golem strike: one-shot release from the cocked pose, then back to base; play at 24fps",
+      "frame": [
+        40,
+        40
+      ],
+      "count": 8,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        20,
+        38
+      ]
+    },
+    "iron_golem_hit.png": {
+      "what": "iron_golem hit: one-shot flinch: white flash, knockback, recover to base",
+      "frame": [
+        40,
+        40
+      ],
+      "count": 6,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        20,
+        38
+      ]
+    },
+    "boss_tide_warden_idle.png": {
+      "what": "boss_tide_warden idle, 48 frames (3 different subtle loops that each start and end on the base pose), readable at 0.2x in held time",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 48,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        24,
+        46
+      ]
+    },
+    "boss_tide_warden_windup.png": {
+      "what": "boss_tide_warden windup: driven by attack progress: frame 0 = warning starts, 23 = fully cocked (holdable). Crouch/lean back, tint and a pulsing rim glow build up, trembles in the last third.",
+      "frame": [
+        60,
+        60
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        30,
+        58
+      ]
+    },
+    "boss_tide_warden_strike.png": {
+      "what": "boss_tide_warden strike: one-shot release from the cocked pose, then back to base; play at 24fps",
+      "frame": [
+        60,
+        60
+      ],
+      "count": 8,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        30,
+        58
+      ]
+    },
+    "boss_tide_warden_hit.png": {
+      "what": "boss_tide_warden hit: one-shot flinch: white flash, knockback, recover to base",
+      "frame": [
+        60,
+        60
+      ],
+      "count": 6,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        30,
+        58
+      ]
+    },
+    "hero_idle.png": {
+      "what": "hero idle, 48 frames (3 different subtle loops that each start and end on the base pose), readable at 0.2x in held time",
+      "frame": [
+        24,
+        24
+      ],
+      "count": 48,
+      "fps": 24,
+      "loop": true,
+      "anchor": [
+        12,
+        22
+      ]
+    },
+    "hero_windup.png": {
+      "what": "hero windup: driven by attack progress: frame 0 = warning starts, 23 = fully cocked (holdable). Crouch/lean back, tint and a pulsing rim glow build up, trembles in the last third.",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 24,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "hero_strike.png": {
+      "what": "hero strike: one-shot release from the cocked pose, then back to base; play at 24fps",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 8,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "hero_hit.png": {
+      "what": "hero hit: one-shot flinch: white flash, knockback, recover to base",
+      "frame": [
+        32,
+        32
+      ],
+      "count": 6,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        30
+      ]
+    },
+    "hero_walk.png": {
+      "what": "hero one-cell step in place, 12 frames played over one game second; move the sprite 16px across the 12 frames in code; starts and ends on the base pose",
+      "frame": [
+        24,
+        24
+      ],
+      "count": 12,
+      "fps": 12,
+      "loop": false,
+      "anchor": [
+        12,
+        22
+      ]
+    },
+    "hero_act.png": {
+      "what": "hero attack, exaggerated (PixelLab pixminimax): frames before peak = wind-up driven by progress, peak.. = release at 24fps",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 25,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        16,
+        44
+      ],
+      "peak": 7
+    },
+    "ember_imp_act.png": {
+      "what": "ember imp pounce attack, exaggerated: wind-up before peak, leap and fire slam after",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 25,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        32,
+        44
+      ],
+      "peak": 11
+    },
+    "slime_act.png": {
+      "what": "slime body slam, exaggerated",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 25,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        32,
+        44
+      ],
+      "peak": 8
+    },
+    "walker_act.png": {
+      "what": "wanderer overhead chop, exaggerated",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 25,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        32,
+        44
+      ],
+      "peak": 11
+    },
+    "iron_golem_act.png": {
+      "what": "iron golem ground pound, exaggerated",
+      "frame": [
+        64,
+        64
+      ],
+      "count": 25,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        40,
+        60
+      ],
+      "peak": 12
+    },
+    "boss_tide_warden_act.png": {
+      "what": "tide warden tidal crash, exaggerated",
+      "frame": [
+        96,
+        96
+      ],
+      "count": 25,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        60,
+        92
+      ],
+      "peak": 14
+    },
+    "hero_run.png": {
+      "what": "hero one-cell dash, in place (the code glides the body); played across the replayed second",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 17,
+      "loop": false,
+      "anchor": [
+        16,
+        44
+      ],
+      "cycle": [
+        5,
+        10
+      ]
+    },
+    "hero_roll.png": {
+      "what": "hero dodge roll (구르기), in place; played across the card's second",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 17,
+      "loop": false,
+      "anchor": [
+        16,
+        44
+      ]
+    },
+    "hero_hurt.png": {
+      "what": "hero hit reaction, exaggerated: jolts back, cloak flies, recovers",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        26,
+        44
+      ]
+    },
+    "hero_guard.png": {
+      "what": "hero guard stance (방어/받아치기), played across the card's seconds",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 17,
+      "loop": false,
+      "anchor": [
+        24,
+        44
+      ]
+    },
+    "slime_run.png": {
+      "what": "slime one-cell move, exaggerated, in place (the code glides the body); played across the replayed second",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 17,
+      "loop": false,
+      "anchor": [
+        32,
+        44
+      ],
+      "cycle": [
+        2,
+        14
+      ]
+    },
+    "slime_hurt.png": {
+      "what": "slime hit reaction, exaggerated; plays on world time at 24fps",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        24,
+        44
+      ]
+    },
+    "ember_imp_run.png": {
+      "what": "ember_imp one-cell move, exaggerated, in place (the code glides the body); played across the replayed second",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 17,
+      "loop": false,
+      "anchor": [
+        32,
+        44
+      ],
+      "cycle": [
+        3,
+        14
+      ]
+    },
+    "ember_imp_hurt.png": {
+      "what": "ember_imp hit reaction, exaggerated; plays on world time at 24fps",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        24,
+        44
+      ]
+    },
+    "walker_run.png": {
+      "what": "walker one-cell move, exaggerated, in place (the code glides the body); played across the replayed second",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 17,
+      "loop": false,
+      "anchor": [
+        32,
+        44
+      ],
+      "cycle": [
+        7,
+        14
+      ]
+    },
+    "walker_hurt.png": {
+      "what": "walker hit reaction, exaggerated; plays on world time at 24fps",
+      "frame": [
+        48,
+        48
+      ],
+      "count": 17,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        24,
+        44
+      ]
+    },
+    "iron_golem_run.png": {
+      "what": "iron_golem one-cell move, exaggerated, in place (the code glides the body); played across the replayed second",
+      "frame": [
+        64,
+        64
+      ],
+      "count": 17,
+      "fps": 17,
+      "loop": false,
+      "anchor": [
+        40,
+        60
+      ],
+      "cycle": [
+        3,
+        14
+      ]
+    },
+    "iron_golem_hurt.png": {
+      "what": "iron_golem hit reaction, exaggerated; plays on world time at 24fps",
+      "frame": [
+        64,
+        64
+      ],
+      "count": 17,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        32,
+        60
+      ]
+    },
+    "boss_tide_warden_run.png": {
+      "what": "boss_tide_warden one-cell move, exaggerated, in place (the code glides the body); played across the replayed second",
+      "frame": [
+        96,
+        96
+      ],
+      "count": 17,
+      "fps": 17,
+      "loop": false,
+      "anchor": [
+        60,
+        92
+      ]
+    },
+    "boss_tide_warden_hurt.png": {
+      "what": "boss_tide_warden hit reaction, exaggerated; plays on world time at 24fps",
+      "frame": [
+        96,
+        96
+      ],
+      "count": 17,
+      "fps": 24,
+      "loop": false,
+      "anchor": [
+        48,
+        92
+      ]
+    }
+  },
+  "ui": {
+    "cards/card_frame_<family>_<rarity>.png": {
+      "what": "12 card frames. family: neutral (slate plate), sword (crimson plate), magic (violet plate). rarity: basic (plain stone), common (bronze), rare (silver + sapphire), legendary (gold + amber).",
+      "size": [
+        88,
+        136
+      ],
+      "boxes": {
+        "art_window": [
+          12,
+          12,
+          64,
+          51
+        ],
+        "name_plate": [
+          12,
+          67,
+          67,
+          8
+        ],
+        "text_box": [
+          8,
+          79,
+          71,
+          49
+        ],
+        "time_badge_centre": [
+          77,
+          11
+        ],
+        "time_badge_radius": 9
+      },
+      "text": {
+        "name": "fonts/Galmuri7.ttf size 8, #F0ECE0, ink centred on x=44.5, vertically centred in name_plate",
+        "description": "fonts/Galmuri7.ttf size 8, line height 8, up to 6 lines, ink #34281E, [keywords] in #964614 without brackets. Centre the INK (textbbox, not advance width) on x=44.5, block centred on y=103.5 (reference/cardtext7.py)",
+        "time": "fonts/Galmuri11-Bold.ttf size 12, centred on time_badge_centre (top-right now)"
+      },
+      "check": "2026-11-26 v7 (Luchenia): rarity gem removed (rarity shows only by frame metal colour); description and name ink centred on the parchment (was ~2px left)."
+    },
+    "window_frame.png": {
+      "what": "stone window frame, empty centre, 9-slice",
+      "size": [
+        96,
+        96
+      ],
+      "nine_slice_margin": 18
+    },
+    "hand_wheel.png": {
+      "what": "hand wheel (top half of a stone rune wheel with 5 card slots + brass hub). Rotate around the hub when the hand scrolls.",
+      "size": [
+        320,
+        112
+      ],
+      "hub_centre": [
+        160,
+        112
+      ],
+      "slot_centres": [
+        [
+          68,
+          83
+        ],
+        [
+          100,
+          43
+        ],
+        [
+          159,
+          27
+        ],
+        [
+          218,
+          43
+        ],
+        [
+          248,
+          83
+        ]
+      ]
+    },
+    "icons/*.png": {
+      "what": "16x16 icons: heart, shield, hourglass, pause, settings, map, exhaust",
+      "size": [
+        16,
+        16
+      ]
+    },
+    "card_back.png": {
+      "what": "card back v2 (Luchenia: v1 looked grimy; clean, polished, Hearthstone-level finish without copying its design). Deep blue gradient panel, gold filigree border, large symmetric emblem: violet crystal in a gold four-ray ring. Same 88x136 size and metal border as the fronts. Reads down to ~40px wide in the 3D ring.",
+      "size": [
+        88,
+        136
+      ],
+      "alt": "card_back_red.png (crimson version)"
+    },
+    "hand_rogue.png": {
+      "what": "rogue's own gloved hand as the card cursor (brown leather glove, navy sleeve cuff showing it belongs to the hero). Strip of 3 frames 24x28: 0 point, 1 press (1px down, fingertip squashed), 2 swipe (two faded ghosts to the left; flip horizontally for a rightward swipe).",
+      "frame": [
+        24,
+        28
+      ],
+      "count": 3,
+      "hotspot": [
+        6,
+        3
+      ],
+      "hotspot_means": "fingertip pixel in frame 0; frame 1 tip is at [6,4]"
+    }
+  }
+}

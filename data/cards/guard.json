@@ -1,0 +1,22 @@
+{
+ "id": "guard",
+ "name": "방어",
+ "time": 2,
+ "weight": 1,
+ "rarity": "basic",
+ "target": {
+  "shape": "self",
+  "range": 0,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "shield",
+   "amount": 8,
+   "secs": 6
+  }
+ ],
+ "desc": "8의 [보호막]을 얻습니다.",
+ "family": "neutral",
+ "pool": "wanderer"
+}

@@ -1,0 +1,54 @@
+{
+ "id": "boss_tide_warden",
+ "name": "물결 파수꾼",
+ "hp": 120,
+ "mass": 6,
+ "armor": 2,
+ "resist": {
+  "fire": 0.3
+ },
+ "is_boss": true,
+ "base_ability": "step1",
+ "deck": [
+  "enemy_tide",
+  "enemy_snipe",
+  "enemy_quake",
+  "shock",
+  "enemy_slam",
+  "rain"
+ ],
+ "pattern": [
+  "rain",
+  "enemy_snipe",
+  "enemy_tide",
+  "enemy_quake",
+  "shock",
+  "enemy_slam"
+ ],
+ "signature": "enemy_tide",
+ "trait": [
+  {
+   "op": "state",
+   "id": "damp"
+  }
+ ],
+ "temper": "stubborn",
+ "likes": {
+  "water": 2,
+  "damp": 1
+ },
+ "dislikes": {
+  "heat": 2,
+  "blaze": 3
+ },
+ "move": "intercept",
+ "tricks": [
+  {
+   "card": "enemy_tide",
+   "when": "aligned",
+   "min": 1,
+   "max": 5,
+   "cd": 7
+  }
+ ]
+}

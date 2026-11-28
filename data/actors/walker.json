@@ -1,0 +1,39 @@
+{
+ "id": "walker",
+ "name": "도적",
+ "hp": 60,
+ "mass": 2,
+ "armor": 0,
+ "base_ability": "step1",
+ "deck": [
+  "strike",
+  "guard",
+  "step",
+  "throw_dagger",
+  "oil_spill",
+  "flint",
+  "parry",
+  "roll",
+  "shadow_tread",
+  "poison_blade"
+ ],
+ "signature": "strike",
+ "trait": [
+  {
+   "op": "push",
+   "dist": 1,
+   "dir": "away"
+  }
+ ],
+ "pools": [
+  "wanderer",
+  "common"
+ ],
+ "facing": [
+  1,
+  0
+ ],
+ "passives": [
+  "backstab"
+ ]
+}

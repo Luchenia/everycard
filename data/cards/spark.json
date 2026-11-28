@@ -1,0 +1,26 @@
+{
+ "id": "spark",
+ "name": "점화",
+ "time": 2,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "cell",
+  "range": 3,
+  "size": 0,
+  "reach": "circle"
+ },
+ "parts": [
+  {
+   "op": "material",
+   "id": "fire"
+  },
+  {
+   "op": "state",
+   "id": "heat"
+  }
+ ],
+ "desc": "1×1 칸을 [화염] 상태로 만듭니다.",
+ "family": "magic",
+ "pool": "mage"
+}

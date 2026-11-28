@@ -1,0 +1,19 @@
+{
+ "id": "enemy_ooze",
+ "name": "재생",
+ "time": 2,
+ "weight": 1,
+ "rarity": "basic",
+ "target": {
+  "shape": "self",
+  "range": 0,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "heal",
+   "amount": 4
+  }
+ ],
+ "desc": "체력 4 회복"
+}

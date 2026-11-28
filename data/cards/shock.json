@@ -1,0 +1,27 @@
+{
+ "id": "shock",
+ "name": "낙뢰",
+ "time": 2,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "cell",
+  "range": 3,
+  "size": 0,
+  "reach": "circle"
+ },
+ "parts": [
+  {
+   "op": "state",
+   "id": "charged"
+  },
+  {
+   "op": "damage",
+   "amount": 5,
+   "kind": "electric"
+  }
+ ],
+ "desc": "1×1 칸에 번개를 떨어뜨려 5의 피해를 입히고 [전기] 상태로 만듭니다.",
+ "family": "magic",
+ "pool": "mage"
+}

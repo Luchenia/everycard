@@ -1,0 +1,22 @@
+{
+ "id": "gust",
+ "name": "폭풍",
+ "time": 3,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "line",
+  "range": 1,
+  "size": 4
+ },
+ "parts": [
+  {
+   "op": "state",
+   "id": "gust",
+   "dir": "along"
+  }
+ ],
+ "desc": "앞쪽 4칸을 [돌풍] 상태로 만듭니다.",
+ "family": "magic",
+ "pool": "mage"
+}

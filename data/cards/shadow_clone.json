@@ -1,0 +1,22 @@
+{
+ "id": "shadow_clone",
+ "weight": 1,
+ "name": "그림자 분신",
+ "time": 2,
+ "rarity": "legendary",
+ "family": "sword",
+ "pool": "wanderer",
+ "target": {
+  "shape": "cell",
+  "range": 2,
+  "size": 0,
+  "reach": "circle"
+ },
+ "parts": [
+  {
+   "op": "clone",
+   "secs": 8
+  }
+ ],
+ "desc": "8초 동안 [분신]을 남깁니다. 분신은 내 공격 카드를 따라 씁니다."
+}

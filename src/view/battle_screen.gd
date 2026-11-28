@@ -1,0 +1,1413 @@
+extends Control
+## Battle screen: clock track on top, the dungeon room filling the middle, the hand as a ring of
+## cards at the bottom. Almost no text: hovering a card or a cell explains its [keywords].
+## Keys: left click a cell to walk there, right click for full details (or to cancel
+## a picked card), Q W E R T pick a card, 1-5 game speed, arrows move (1 s), mouse wheel or A/D flip
+## through the hand, Space wait 1 s.
+
+const SEC_REAL := 1.0    # real seconds one game second takes when replayed (Luchenia 2026-11-28: half the old 0.5 pace)
+const PLAY_K := 0.5      # effects and body clocks slow by the same factor, so feet and sparks keep pace with the bodies
+const HUB := Vector2(640, 800)   # hand wheel hub on screen
+
+var catalog: Catalog
+var flow: RunFlow
+var board: BoardView
+var font: Font
+var timeline: TimelineBar
+var hand_layer: Control
+var hud: Control
+var tips: VBoxContainer
+var overlay: Control
+var selected := -1
+var seed_value := 0
+var shown_frame := 0
+var replay_t := 0.0
+var flow_from := 0       # first frame of the flow being replayed
+var warp := 0.0           # time-warp factor: eases up from bullet time when time starts flowing, back down at the end
+var cards: Array = []          # CardView per hand slot (null for empty / heavy tail)
+var hovered_card: CardView
+var wiggle_until := 0.0
+var real := 0.0
+var cell_hover_t := 0.0
+var dragging := false     # left button held on the board with no card: drawing a walk
+var drag_manual := false  # started on the hero: the path follows the mouse cell by cell
+var drag_from := Vector2i(-1, -1)
+var drag_px := Vector2.ZERO   # where the button went down: dragging right of it confirms, left cancels
+const DRAG_GO := 24.0
+var focus_at := -9.0
+var settle_tau := 0.0       # wall seconds into the slowing moment after the player's move
+var speed := 1.0             # playback speed of passing seconds (1-5 keys)
+var speed_shown_at := -9.0
+var hand_cursor: HandCursor     # when the window got focus: the click that focuses it never walks
+var log_i := 0           # battle log entries already shown as flashes
+var board_base := Vector2.ZERO  # where the board sits; slides move it off and back
+var view: Control                 # clipping window around the board (the camera frame)
+var cam_zoom := 1.0
+var cam_focus := Vector2.ZERO     # board-local point the camera pushes in on
+var slide_dir := Vector2i.ZERO  # walking through a door: the camera slides toward the next room
+var slide_t := 0.0              # 0..1 out, then 1..2 in
+var banner := ""                # room name shown for a moment on entering
+var banner_at := -9.0
+const SLIDE_OUT := 0.22
+const SLIDE_IN := 0.32
+
+func _ready() -> void:
+	font = load("res://assets/fonts/Galmuri11.ttf")
+	var th := Theme.new()
+	th.default_font = font
+	th.default_font_size = 14
+	theme = th
+	catalog = Catalog.load_dir("res://data")
+	seed_value = int(Time.get_unix_time_from_system()) % 100000
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--seed="):
+			seed_value = int(a.substr(7))
+	var bg := ColorRect.new()
+	bg.color = Color("#0a090d")
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(bg)
+	board = BoardView.new()
+	board.font = font
+	# the camera: the board sits inside a clipping window and can push in on the action while time flows
+	view = Control.new()
+	view.clip_contents = true
+	view.mouse_filter = Control.MOUSE_FILTER_PASS
+	add_child(view)
+	view.add_child(board)
+	board.gui_input.connect(_on_board_input)
+	timeline = TimelineBar.new()
+	timeline.font = font
+	timeline.size = Vector2(560, 40)
+	timeline.position = Vector2(360, 0)
+	timeline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	timeline.visible = false   # warnings and their seconds now live on the board itself
+	add_child(timeline)
+	hud = Control.new()
+	hud.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.draw.connect(_draw_hud)
+	add_child(hud)
+	hand_layer = Control.new()
+	hand_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hand_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hand_layer.draw.connect(_draw_wheel)
+	add_child(hand_layer)
+	hand_cursor = HandCursor.new()
+	tips = VBoxContainer.new()
+	tips.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tips.add_theme_constant_override("separation", 4)
+	tips.z_index = 100   # explanations sit above the hand's cards, never behind them
+	add_child(tips)
+	_make_log_panel()
+	overlay = Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(overlay)
+	add_child(hand_cursor)
+	_new_run()
+
+# ---- temporary damage log (to find where unexplained damage comes from) ------------------------
+
+const LOG_SHOWN := ["play", "telegraph", "telegraph_hit", "damage", "status_damage", "collision", "void", "dislike",
+	"like", "split", "charge", "death", "unknown", "shatter", "parry", "dodge", "trap", "timer_fire"]
+const LOG_LINES := 40
+var log_box: RichTextLabel
+
+func _make_log_panel() -> void:
+	var panel := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.05, 0.045, 0.07, 0.82)
+	sb.border_color = Color("#3a3548")
+	sb.set_border_width_all(1)
+	sb.set_content_margin_all(6)
+	panel.add_theme_stylebox_override("panel", sb)
+	panel.position = Vector2(1054, 168)
+	panel.size = Vector2(222, 440)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	log_box = RichTextLabel.new()
+	log_box.bbcode_enabled = true
+	log_box.scroll_following = true
+	log_box.fit_content = false
+	log_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	log_box.add_theme_font_size_override("normal_font_size", 11)
+	log_box.add_theme_constant_override("line_separation", 2)
+	panel.add_child(log_box)
+	add_child(panel)
+
+func _log_line(e: Dictionary) -> void:
+	if log_box == null or not e["t"] in LOG_SHOWN:
+		return
+	var col := "#b8b2c8"
+	var me := flow.battle.human()
+	var uid := int(e.get("data", {}).get("uid", -1))
+	match e["t"]:
+		"unknown": col = "#ff6af0"
+		"damage", "status_damage", "collision", "void", "dislike":
+			col = "#ff8a7a" if me != null and uid == me.uid else "#ffd27a"
+		"like", "split": col = "#9cf08a"
+		"play": col = "#9cc8f0"
+		"telegraph", "telegraph_hit": col = "#d9a35a"
+		"death": col = "#8a8498"
+	var msg := str(e.get("msg", "")).replace("[", "(").replace("]", ")")
+	log_box.append_text("[color=#5a5468]%.1f초[/color] [color=%s]%s[/color]\n" % [float(e.get("at", 0)) / Battle.TPS, col, msg])
+	if log_box.get_paragraph_count() > LOG_LINES + 10:
+		log_box.remove_paragraph(0)
+
+func _new_run() -> void:
+	flow = RunFlow.new(catalog, seed_value)
+	shown_frame = flow.battle.frames.size() - 1
+	log_i = flow.battle.log.size()
+	board.reset_tracking()
+	_refresh()
+
+func _replaying() -> bool:
+	return flow != null and flow.battle != null and shown_frame < flow.battle.frames.size() - 1
+
+## Plays passed seconds back: units glide from one second's position to the next.
+func _step_replay(delta: float) -> void:
+	var fr: Array = flow.battle.frames
+	if shown_frame >= fr.size() - 1:
+		if board.replaying:
+			board.replaying = false
+			_refresh()
+		return
+	if not board.replaying:
+		warp = BoardView.HELD
+		flow_from = shown_frame
+	board.replaying = true
+	# the moment after the player's move (battle.settle): the world slows by halves, 1, 1/2, 1/4 ...
+	# so it runs on a fixed sliver of time and comes to rest mid-motion instead of snapping to a stop
+	var has_settle: bool = bool(fr[-1].get("settle", false)) and not flow.calm()
+	if has_settle and shown_frame == fr.size() - 2:
+		if board.rt >= board.hitstop_until:
+			settle_tau += delta
+		var g := maxf(float(fr[-1]["t"]) - float(fr[shown_frame]["t"]), 0.05)
+		var h := g * log(2.0) * SEC_REAL / maxf(speed, 0.1)
+		var r := pow(0.5, settle_tau / h)
+		var held := BoardView.HELD2 if BoardView.BT2 else BoardView.HELD
+		warp = maxf(r, held)
+		board.play_speed = speed * maxf(warp * PLAY_K, held)
+		replay_t = 1.0 if r <= held else 1.0 - r
+	else:
+		settle_tau = 0.0
+		# ramp out of bullet time, and settle back into it over the last moments of the flow
+		var left := float(fr.size() - 1 - shown_frame) - replay_t
+		var tail := 1.0 if has_settle else lerpf(0.3, 1.0, clampf(left / 0.6, 0.0, 1.0))
+		if BoardView.BT2 and not has_settle:
+			# study: a longer, eased brake into held time, so the last moment visibly slows to a crawl
+			var q := clampf(left / 0.9, 0.0, 1.0)
+			tail = lerpf(0.12, 1.0, q * q * (3.0 - 2.0 * q))
+		if fast_flow and BoardView.BT2:
+			# study: turning the ring lets time slip by gently instead of the world lurching to full speed
+			tail = minf(tail, 0.45)
+		warp = move_toward(warp, tail, delta * (1.5 if fast_flow and BoardView.BT2 else 4.0)) if warp < tail else tail
+		board.drift = fast_flow and BoardView.BT2
+		if flow.calm() or (fast_flow and not BoardView.BT2):
+			warp = 1.0   # nothing to fight, or only the ring turning: no slow motion
+		var calm_k := 3.0 if (flow.calm() or (fast_flow and not BoardView.BT2)) else (1.2 if fast_flow else 1.0)
+		board.play_speed = speed * warp * PLAY_K
+		if board.rt < board.hitstop_until:
+			return   # hit-stop: the replay holds on the blow
+		replay_t += delta * speed * warp * calm_k / SEC_REAL
+	while replay_t >= 1.0 and shown_frame < fr.size() - 1:
+		replay_t -= 1.0
+		shown_frame += 1
+	if shown_frame >= fr.size() - 1:
+		replay_t = 0.0
+		fast_flow = false
+		board.drift = false
+		board.replaying = false
+		flow.update()
+		_refresh()
+		return
+	var a: Dictionary = fr[shown_frame]
+	var b: Dictionary = fr[shown_frame + 1]
+	var k := clampf(replay_t, 0.0, 1.0)
+	var prev: Dictionary = fr[shown_frame - 1] if shown_frame > flow_from else {}
+	var next: Dictionary = fr[shown_frame + 2] if shown_frame + 2 < fr.size() else {}
+	board.shown_pos = {}
+	board.moving = {}
+	board.glide_k = {}
+	board.walk_link = {}
+	board.replay_k = k
+	for uid in a["pos"]:
+		var p0 := Vector2(a["pos"][uid])
+		var p1 := Vector2(b["pos"].get(uid, a["pos"][uid]))
+		# a walk over several seconds glides at a steady pace: ease only where it starts and stops
+		var went: bool = prev.has("pos") and Vector2(prev["pos"].get(uid, a["pos"][uid])) != p0
+		var goes: bool = next.has("pos") and Vector2(next["pos"].get(uid, b["pos"].get(uid, a["pos"][uid]))) != p1
+		# enemies do not all set off on the same instant: each starts a beat apart (presentation only)
+		var kk := k
+		var au: Actor = flow.battle._actor(int(uid))
+		if au != null and au.controller == "ai" and not went:
+			var lag := fmod(float(uid) * 0.618, 1.0) * 0.18
+			kk = clampf((k - lag) / (1.0 - lag), 0.0, 1.0)
+		var e := kk
+		if went and not goes:
+			e = 1.0 - (1.0 - kk) * (1.0 - kk)
+		elif goes and not went:
+			e = kk * kk
+		elif not went and not goes:
+			e = kk * kk * (3.0 - 2.0 * kk)
+		if p1 != p0:
+			# feet on the floor: the body surges with each footfall instead of sliding at one speed
+			e = clampf(e + sin(e * TAU * 2.0) * 0.035, 0.0, 1.0)
+		board.shown_pos[uid] = p0.lerp(p1, e)
+		board.walk_link[uid] = Vector2i(int(went), int(goes))
+		if p1 != p0:
+			board.moving[uid] = Vector2i(p1)
+	board.shown_hp = a["hp"] if k < 0.5 else b["hp"]
+	board.shown_now = lerpf(float(a["t"]), float(b["t"]), k)
+	# 불릿타임: a step that takes longer than one replayed moment is spread over its whole time,
+	# so monsters walk three times slower instead of finishing their step in one moment
+	# A recorded step is always drawn from its own record, whichever moments it spans: switching
+	# between this and the frame-to-frame glide made a leap jump, slide back and jump again.
+	var gl: Dictionary = a.get("glide", {}).duplicate()
+	gl.merge(b.get("glide", {}), true)
+	board.glide_k = {}
+	for uid in gl:
+		var g: Array = gl[uid]
+		var gt0 := float(g[2])
+		var gt1 := float(g[3])
+		if not board.shown_pos.has(uid) or gt1 - gt0 < 0.01:
+			continue
+		if board.shown_now > gt1 + 0.001 and Vector2(b["pos"].get(uid, g[1])) != Vector2(g[1]):
+			continue   # it has moved on since (pushed, another step): the frames know better
+		var gk := clampf((board.shown_now - gt0) / (gt1 - gt0), 0.0, 1.0)
+		board.glide_k[uid] = gk   # the step strip follows the whole step, not each replayed moment (no double hop)
+		board.shown_pos[uid] = Vector2(g[0]).lerp(Vector2(g[1]), gk * gk * (3.0 - 2.0 * gk))
+		if gk < 1.0:
+			board.moving[uid] = Vector2i(g[1])
+		else:
+			board.moving.erase(uid)
+
+const FLASH := {"fire": Color("#ff8a3a"), "ice": Color("#bfe8ff"), "water": Color("#5aa8ff"), "electric": Color("#ffe14a")}
+
+## Shows log events (cards landing, enemy blows) as flashes when the replay reaches their second.
+func _flashes() -> void:
+	var b := flow.battle
+	if log_i > b.log.size():
+		log_i = b.log.size()
+	var t_now: float = board.sim_time()
+	while log_i < b.log.size():
+		var e: Dictionary = b.log[log_i]
+		if float(e.get("at", 0)) / Battle.TPS > t_now + 0.001:
+			break
+		log_i += 1
+		_log_line(e)
+		match e["t"]:
+			"play":
+				var kind_by_card := {"roll": "roll", "guard": "guard", "parry": "guard"}
+				var cid: String = str(e["data"].get("card", ""))
+				var at_s := float(e["at"]) / Battle.TPS
+				var ws := float(e["data"].get("wsecs", maxi(1, int(e["data"].get("secs", 1)))))
+				if kind_by_card.has(cid) and e["data"].has("uid"):
+					board.acts[int(e["data"]["uid"])] = {"kind": kind_by_card[cid], "t0": at_s, "t1": at_s + ws}
+				elif e["data"].has("uid") and Effects.card_def(cid, catalog).get("parts", []).any(func(pt): return pt.get("op", "") == "damage"):
+					# a blow: the body starts winding up the moment the card is played, and lets go when it lands
+					board.acts[int(e["data"]["uid"])] = {"kind": "act", "t0": at_s, "t1": at_s + ws}
+				if int(e["data"].get("secs", 0)) >= 2:
+					board.casts.append({"uid": int(e["data"].get("uid", -1)), "cells": e["data"].get("cells", []),
+						"t0": at_s, "t1": at_s + ws})
+			"land":
+				var c := Effects.card_def(e["data"].get("card", ""), catalog)
+				var col := Color("#fff4c8")
+				for part in c.get("parts", []):
+					if part.get("op", "") == "material" and FLASH.has(part.get("id", "")):
+						col = FLASH[part["id"]]
+					if part.get("kind", "") == "electric":
+						col = FLASH["electric"]
+				var from := Vector2i(-1, -1)
+				var is_beam: bool = c.get("parts", []).any(func(pt): return pt.get("op", "") == "beam")
+				if c.get("target", {}).get("shape", "") == "line" and not is_beam:
+					var u := b._actor(int(e["data"].get("user", -1)))
+					if u:
+						from = u.pos
+				board.burst([] if is_beam else e["data"].get("cells", []), col, from)
+				if col == FLASH["water"] or col == FLASH["fire"]:
+					board.splash(e["data"].get("cells", []), "water" if col == FLASH["water"] else "fire")
+				if c.get("parts", []).any(func(pt): return pt.get("op", "") == "damage"):
+					board.attack(int(e["data"].get("user", -1)), e["data"].get("cells", []))
+			"trap", "interrupt", "delay_actor", "clone", "vanish":
+				board.burst(e["data"].get("cells", []), Color("#c0a0ff") if e["t"] in ["clone", "vanish", "delay_actor"] else Color("#ffcf6a"))
+			"parry":
+				board.burst(e["data"].get("cells", []), Color("#ffe27a"))
+				board.shake(0.3)
+			"dodge":
+				board.burst(e["data"].get("cells", []), Color("#9fe8ff"))
+			"dislike":
+				board.burst(e["data"].get("cells", []), Color("#d8ecff"))
+			"like":
+				board.burst(e["data"].get("cells", []), Color("#9cf08a"))
+			"split":
+				board.burst(e["data"].get("cells", []), Color("#8fe07a"))
+				board.shake(0.15)
+			"charge":
+				board.burst(e["data"].get("cells", []), Color("#ffcf6a"))
+				board.shake(0.3)
+			"backstab":
+				board.burst(e["data"].get("cells", []), Color("#ff5a7a"))
+			"timer_fire":
+				board.burst(e["data"].get("cells", []), Color("#ff8a3a"))
+				board.shake(0.25)
+			"shatter":
+				board.shatter(e["data"]["cell"])
+				board.shake(0.12)
+			"beam":
+				board.beam(e["data"].get("from", Vector2i(-1, -1)), e["data"].get("path", []), e["data"].get("bends", []), e["data"].get("kind", "energy"))
+			"telegraph_hit":
+				board.burst(e["data"].get("cells", []), Art.DANGER)
+				board.attack(int(e["data"].get("user", -1)), e["data"].get("cells", []))
+				board.shake(0.18)
+
+func _process(delta: float) -> void:
+	real += delta
+	if flow == null or flow.battle == null:
+		return
+	board.play_speed = speed * PLAY_K
+	_step_replay(delta)
+	_step_slide(delta)
+	_flashes()
+	_step_ring(delta)
+	_layout_hand()
+	_step_held(delta)
+	_step_camera(delta)
+	if _replaying() and tips.visible and hovered_card == null:
+		_clear_tips()   # bodies are still on their way: no stale facts under the mouse
+	if flow.phase != "battle" and board.hover.x >= 0:
+		board.hover = Vector2i(-1, -1)   # a shop, reward or end screen covers the board: nothing under it answers the mouse
+		cell_hover_t = 0.0
+	if board.hover.x >= 0 and selected < 0 and hovered_card == null and not _replaying() and not dragging:
+		cell_hover_t += delta
+		if cell_hover_t > 0.25 and tips.get_child_count() == 0:
+			_cell_tips(board.hover)
+	hud.queue_redraw()
+
+# ---- rooms --------------------------------------------------------------------------------------
+
+## Walking through a door: the view slides toward the next room, the room changes, and the
+## new room slides in from the side the player came from.
+func _step_slide(delta: float) -> void:
+	if slide_dir == Vector2i.ZERO:
+		if flow.phase == "battle" and flow.exit_dir != Vector2i.ZERO and not _replaying():
+			slide_dir = flow.exit_dir
+			slide_t = 0.0
+			selected = -1
+			_clear_tips()
+		else:
+			return
+	var before := slide_t
+	slide_t += delta / (SLIDE_OUT if slide_t < 1.0 else SLIDE_IN)
+	if before < 1.0 and slide_t >= 1.0:
+		shown_frame = flow.battle.frames.size() - 1
+		log_i = flow.battle.log.size()
+		board.reset_tracking()
+		_refresh()
+	if slide_t >= 2.0:
+		slide_dir = Vector2i.ZERO
+		slide_t = 0.0
+	view.position = board_base + _slide_off()
+
+func _slide_off() -> Vector2:
+	if slide_dir == Vector2i.ZERO:
+		return Vector2.ZERO
+	var span := Vector2(board.size.x, board.size.y) * 0.6
+	var d := Vector2(slide_dir)
+	if slide_t < 1.0:
+		var k := slide_t * slide_t
+		return -d * span * k
+	var k2 := 1.0 - (slide_t - 1.0)
+	return d * span * k2 * k2
+
+## Tools and tests: jump straight into the first room of a kind, as if walked in.
+func debug_enter(kind: String) -> void:
+	flow.start_battle(RunFlow.FIGHTS.size() - 1 if kind == "boss" else 0)
+	shown_frame = flow.battle.frames.size() - 1
+	log_i = flow.battle.log.size()
+	board.reset_tracking()
+	_refresh()
+
+func _sliding() -> bool:
+	return slide_dir != Vector2i.ZERO
+
+# ---- layout -------------------------------------------------------------------------------------
+
+func _refresh() -> void:
+	for ch in overlay.get_children():
+		ch.queue_free()
+	var b := flow.battle
+	board.battle = b
+	board.fit()
+	board_base = Vector2(round((1280 - board.size.x) / 2), 44)
+	view.position = board_base + _slide_off()
+	view.size = board.size
+	board.preview = {}
+	board.aiming = selected >= 0
+	timeline.battle = b
+	if b.human() != null:
+		hand_cursor.set_actor(b.human().def_id)
+	_update_span()
+	_build_hand()
+	hand_layer.visible = flow.phase == "battle"
+	if flow.phase == "reward":
+		_reward_overlay()
+	elif flow.phase == "shop":
+		_shop_overlay()
+	elif flow.phase in ["game_over", "victory"]:
+		_end_overlay()
+
+func _build_hand() -> void:
+	for ch in hand_layer.get_children():
+		ch.queue_free()
+	cards = []
+	ring_views = []
+	hovered_card = null
+	_clear_tips()
+	var b := flow.battle
+	if b.belt == null:
+		return
+	_sync_ring()
+	cards.resize(b.belt.slots.size())
+	cards.fill(null)
+	var slot_of := []
+	for i in b.belt.slots.size():
+		var s = b.belt.slots[i]
+		if s != null and not s.get("tail", false):
+			slot_of.append(i)
+	for k in ring_tokens.size():
+		var cv := CardView.new()
+		cv.setup(ring_tokens[k]["id"], catalog, font)
+		if k < slot_of.size():
+			cv.set_meta("slot", slot_of[k])
+			cv.picked.connect(_on_card_picked)
+			cv.hovered.connect(_on_card_hover)
+			cv.inspected.connect(func(c):
+				_clear_tips()
+				_keyword_tips(c.def().get("desc", ""), true)
+				tips.position = Vector2(clampf(c.global_position.x + c.size.x * c.scale.x + 12, 8, 1280 - 250), 300))
+			cards[slot_of[k]] = cv
+		else:
+			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hand_layer.add_child(cv)
+		ring_views.append(cv)
+	_layout_hand()
+
+## The hand and the deck are one ring of cards standing on an ellipse, seen in 3D. The hand is
+## the front of the ring, facing the player; the rest of the deck stands around the back, turned
+## away (backs showing). Rolling turns the whole ring; a used card goes round to the back and the
+## next one comes round to the front. Every card glides to its new place, nothing jumps.
+const RING_C := Vector2(640, 694)
+const RING_R := Vector2(420, 34)
+const HAND_STEP := 0.29          # radians between two hand cards
+var ring_tokens: Array = []      # ring order: {id, q (shown place, unwrapped), t (target place)}
+var ring_views: Array = []       # CardView per token
+var held_cv: CardView = null     # the picked card lifted out of the hand, following the mouse
+var held_slot := -1
+var held_vel := Vector2.ZERO
+var held_prev := Vector2.ZERO
+var press_px := Vector2(-1, -1)   # where the mouse went down on a hand card (drag it onto the board to play)
+var hand_n := 5.0                # eases to the number of cards in the hand
+var snap_index := -1             # old ring place of a card that just flew off to be played
+
+var _ring_for: HandBelt
+
+## Matches the new ring to the cards already shown, so each card glides from where it was.
+func _sync_ring() -> void:
+	var ids: Array = flow.battle.belt.ring()
+	var n := ids.size()
+	if _ring_for != flow.battle.belt:
+		# a new fight or a new run: the ring starts afresh instead of gliding from the last one's
+		_ring_for = flow.battle.belt
+		ring_tokens = []
+		snap_index = -1
+	var old := ring_tokens
+	var on := maxi(1, old.size())
+	var match_of := {}   # new index -> old token index
+	var taken := {}
+	# the card just played went to the back of the ring: it is already there
+	if snap_index >= 0 and n > 0:
+		for j in old.size():
+			if posmod(int(round(float(old[j]["t"]))), on) == snap_index and old[j]["id"] == ids[n - 1]:
+				match_of[n - 1] = j
+				taken[j] = true
+				break
+	# Copies of the same card (four 베기) are matched as a group, keeping their order round the
+	# ring: matching each new place to its nearest old copy one by one let two copies swap, and
+	# a card then cut across the front instead of turning one step with the rest.
+	var groups := {}
+	for i in n:
+		if not match_of.has(i):
+			groups.get_or_add(ids[i], {"new": [], "old": []})["new"].append(i)
+	for j in old.size():
+		if not taken.has(j) and groups.has(old[j]["id"]):
+			groups[old[j]["id"]]["old"].append(j)
+	for id in groups:
+		var nw: Array = groups[id]["new"]
+		var ol: Array = groups[id]["old"]
+		ol.sort_custom(func(x, y): return posmod(int(round(float(old[x]["t"]))), on) < posmod(int(round(float(old[y]["t"]))), on))
+		var m := mini(nw.size(), ol.size())
+		if m == 0:
+			continue
+		# try every rotation of the old copies against the new places; keep the one that moves least
+		var best_r := 0
+		var best_k := 0
+		var best_cost := 1e18
+		for k in range(0, nw.size() - m + 1):
+			for r in ol.size():
+				var cost := 0.0
+				for i in m:
+					var io := posmod(int(round(float(old[ol[(i + r) % ol.size()]]["t"]))), on)
+					var d := absf(_wrap(float(nw[k + i] - io), n))
+					cost += d * d
+				if cost < best_cost - 0.001:
+					best_cost = cost
+					best_r = r
+					best_k = k
+		for i in m:
+			match_of[nw[best_k + i]] = ol[(i + best_r) % ol.size()]
+	var out := []
+	for i in n:
+		if not match_of.has(i):
+			out.append({"id": ids[i], "q": float(i), "t": float(i)})
+			continue
+		var tk: Dictionary = old[match_of[i]]
+		var io2 := posmod(int(round(float(tk["t"]))), on)
+		var nt := float(tk["t"]) + _wrap(float(i - io2), n)
+		var q := float(tk["q"])
+		if io2 == snap_index:
+			q = nt   # it flew to the board; it is already back on the ring
+		out.append({"id": ids[i], "q": q, "t": nt, "moved": nt - float(tk["t"])})
+	ring_tokens = out
+	snap_index = -1
+
+static func _wrap(d: float, n: int) -> float:
+	if n <= 0:
+		return d
+	var h := n / 2.0
+	while d > h:
+		d -= n
+	while d <= -h:
+		d += n
+	return d
+
+## Angle on the ring for place q (0 = the hand's left card). The hand spreads evenly over the
+## front; the rest of the deck shares the back.
+func _ring_phi(q: float, n: int) -> float:
+	var h := clampf(hand_n, 1.0, float(maxi(1, n)))
+	var c := (h - 1.0) / 2.0
+	var a0 := PI / 2 + c * HAND_STEP              # hand's left card
+	var a1 := PI / 2 - c * HAND_STEP              # hand's right card
+	var qm := fposmod(q, float(maxi(1, n)))
+	if qm <= h - 1.0:
+		return a0 - qm * HAND_STEP
+	var back := float(n) - (h - 1.0)               # steps from the hand's right card round to its left
+	var k := (qm - (h - 1.0)) / maxf(0.001, back)
+	return a1 - k * (2.0 * PI - (a0 - a1))
+
+func _ring_at(phi: float) -> Vector2:
+	return RING_C + Vector2(cos(phi) * RING_R.x, sin(phi) * RING_R.y)
+
+func _step_ring(delta: float) -> void:
+	var h := 0
+	if flow.battle.belt != null:
+		h = flow.battle.belt._entries().size()
+	hand_n = move_toward(hand_n, float(h), delta * 4.0)
+	var k := minf(1.0, delta * 9.0)
+	for tk in ring_tokens:
+		tk["q"] = float(tk["q"]) + (float(tk["t"]) - float(tk["q"])) * k
+
+func _draw_wheel() -> void:
+	if flow == null or flow.phase != "battle" or flow.battle.belt == null:
+		return
+	var n := ring_tokens.size()
+	var dim := 0.45 if selected >= 0 else 1.0
+	# the backs of cards turned away, far ones first
+	var order := range(n)
+	order.sort_custom(func(a, b): return sin(_ring_phi(ring_tokens[a]["q"], n)) < sin(_ring_phi(ring_tokens[b]["q"], n)))
+	var t := Art.tex("ui/card_back.png")
+	for i in order:
+		var phi := _ring_phi(ring_tokens[i]["q"], n)
+		var depth := sin(phi)
+		if depth > 0.02:
+			continue
+		var p := _ring_at(phi)
+		var sc := 0.6 + 0.4 * (depth + 1.0) / 2.0
+		var w := maxf(0.06, absf(depth))
+		var sz := CardView.SIZE * sc
+		var shade := (0.45 + 0.4 * (depth + 1.0) / 2.0) * dim
+		hand_layer.draw_set_transform(p, 0.0, Vector2(w, 1.0))
+		var rr := Rect2(-sz / 2, sz)
+		hand_layer.draw_rect(Rect2(rr.position + Vector2(3, 4), rr.size), Color(0, 0, 0, 0.3 * dim))
+		if t != null:
+			hand_layer.draw_texture_rect(t, rr, false, Color(shade, shade, shade))
+		else:
+			hand_layer.draw_rect(rr, Color("#2a4a9a") * Color(shade, shade, shade))
+		hand_layer.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func _layout_hand() -> void:
+	if flow.battle.belt == null:
+		return
+	hand_layer.queue_redraw()
+	var aiming := selected >= 0
+	var wig := sin(real * 60.0) * 0.03 if real < wiggle_until else 0.0
+	var n := ring_tokens.size()
+	for i in mini(n, ring_views.size()):
+		var cv: CardView = ring_views[i]
+		if cv == null:
+			continue
+		var phi := _ring_phi(ring_tokens[i]["q"], n)
+		var depth := sin(phi)
+		var in_hand: bool = cv.has_meta("slot")
+		cv.visible = depth > 0.02
+		if not cv.visible:
+			continue
+		var p := _ring_at(phi)
+		var sc := 0.6 + 0.4 * (depth + 1.0) / 2.0
+		var w := maxf(0.06, absf(depth))
+		cv.lit = in_hand and int(cv.get_meta("slot")) == selected
+		cv.shown_time = flow.battle.cost_secs(int(cv.def().get("time", 0))) if flow.battle != null else -1.0
+		var big := in_hand and cv == hovered_card and not aiming
+		var z := 2 if big else 1
+		if cv.zoom != z:
+			cv.set_zoom(z)
+		cv.pivot_offset = cv.size / 2
+		if big:
+			var x := clampf(p.x - cv.size.x / 2, 8, 1280 - cv.size.x - 8)
+			cv.position = Vector2(x, 796 - cv.size.y)
+			cv.rotation = 0.0
+			cv.scale = Vector2.ONE
+		else:
+			cv.position = p - cv.size / 2
+			cv.rotation = wig if cv.lit else 0.0
+			cv.scale = Vector2(sc * w, sc)
+			if cv.lit:
+				cv.position.y -= 34   # the picked card rises out of the hand
+		var alpha := 1.0
+		if aiming:
+			alpha = 0.62 if cv.lit else 0.24
+		var shade := 1.0 if in_hand else 0.55   # deck cards passing the front are not in hand
+		cv.modulate = Color(shade, shade, shade, alpha)
+		cv.z_index = 40 if (big or cv.lit) else int((depth + 1.0) * 10.0)
+
+# ---- hud ----------------------------------------------------------------------------------------
+
+func _draw_hud() -> void:
+	var b := flow.battle
+	_draw_map(Vector2(1068, 62))
+	# room name for a moment after walking in
+	if banner != "" and real - banner_at < 1.6:
+		var ba := clampf(1.6 - (real - banner_at), 0.0, 1.0)
+		hud.draw_string_outline(font, Vector2(0, 104), banner, HORIZONTAL_ALIGNMENT_CENTER, 1280, 28, 8, Color(Art.INK, ba))
+		hud.draw_string(font, Vector2(0, 104), banner, HORIZONTAL_ALIGNMENT_CENTER, 1280, 28, Color(Art.GOLD, ba))
+	# the hero's health, always readable in the corner (bars on the board carry no numbers)
+	var me := b.human()
+	if me != null:
+		var hp_at := Vector2(16, 40)
+		hud.draw_rect(Rect2(hp_at, Vector2(120, 14)), Art.INK)
+		hud.draw_rect(Rect2(hp_at + Vector2(2, 2), Vector2(116, 10)), Color("#3a1418"))
+		hud.draw_rect(Rect2(hp_at + Vector2(2, 2), Vector2(116 * clampf(float(me.hp) / me.max_hp, 0, 1), 10)), Color("#58c46a"))
+		var ht := "%d / %d" % [me.hp, me.max_hp] + ("  +%d" % me.shield if me.shield > 0 else "")
+		hud.draw_string_outline(font, hp_at + Vector2(128, 13), ht, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, 5, Art.INK)
+		hud.draw_string(font, hp_at + Vector2(128, 13), ht, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
+	# hand refill: a small ring on the deck icon counts the seconds to the next card
+	var dr := b.next_draw_at() - b.now
+	var dk := Vector2(1214, 20)
+	if dr > 0.0:
+		hud.draw_arc(dk, 17, -PI / 2, -PI / 2 + TAU * (1.0 - float(dr) / maxf(1.0, float(b.round_time()))), 24, Color("#9cc8f0"), 2)
+	# game speed (1-5 keys): shown while it is not normal, and big for a moment after a change
+	if speed != 1.0 or real - speed_shown_at < 1.2:
+		var big := real - speed_shown_at < 1.2
+		var st := "×%s" % (str(int(speed)) if speed == floor(speed) else str(speed))
+		var sp := Vector2(1150, 26) if not big else Vector2(600, 90)
+		var fs := 16 if not big else 34
+		var a := 1.0 if not big else clampf(1.2 - (real - speed_shown_at), 0.0, 1.0)
+		hud.draw_string_outline(font, sp, st, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 6, Color(Art.INK, a))
+		hud.draw_string(font, sp, st, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(Art.GOLD, a))
+	# small icons (top-right): help and deck size
+	var hc := Vector2(1252, 20)
+	hud.draw_circle(hc, 12, Art.INK)
+	hud.draw_circle(hc, 10, Color("#3a3644"))
+	hud.draw_string(font, hc + Vector2(-4, 6), "?", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 1, 1, 0.8))
+	var dc := Vector2(1214, 20)
+	hud.draw_rect(Rect2(dc - Vector2(9, 12), Vector2(18, 24)), Art.INK)
+	hud.draw_rect(Rect2(dc - Vector2(7, 10), Vector2(14, 20)), Color("#9cc8f0"))
+	if b.belt:
+		hud.draw_string(font, dc + Vector2(-16, 26), "%d" % b.belt.ring().size(), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.5))
+	var h := b.human()
+	if h != null and h.discount > 0:
+		var p := board.get_global_transform() * board.feet(Vector2(h.pos)) - Vector2(-26, 90)
+		hud.draw_string_outline(font, p, "-%d초" % h.discount, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 5, Art.INK)
+		hud.draw_string(font, p, "-%d초" % h.discount, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#bfe8ff"))
+
+## The run (top-right): one small card per battle, face down ahead, the current one lit and the
+## boss last with a crown mark.
+func _draw_map(at: Vector2) -> void:
+	var n := RunFlow.FIGHTS.size()
+	var pitch := 26.0
+	var sz := Vector2(18, 24)
+	var o := at + Vector2(196 - pitch * n, 0)
+	for i in n:
+		var rc := Rect2(o + Vector2(i * pitch, 0), sz)
+		hud.draw_rect(rc.grow(2), Art.INK)
+		if i < flow.index:
+			hud.draw_rect(rc, Color("#8a8296"))
+		elif i == flow.index:
+			hud.draw_rect(rc, Color("#e8dcc0"))
+			var pulse := 0.6 + 0.4 * sin(real * 4.0)
+			hud.draw_rect(rc.grow(3), Color(Art.GOLD, pulse), false, 2)
+		else:
+			hud.draw_rect(rc, Color("#24203a"))
+			hud.draw_rect(rc.grow(-2), Color("#2a4a9a"))
+		if RunFlow.FIGHTS[i].get("boss", false):
+			var c := rc.get_center()
+			hud.draw_colored_polygon(PackedVector2Array([c + Vector2(-5, 3), c + Vector2(-5, -3), c + Vector2(-2, 0), c + Vector2(0, -5), c + Vector2(2, 0), c + Vector2(5, -3), c + Vector2(5, 3)]), Art.GOLD)
+
+func _update_span() -> void:
+	var b := flow.battle
+	board.range_cells = []
+	board.self_aim = false
+	board.forecast = 0
+	timeline.span_secs = 0
+	timeline.span_world = -1.0
+	timeline.span_exhaust = 0
+	if selected < 0 or b.belt == null or selected >= b.belt.slots.size() or b.belt.slots[selected] == null or b.human() == null:
+		return
+	var c := Effects.card_def(b.belt.slots[selected]["card_id"], catalog)
+	var shape: String = c.get("target", {}).get("shape", "cell")
+	if not shape in ["self", "all", "around"]:
+		for p in b.grid.all_cells():
+			if b.can_play(selected, p):
+				board.range_cells.append(p)
+	else:
+		board.self_aim = true
+	var secs := maxi(0, b.action_secs(int(c.get("time", 0)), b.human()))
+	if secs > 0:
+		secs = maxi(0, secs - b.human().discount)
+	timeline.span_secs = secs
+	timeline.span_world = maxf(0.0, b.cost_secs(int(c.get("time", 0))) - (b.human().discount if int(c.get("time", 0)) > 0 else 0))
+	timeline.span_exhaust = int(c.get("exhaust", 0))
+	board.forecast = secs
+
+# ---- tips ---------------------------------------------------------------------------------------
+
+func _clear_tips() -> void:
+	for ch in tips.get_children():
+		ch.queue_free()
+	tips.visible = false
+
+func _tip(title: String, text: String, accent: Color) -> void:
+	var pc := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color("#1b1822f0")
+	sb.border_color = accent
+	sb.set_border_width_all(2)
+	sb.content_margin_left = 10
+	sb.content_margin_right = 10
+	sb.content_margin_top = 6
+	sb.content_margin_bottom = 8
+	pc.add_theme_stylebox_override("panel", sb)
+	pc.set_meta("title", title)
+	pc.set_meta("raw", text)
+	pc.custom_minimum_size = Vector2(230, 0)
+	pc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var rt := RichTextLabel.new()
+	rt.bbcode_enabled = true
+	rt.fit_content = true
+	rt.scroll_active = false
+	rt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rt.custom_minimum_size = Vector2(210, 0)
+	rt.add_theme_font_size_override("normal_font_size", 13)
+	rt.text = "[color=#%s]%s[/color]\n%s" % [accent.to_html(false), title, CardView.rich(text).replace("#9a3d12", "#ffcf6a")]
+	pc.add_child(rt)
+	tips.add_child(pc)
+	tips.visible = true
+
+func _keyword_tips(text: String, full := false) -> void:
+	var kw: Dictionary = catalog.keywords.get("keywords", {})
+	var seen := []
+	var queue := CardView.keywords_in(text)
+	while not queue.is_empty() and (full or seen.size() < 5):
+		var k: String = queue.pop_front()
+		if k in seen or not kw.has(k):
+			continue
+		seen.append(k)
+		_tip(k, kw[k], Color("#ffcf6a"))
+		if full:
+			queue.append_array(CardView.keywords_in(kw[k]))
+
+func _on_card_hover(cv: CardView, on: bool) -> void:
+	if on:
+		hovered_card = cv
+		_clear_tips()
+		if selected < 0:
+			_keyword_tips(cv.def().get("desc", ""))
+			tips.position = Vector2(cv.global_position.x + cv.size.x * cv.scale.x + 12, 420)
+			if tips.position.x > 1280 - 250:
+				tips.position.x = cv.global_position.x - 250
+	elif hovered_card == cv:
+		hovered_card = null
+		_clear_tips()
+
+func _cell_tips(p: Vector2i, full := false) -> void:
+	var b := flow.battle
+	var kw: Dictionary = catalog.keywords.get("keywords", {})
+	var cellmap: Dictionary = catalog.keywords.get("cell", {})
+	var stmap: Dictionary = catalog.keywords.get("status", {})
+	var u = b.grid.unit_at(p)
+	if u != null:
+		var parts := []
+		for s in u.statuses.keys():
+			if stmap.has(s):
+				parts.append("[%s]" % stmap[s])
+		_tip(u.name, "체력 %d / %d" % [u.hp, u.max_hp] + ("\n" + " ".join(parts) if not parts.is_empty() else ""),
+			Color("#7ee08a") if u.controller == "human" else Color("#ff8a7a"))
+		for s in u.statuses.keys():
+			if stmap.has(s) and kw.has(stmap[s]):
+				_tip(stmap[s], kw[stmap[s]], Color("#ffcf6a"))
+		if full:
+			_unit_details(u)
+	var m := b.grid.get_material(p)
+	if cellmap.has(m) and kw.has(cellmap[m]):
+		_tip(cellmap[m], kw[cellmap[m]], Color("#9cc8f0"))
+	# the cell's states: [열기], [돌풍], [멈춘 시간]...
+	var smap: Dictionary = b.catalog.keywords.get("state", {})
+	for sid in b.grid.states_at(p):
+		var nm: String = smap.get(sid, "")
+		if nm != "" and kw.has(nm):
+			_tip(nm, kw[nm], Color("#ffe14a") if sid == "charged" else Color("#9cc8f0"))
+	if full:
+		# keywords named inside those explanations too, one level deep
+		var titles := []
+		var raws := []
+		for ch in tips.get_children():
+			titles.append(ch.get_meta("title", ""))
+			raws.append(ch.get_meta("raw", ""))
+		for r in raws:
+			for k in CardView.keywords_in(r):
+				if not k in titles and kw.has(k):
+					titles.append(k)
+					_tip(k, kw[k], Color("#ffcf6a"))
+	if tips.get_child_count() > 0:
+		var mp := get_viewport().get_mouse_position()
+		tips.position = mp + Vector2(18, 10)
+		if tips.position.x > 1280 - 250:
+			tips.position.x = mp.x - 250
+		if tips.position.y > 520:
+			tips.position.y = 520
+
+## Right-click on a body: what it will do next and the cards it fights with.
+func _unit_details(u: Actor) -> void:
+	var b := flow.battle
+	if u.controller == "ai":
+		var lines := []
+		for t in b.telegraphs:
+			if int(t["actor_uid"]) == u.uid:
+				lines.append("%s: %s초 뒤" % [Effects.card_def(t["card_id"], catalog).get("name", ""), Battle.fmt_secs(b.secs_until(int(t["fire_at"])))])
+		var it := b.ai_intent(u)
+		if it.get("kind", "") == "move":
+			lines.append("이동: %s초 뒤" % Battle.fmt_secs(b.secs_until(int(it["at"]))))
+		var seq: Array = u.pattern if not u.pattern.is_empty() else u.deck
+		if not seq.is_empty():
+			var names := []
+			for i in seq.size():
+				names.append(Effects.card_def(seq[(u.pattern_index + i) % seq.size()], catalog).get("name", ""))
+			lines.append("순서: " + " → ".join(names))
+		if not lines.is_empty():
+			_tip("다음 행동", "\n".join(lines), Color("#ff8a7a"))
+	else:
+		var pas := []
+		for p in u.passives:
+			pas.append(p)
+		if "backstab" in pas:
+			_tip("급소 찌르기", catalog.keywords.get("keywords", {}).get("급소 찌르기", ""), Color("#7ee08a"))
+
+# ---- overlays -----------------------------------------------------------------------------------
+
+func _veil() -> void:
+	var v := ColorRect.new()
+	v.color = Color(0.02, 0.02, 0.04, 0.72)
+	v.set_anchors_preset(Control.PRESET_FULL_RECT)
+	v.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(v)
+
+func _title(t: String, y: float) -> void:
+	var l := Label.new()
+	l.text = t
+	l.add_theme_font_size_override("font_size", 30)
+	l.add_theme_color_override("font_outline_color", Art.INK)
+	l.add_theme_constant_override("outline_size", 8)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.position = Vector2(0, y)
+	l.size = Vector2(1280, 40)
+	overlay.add_child(l)
+
+func _reward_overlay() -> void:
+	_veil()
+	_title("보물 상자" if flow.from_chest else "승리", 200)
+	_button("넘기기", Vector2(590, 560), func(): _pick_reward(-1))
+	for i in flow.rewards.size():
+		var cv := CardView.new()
+		cv.setup(flow.rewards[i], catalog, font, 2)
+		cv.position = Vector2(640 - 1.5 * 190 + i * 190 - 76 + 95, 270)
+		var idx := i
+		cv.picked.connect(func(_c): _pick_reward(idx))
+		cv.hovered.connect(func(c, on):
+			_clear_tips()
+			if on:
+				_keyword_tips(c.def().get("desc", ""))
+				tips.position = Vector2(c.position.x + 164, 280))
+		overlay.add_child(cv)
+
+func _button(text: String, at: Vector2, on_press: Callable, enabled := true) -> Button:
+	var bt := Button.new()
+	bt.text = text
+	bt.position = at
+	bt.size = Vector2(100, 36)
+	bt.disabled = not enabled
+	bt.pressed.connect(on_press)
+	overlay.add_child(bt)
+	return bt
+
+## The shop: cards on the merchant's rug with their prices, a heal, and the way out.
+func _shop_overlay() -> void:
+	_veil()
+	_title("상점   금화 %d" % flow.gold, 150)
+	var items := flow.stock()
+	for i in items.size():
+		var it: Dictionary = items[i]
+		var x := 640 - 2 * 190 + i * 190 + 18
+		if not it["sold"]:
+			var cv := CardView.new()
+			cv.setup(it["id"], catalog, font, 2)
+			cv.position = Vector2(x, 220)
+			var idx := i
+			cv.picked.connect(func(_c):
+				if flow.buy(idx):
+					_refresh())
+			cv.hovered.connect(func(c, on):
+				_clear_tips()
+				if on:
+					_keyword_tips(c.def().get("desc", ""))
+					tips.position = Vector2(c.position.x + 164, 230))
+			if flow.gold < int(it["price"]):
+				cv.modulate = Color(0.55, 0.55, 0.6)
+			overlay.add_child(cv)
+		var pl := Label.new()
+		pl.text = "팔림" if it["sold"] else "%d" % it["price"]
+		pl.position = Vector2(x, 470)
+		pl.size = Vector2(152, 24)
+		pl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		pl.add_theme_font_size_override("font_size", 20)
+		pl.add_theme_color_override("font_color", Art.GOLD if not it["sold"] and flow.gold >= int(it["price"]) else Color(0.6, 0.6, 0.65))
+		pl.add_theme_color_override("font_outline_color", Art.INK)
+		pl.add_theme_constant_override("outline_size", 6)
+		overlay.add_child(pl)
+	var me := flow.battle.human()
+	_button("회복 +%d (%d)" % [RunFlow.HEAL_AMOUNT, RunFlow.HEAL_PRICE], Vector2(480, 540), func():
+		if flow.buy_heal():
+			_refresh(), flow.gold >= RunFlow.HEAL_PRICE and me != null and me.hp < me.max_hp).size = Vector2(150, 36)
+	_button("나가기", Vector2(660, 540), func():
+		flow.leave_shop()
+		_refresh())
+
+func _end_overlay() -> void:
+	_veil()
+	_title("쓰러졌다" if flow.phase == "game_over" else "보스 격파", 300)
+	var again := Button.new()
+	again.text = "새 판"
+	again.position = Vector2(590, 380)
+	again.size = Vector2(100, 40)
+	again.pressed.connect(func():
+		seed_value += 1
+		_new_run())
+	overlay.add_child(again)
+
+func _pick_reward(i: int) -> void:
+	flow.choose_reward(i)
+	shown_frame = flow.battle.frames.size() - 1
+	log_i = flow.battle.log.size()
+	selected = -1
+	board.reset_tracking()
+	_refresh()
+
+# ---- input --------------------------------------------------------------------------------------
+
+func _on_card_picked(cv: CardView) -> void:
+	if flow.phase != "battle" or _replaying() or _sliding():
+		return
+	var i: int = cv.get_meta("slot")
+	var b := flow.battle
+	press_px = get_global_mouse_position()
+	if selected == i:
+		# a selected card that needs no aim plays when clicked again
+		var shape: String = cv.def().get("target", {}).get("shape", "cell")
+		var me := b.human().pos
+		if shape in ["self", "all", "around"] and b.cmd_play(i, me):
+			_fly(i, me)
+			selected = -1
+			_after()
+			return
+		selected = -1
+	else:
+		selected = i
+	_clear_tips()
+	_refresh()
+
+## The played card leaves the hand and flies into its target, shrinking away.
+func _fly(slot: int, target: Vector2i) -> void:
+	var src: CardView = cards[slot] if slot < cards.size() else null
+	if src == null:
+		return
+	snap_index = ring_views.find(src)
+	var from: Control = held_cv if held_cv != null and held_slot == slot else src
+	var cv := CardView.new()
+	cv.setup(src.card_id, catalog, font, src.zoom)
+	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cv.position = from.position
+	cv.rotation = from.rotation
+	cv.scale = from.scale
+	cv.pivot_offset = cv.size / 2
+	cv.z_index = 20
+	add_child(cv)
+	var dest := board.get_global_transform() * board.cell_rect(target).get_center() - cv.size / 2
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(cv, "position", dest, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(cv, "scale", Vector2(0.25, 0.25), 0.22)
+	tw.tween_property(cv, "rotation", 0.0, 0.22)
+	tw.tween_property(cv, "modulate", Color(1, 1, 1, 0.0), 0.22).set_delay(0.08)
+	tw.chain().tween_callback(cv.queue_free)
+
+func _on_board_input(ev: InputEvent) -> void:
+	if flow.phase != "battle" or _replaying() or _sliding():
+		return
+	var b := flow.battle
+	if ev is InputEventMouseMotion:
+		var c := board.cell_at(ev.position)
+		if c != board.hover:
+			board.hover = c
+			cell_hover_t = 0.0
+			_clear_tips()
+			board.preview = b.preview(selected, c) if selected >= 0 and c.x >= 0 else {}
+			if dragging and drag_manual and c.x >= 0:
+				_drag_to(c)
+		if dragging and not drag_manual:
+			var dx: float = _drag_along(ev.position)
+			board.walk_mode = "go" if dx > DRAG_GO else ("cancel" if dx < -DRAG_GO else "hold")
+	elif ev is InputEventMouseButton and not ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT and dragging:
+		_end_drag(board.cell_at(ev.position), ev.position)
+	elif ev is InputEventMouseButton and ev.pressed:
+		var cell := board.cell_at(ev.position)
+		if ev.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+			return
+		if ev.button_index == MOUSE_BUTTON_RIGHT and dragging:
+			dragging = false
+			board.walk_path = []
+			return
+		if ev.button_index == MOUSE_BUTTON_RIGHT:
+			if selected >= 0:
+				selected = -1
+				_refresh()
+			elif cell.x >= 0:
+				# everything about that cell, nothing cut short
+				_clear_tips()
+				_cell_tips(cell, true)
+		elif ev.button_index == MOUSE_BUTTON_LEFT and cell.x >= 0 and selected < 0:
+			if real - focus_at < 0.4 or b.human() == null:
+				return   # the click that only focuses the window
+			dragging = true
+			drag_from = cell
+			drag_px = ev.position
+			drag_manual = cell == b.human().pos
+			# a ping: the pressed cell is the destination and stays put while the mouse moves
+			board.walk_path = [] if drag_manual else _path(b.human().pos, cell)
+			board.walk_mode = "go" if drag_manual else "hold"
+			_clear_tips()
+		elif ev.button_index == MOUSE_BUTTON_LEFT and cell.x >= 0 and selected >= 0:
+			_play_at(cell)
+
+## Plays the picked card on a board cell (a click, or a card dragged there and let go).
+func _play_at(cell: Vector2i) -> void:
+	var b := flow.battle
+	var played := selected
+	if board.self_aim and b.human() != null:
+		cell = b.human().pos   # a card on oneself: a click anywhere on the board uses it
+	if b.cmd_play(selected, cell):
+		_fly(played, cell)
+		selected = -1
+		_after()
+	else:
+		board.out_of_range_click(cell)
+		wiggle_until = real + 0.3
+
+## Click-to-move: walks there one cell (one second) at a time, and stops early when a new
+## warning appears or the body is hit, so the player can rethink.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_IN or what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
+		focus_at = real
+
+## How far the mouse has been dragged the way the hero would walk (towards the pressed cell from
+## the hero): forward confirms the walk, backward cancels it, whichever side the cell is on.
+func _drag_along(at: Vector2) -> float:
+	var h := flow.battle.human()
+	var way := Vector2(drag_from - h.pos) if h != null else Vector2.RIGHT
+	if way.length() < 0.01:
+		way = Vector2.RIGHT
+	return (at - drag_px).dot(way.normalized())
+
+## Walking, like a ping: press on the destination, drag the way you are going and release to go;
+## drag back or right-click to cancel. The destination is the cell first pressed. Pressing on the hero instead
+## draws the route by hand, cell by cell (it may cross itself). A plain click steps to a neighbour.
+func _drag_to(c: Vector2i) -> void:
+	var b := flow.battle
+	var h := b.human()
+	if h == null:
+		return
+	var path: Array = board.walk_path
+	var last: Vector2i = path.back() if not path.is_empty() else h.pos
+	if c == last:
+		return
+	var prev: Vector2i = path[path.size() - 2] if path.size() >= 2 else h.pos
+	if not path.is_empty() and c == prev:
+		path.pop_back()   # stepping back over the last cell rubs it out
+	elif absi(c.x - last.x) + absi(c.y - last.y) == 1 and b.grid.passable(c) and (b.grid.unit_at(c) == null or c == h.pos):
+		path.append(c)
+	else:
+		var tail := _path(last, c)
+		if tail.is_empty():
+			return
+		path.append_array(tail)
+	board.walk_path = path
+
+func _end_drag(cell: Vector2i, at: Vector2) -> void:
+	dragging = false
+	var b := flow.battle
+	var h := b.human()
+	var path: Array = board.walk_path
+	board.walk_path = []
+	if h == null:
+		return
+	var dx := _drag_along(at)
+	if not drag_manual:
+		if dx < -DRAG_GO:
+			path = []   # dragged left: cancelled
+		elif dx <= DRAG_GO and not flow.calm():
+			# no drag: only a step onto a neighbouring cell counts (in a calm room, any click walks)
+			path = [drag_from] if absi(drag_from.x - h.pos.x) + absi(drag_from.y - h.pos.y) == 1 else []
+	if path.is_empty():
+		_refresh()
+		return
+	var hp0 := h.hp
+	for step in path:
+		var hh := b.human()
+		if hh == null or b.phase != "player" or not b.cmd_move(step - hh.pos):
+			break
+		if b.human() != null and b.human().hp < hp0:
+			break   # hit on the way: hand control back
+		if b.grid.get_material(b.human().pos) in ["door", "chest", "stall", "spring"]:
+			break   # stepped on something that does something
+	_after()
+
+func _path(from: Vector2i, to: Vector2i) -> Array:
+	var g := flow.battle.grid
+	var prev := {from: from}
+	var q := [from]
+	while not q.is_empty():
+		var c: Vector2i = q.pop_front()
+		if c == to:
+			break
+		for n in g.neighbors4(c):
+			if prev.has(n) or not g.passable(n) or (g.unit_at(n) != null and n != to) or g.mat_def(n).get("lethal", false):
+				continue
+			prev[n] = c
+			q.append(n)
+	if not prev.has(to):
+		return []
+	var out := []
+	var c2 := to
+	while c2 != from:
+		out.push_front(c2)
+		c2 = prev[c2]
+	if not out.is_empty() and flow.battle.grid.unit_at(out.back()) != null:
+		out.pop_back()   # clicked a body: walk up to it
+	return out
+
+## A quick flick of the wheel keeps turning the ring: notches that follow within a moment add
+## up in one smooth turn, as many as the wheel gives (one card per notch, so a single notch never
+## over-turns by mistake).
+const ROLL_CHAIN := 0.35   # seconds after a roll in which the next notch joins it
+var roll_at := -9.0
+var roll_burst := 0
+var fast_flow := false      # the seconds now playing are only the ring turning: play them quickly
+
+## Camera: while time flows it pushes in a little on where things happen (the hero and whoever is
+## moving or striking), like a film shot; when time is held it eases back out to the whole board,
+## so planning always sees everything.
+func _step_camera(delta: float) -> void:
+	var b := flow.battle
+	var flowing := _replaying() and not flow.calm()
+	var want_z := 1.0
+	var focus := board.size / 2
+	if flowing and b.human() != null:
+		var pts: Array = [board.feet(board._pos_of(b.human()))]
+		for uid in board.moving.keys():
+			var a: Actor = b._actor(uid)
+			if a != null:
+				pts.append(board.feet(board._pos_of(a)))
+		for uid in board.lunges.keys():
+			var a2: Actor = b._actor(uid)
+			if a2 != null and board.real - float(board.lunges[uid]["t0"]) < 0.6:
+				pts.append(board.feet(board._pos_of(a2)))
+		focus = Vector2.ZERO
+		for q in pts:
+			focus += q
+		focus /= pts.size()
+		var spread := 0.0
+		for q in pts:
+			spread = maxf(spread, focus.distance_to(q))
+		want_z = clampf(1.14 - spread / board.size.x * 0.5, 1.04, 1.14)
+	cam_zoom = lerpf(cam_zoom, want_z, 1.0 - exp(-delta * (1.6 if want_z > cam_zoom else 2.4)))
+	if cam_focus == Vector2.ZERO:
+		cam_focus = focus
+	cam_focus = cam_focus.lerp(focus, 1.0 - exp(-delta * 2.5))
+	board.scale = Vector2(cam_zoom, cam_zoom)
+	var pos := -cam_focus * (cam_zoom - 1.0)
+	pos.x = clampf(pos.x, board.size.x - board.size.x * cam_zoom, 0.0)
+	pos.y = clampf(pos.y, board.size.y - board.size.y * cam_zoom, 0.0)
+	board.position = pos
+
+## The picked card is lifted out of the hand: it pops up, then follows the mouse with a little lag,
+## leaning into the way it moves, and shrinks over the board so the cells under it stay readable.
+func _step_held(delta: float) -> void:
+	var want := selected >= 0 and flow.phase == "battle" and not _replaying()
+	var src: CardView = cards[selected] if want and selected < cards.size() else null
+	if src == null or (held_cv != null and held_slot != selected):
+		if held_cv != null:
+			held_cv.queue_free()
+			held_cv = null
+			held_slot = -1
+		if src == null:
+			return
+	var m := get_global_mouse_position()
+	if held_cv == null:
+		held_cv = CardView.new()
+		held_cv.setup(src.card_id, catalog, font, 1)
+		held_cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		held_cv.pivot_offset = held_cv.size / 2
+		held_cv.z_index = 60
+		held_cv.lit = true
+		held_cv.position = src.position
+		held_cv.scale = src.scale
+		add_child(held_cv)
+		held_slot = selected
+		held_prev = m
+		held_vel = Vector2.ZERO
+	src.modulate.a = 0.15   # its place in the hand stays, faintly
+	var hc := board.cell_at(board.get_local_mouse_position())
+	var over_board := hc.x >= 0
+	if press_px.x >= 0 and hc != board.hover:
+		# while the button is held the card keeps the mouse, so the board hears nothing: aim for it
+		board.hover = hc
+		board.preview = flow.battle.preview(selected, hc) if hc.x >= 0 else {}
+	# lifted only a little above the hand and leaning toward the mouse: it never covers the board
+	var sc := 1.15
+	var rest := src.position + src.size * src.scale / 2   # where the card sits in the hand (centre)
+	var gx := clampf(lerpf(rest.x, m.x, 0.45), held_cv.size.x * sc / 2 + 8, 1280 - held_cv.size.x * sc / 2 - 8)
+	var gy := maxf(rest.y - 46, m.y + held_cv.size.y * sc * 0.5) if not over_board else rest.y - 46
+	var goal := Vector2(gx, minf(gy, rest.y - 30)) - held_cv.size / 2
+	var k := 1.0 - exp(-delta * 18.0)
+	held_cv.position = held_cv.position.lerp(goal, k)
+	held_cv.scale = held_cv.scale.lerp(Vector2(sc, sc), 1.0 - exp(-delta * 12.0))
+	var v := (m - held_prev) / maxf(delta, 0.001)
+	held_prev = m
+	held_vel = held_vel.lerp(v, 1.0 - exp(-delta * 10.0))
+	var lean := clampf((m.x - gx) * 0.0012, -0.3, 0.3) + clampf(held_vel.x * 0.0004, -0.15, 0.15)
+	held_cv.rotation = lerpf(held_cv.rotation, lean, 1.0 - exp(-delta * 14.0))
+	held_cv.modulate.a = 1.0
+
+func _input(ev: InputEvent) -> void:
+	# a hand card pressed, dragged onto the board and let go: played on that cell
+	if flow != null and flow.phase == "battle" and ev is InputEventMouseButton and not ev.pressed \
+			and ev.button_index == MOUSE_BUTTON_LEFT and press_px.x >= 0:
+		var moved: float = ev.position.distance_to(press_px)
+		press_px = Vector2(-1, -1)
+		if moved > 16.0 and selected >= 0 and not _replaying() and not _sliding():
+			var c := board.cell_at(board.get_local_mouse_position())
+			if c.x >= 0:
+				get_viewport().set_input_as_handled()
+				_play_at(c)
+				return
+	# the wheel turns the ring wherever the mouse is
+	if flow == null or flow.phase != "battle" or not (ev is InputEventMouseButton) or not ev.pressed or _sliding():
+		return
+	if ev.button_index != MOUSE_BUTTON_WHEEL_UP and ev.button_index != MOUSE_BUTTON_WHEEL_DOWN:
+		return
+	get_viewport().set_input_as_handled()
+	var chained := real - roll_at < ROLL_CHAIN
+	if _replaying() and not (chained and fast_flow):
+		return
+	if not chained:
+		roll_burst = 0
+	_roll(-1 if ev.button_index == MOUSE_BUTTON_WHEEL_UP else 1)
+
+func _roll(dir: int) -> void:
+	selected = -1
+	if flow.battle.cmd_wheel(dir):
+		roll_at = real
+		roll_burst += 1
+		fast_flow = true
+	if not _replaying():
+		flow.update()
+	_refresh()
+
+const SPEEDS := [1.0, 1.5, 2.0, 3.0, 4.0]
+const CARD_KEYS := [KEY_Q, KEY_W, KEY_E, KEY_R, KEY_T]
+
+func _unhandled_input(ev: InputEvent) -> void:
+	if flow == null or flow.phase != "battle" or not (ev is InputEventKey) or not ev.pressed or ev.echo or _sliding():
+		return
+	# physical keys, so a Korean input mode (ㅂㅈㄷㄱㅅ) still works
+	var pk: int = ev.physical_keycode
+	if pk == KEY_N:
+		BoardView.FREEZE = not BoardView.FREEZE   # study: crawl on vs brake to a full stop
+		return
+	if pk == KEY_B:
+		BoardView.BT2 = not BoardView.BT2   # study: compare the new held-time look with the old one
+		return
+	if pk >= KEY_1 and pk <= KEY_5:
+		# game speed: only how fast passing seconds play back, never the rules
+		speed = SPEEDS[pk - KEY_1]
+		speed_shown_at = real
+		return
+	if _replaying():
+		return
+	var b := flow.battle
+	if pk in CARD_KEYS:
+		var i: int = CARD_KEYS.find(pk)
+		if i < cards.size() and cards[i] != null:
+			_on_card_picked(cards[i])
+		return
+	if pk == KEY_A or pk == KEY_D:
+		_roll(-1 if pk == KEY_A else 1)
+		return
+	match ev.keycode:
+		KEY_UP: b.cmd_move(Vector2i.UP)
+		KEY_DOWN: b.cmd_move(Vector2i.DOWN)
+		KEY_LEFT: b.cmd_move(Vector2i.LEFT)
+		KEY_RIGHT: b.cmd_move(Vector2i.RIGHT)
+		KEY_SPACE:
+			selected = -1
+			b.cmd_wait(1)
+		KEY_ESCAPE:
+			selected = -1
+		_: return
+	_after()
+
+func _after() -> void:
+	if flow.phase == "battle" and flow.battle != null:
+		flow.battle.settle()   # the world runs on a moment while it slows to a stop
+	fast_flow = false
+	board.drift = false
+	if not _replaying():
+		flow.update()
+	_refresh()

@@ -1,0 +1,47 @@
+{
+ "id": "iron_golem",
+ "name": "쇳덩이 골렘",
+ "hp": 40,
+ "mass": 5,
+ "armor": 3,
+ "resist": {
+  "electric": -0.5
+ },
+ "base_ability": "pull1",
+ "deck": [
+  "enemy_slam",
+  "enemy_cross",
+  "compress"
+ ],
+ "pattern": [
+  "enemy_slam",
+  "enemy_cross",
+  "compress"
+ ],
+ "signature": "enemy_slam",
+ "trait": [
+  {
+   "op": "status",
+   "id": "guard",
+   "turns": 1,
+   "shape": "self"
+  }
+ ],
+ "temper": "stubborn",
+ "dislikes": {
+  "charged": 3,
+  "water": 2,
+  "damp": 1
+ },
+ "move": "chase",
+ "move_secs": 2,
+ "tricks": [
+  {
+   "card": "enemy_charge",
+   "when": "aligned",
+   "min": 2,
+   "max": 6,
+   "cd": 6
+  }
+ ]
+}

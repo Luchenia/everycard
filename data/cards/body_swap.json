@@ -1,0 +1,24 @@
+{
+ "id": "body_swap",
+ "name": "판 뒤집기",
+ "time": 4,
+ "weight": 2,
+ "rarity": "legendary",
+ "target": {
+  "shape": "cell",
+  "range": 3,
+  "size": 0,
+  "reach": "circle"
+ },
+ "parts": [
+  {
+   "op": "swap_bodies"
+  }
+ ],
+ "desc": "적과 [몸을 맞바꿉니다]. [탈진] [일회성]",
+ "exhaust": 3,
+ "family": "neutral",
+ "pool": "common",
+ "drop_weight": 0.15,
+ "once": true
+}

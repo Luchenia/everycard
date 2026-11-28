@@ -1,0 +1,20 @@
+{
+ "id": "heat_wave",
+ "name": "열파",
+ "time": 4,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "circle",
+  "range": 3,
+  "size": 1,
+  "reach": "circle"
+ },
+ "parts": [
+  {
+   "op": "state",
+   "id": "heat"
+  }
+ ],
+ "desc": "3×3 범위를 [열기] 상태로 만듭니다."
+}

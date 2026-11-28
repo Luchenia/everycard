@@ -1,0 +1,22 @@
+{
+ "id": "mirror",
+ "name": "거울",
+ "time": 2,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "cell",
+  "range": 3,
+  "size": 0,
+  "reach": "circle"
+ },
+ "parts": [
+  {
+   "op": "material",
+   "id": "metal"
+  }
+ ],
+ "desc": "1×1 크기의 [거울]을 설치합니다.",
+ "family": "magic",
+ "pool": "mage"
+}

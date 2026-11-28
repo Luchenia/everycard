@@ -1,0 +1,23 @@
+{
+ "id": "gravity_well",
+ "name": "중력장",
+ "time": 3,
+ "weight": 1,
+ "rarity": "rare",
+ "target": {
+  "shape": "circle",
+  "range": 4,
+  "size": 1,
+  "reach": "circle"
+ },
+ "parts": [
+  {
+   "op": "state",
+   "id": "pull",
+   "dir": "toward_aim"
+  }
+ ],
+ "desc": "3×3 범위의 상대를 중앙으로 끌어당깁니다.",
+ "family": "magic",
+ "pool": "mage"
+}

@@ -1,0 +1,22 @@
+{
+ "id": "flint",
+ "name": "부싯돌",
+ "time": 1,
+ "weight": 1,
+ "rarity": "basic",
+ "target": {
+  "shape": "cell",
+  "range": 1,
+  "size": 0,
+  "reach": "square"
+ },
+ "parts": [
+  {
+   "op": "material",
+   "id": "fire"
+  }
+ ],
+ "desc": "붙어 있는 1×1 칸을 [화염] 상태로 만듭니다.",
+ "family": "sword",
+ "pool": "wanderer"
+}

@@ -1,0 +1,22 @@
+{
+ "id": "oil_spill",
+ "name": "기름 투척",
+ "time": 2,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "circle",
+  "range": 3,
+  "size": 1,
+  "reach": "circle"
+ },
+ "parts": [
+  {
+   "op": "material",
+   "id": "oil"
+  }
+ ],
+ "desc": "3×3 범위를 [기름] 상태로 만듭니다.",
+ "family": "neutral",
+ "pool": "wanderer"
+}

@@ -1,0 +1,22 @@
+{
+ "id": "crystallize",
+ "name": "결정화",
+ "time": 3,
+ "rarity": "rare",
+ "family": "magic",
+ "desc": "1×1 칸에 [수정]을 세웁니다. 그 칸에 유닛이 있으면 [결정화]합니다.",
+ "weight": 1,
+ "target": {
+  "shape": "cell",
+  "range": 3,
+  "size": 0,
+  "reach": "circle"
+ },
+ "parts": [
+  {
+   "op": "encase",
+   "turns": 3
+  }
+ ],
+ "pool": "mage"
+}

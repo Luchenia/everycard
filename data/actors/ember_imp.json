@@ -1,0 +1,43 @@
+{
+ "id": "ember_imp",
+ "name": "불 도깨비",
+ "hp": 22,
+ "mass": 1,
+ "armor": 0,
+ "resist": {
+  "fire": 0.8,
+  "cold": -0.5
+ },
+ "base_ability": "heat_self",
+ "deck": [
+  "enemy_ember",
+  "spark",
+  "enemy_ember"
+ ],
+ "pattern": [
+  "enemy_ember",
+  "spark",
+  "enemy_ember"
+ ],
+ "signature": "enemy_ember",
+ "trait": [
+  {
+   "op": "state",
+   "id": "heat"
+  }
+ ],
+ "temper": "careful",
+ "likes": {
+  "fire": 2,
+  "blaze": 3,
+  "heat": 1
+ },
+ "dislikes": {
+  "water": 3,
+  "swamp": 3,
+  "damp": 2,
+  "cold": 2,
+  "ice": 2
+ },
+ "move": "kite"
+}

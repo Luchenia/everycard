@@ -1,0 +1,21 @@
+{
+ "id": "bind_soul",
+ "name": "영혼 봉인",
+ "time": 4,
+ "weight": 2,
+ "rarity": "legendary",
+ "target": {
+  "shape": "cell",
+  "range": 2,
+  "size": 0,
+  "reach": "circle"
+ },
+ "parts": [
+  {
+   "op": "cardify"
+  }
+ ],
+ "desc": "약해진 적을 카드로 [봉인]합니다.",
+ "family": "magic",
+ "pool": "mage"
+}

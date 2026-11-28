@@ -1,0 +1,21 @@
+{
+ "id": "weak_spot",
+ "weight": 1,
+ "name": "빈틈 노리기",
+ "time": 0,
+ "rarity": "common",
+ "family": "sword",
+ "pool": "wanderer",
+ "target": {
+  "shape": "self",
+  "range": 0,
+  "size": 0
+ },
+ "parts": [
+  {
+   "op": "empower",
+   "amount": 4
+  }
+ ],
+ "desc": "다음 공격 카드의 피해가 4 늘어납니다."
+}

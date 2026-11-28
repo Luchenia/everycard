@@ -1,0 +1,22 @@
+{
+ "id": "stolen_time",
+ "weight": 1,
+ "name": "훔친 시간",
+ "time": 1,
+ "rarity": "rare",
+ "family": "neutral",
+ "pool": "wanderer",
+ "target": {
+  "shape": "cell",
+  "range": 4,
+  "size": 0,
+  "reach": "circle"
+ },
+ "parts": [
+  {
+   "op": "delay_actor",
+   "secs": 2
+  }
+ ],
+ "desc": "적 하나의 다음 행동을 2초 늦춥니다."
+}

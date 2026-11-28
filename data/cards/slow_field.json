@@ -1,0 +1,22 @@
+{
+ "id": "slow_field",
+ "name": "늪지",
+ "time": 3,
+ "weight": 1,
+ "rarity": "common",
+ "target": {
+  "shape": "square",
+  "range": 4,
+  "size": 2,
+  "reach": "circle"
+ },
+ "parts": [
+  {
+   "op": "material",
+   "id": "swamp"
+  }
+ ],
+ "desc": "2×2 범위를 [늪] 상태로 만듭니다.",
+ "family": "magic",
+ "pool": "mage"
+}

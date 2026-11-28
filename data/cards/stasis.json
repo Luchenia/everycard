@@ -1,0 +1,21 @@
+{
+ "id": "stasis",
+ "name": "정지",
+ "time": 5,
+ "weight": 1,
+ "rarity": "rare",
+ "target": {
+  "shape": "cell",
+  "range": 4,
+  "size": 0,
+  "reach": "circle"
+ },
+ "parts": [
+  {
+   "op": "state",
+   "id": "stopped",
+   "secs": 4
+  }
+ ],
+ "desc": "1×1 칸을 4초 동안 [멈춘 시간] 상태로 만듭니다."
+}
